@@ -118,6 +118,7 @@ class AppState extends ChangeNotifier {
 
   Timer? _presenceTimer;
   Timer? _scanTimer;
+  Timer? _permissionTimer;
 
   static Future<AppState> load() async {
     final state = AppState._(await SharedPreferences.getInstance());
@@ -196,6 +197,7 @@ class AppState extends ChangeNotifier {
       receiveDir: receiveDir,
       permissions: () => permissions,
       link: directLink,
+      inputReady: _inputReady,
     );
     server.events.listen(_onServerEvent);
     try {
@@ -234,6 +236,13 @@ class AppState extends ChangeNotifier {
       _bleTimer = Timer.periodic(const Duration(seconds: 20), (_) => _maybeScanBluetooth());
     }
 
+    if (Platform.isMacOS) {
+      // Coming back from System Settings doesn't always count as "resumed".
+      _permissionTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+        if (!MacBridge.accessibility) unawaited(_inputReady());
+      });
+    }
+
     addresses = await localAddresses();
     _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) => _checkPresence());
     unawaited(_checkPresence());
@@ -244,6 +253,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _presenceTimer?.cancel();
     _scanTimer?.cancel();
+    _permissionTimer?.cancel();
     _bleTimer?.cancel();
     for (final t in _directIdle.values) {
       t.cancel();
@@ -273,6 +283,21 @@ class AppState extends ChangeNotifier {
     }
     discovery.announce();
     notifyListeners();
+  }
+
+  /// Re-checks the OS permission for remote input, so granting it works
+  /// right away (and so peers learn about it).
+  Future<bool> _inputReady() async {
+    final before = input.supported;
+    try {
+      if (Platform.isMacOS) await MacBridge.refresh();
+      if (Platform.isAndroid) await AndroidBridge.refresh();
+    } catch (_) {}
+    if (input.supported != before) {
+      discovery.announce();
+      notifyListeners();
+    }
+    return input.supported;
   }
 
   bool scanning = false;
@@ -627,6 +652,11 @@ class AppState extends ChangeNotifier {
         if (name != null) _notices.add(Notice('$name unpaired from this device'));
       case FileReceived(:final from, :final file):
         _notices.add(Notice('Received ${p.basename(file.path)} from ${from.name}', revealPath: file.path));
+      case InputBlocked(:final peer):
+        final where = Platform.isMacOS
+            ? 'Allow Sidekick in Settings → Accessibility (if it\'s already on there, remove it and add it again).'
+            : 'Allow remote control in Settings.';
+        _notices.add(Notice('${peer.name} tried to control this device. $where'));
       case RemoteSessionChanged(:final peer, :final active):
         if (active) {
           activeRemoteSessions[peer.id] = peer;

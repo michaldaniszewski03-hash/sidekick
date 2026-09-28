@@ -319,6 +319,13 @@ class PeerClient {
     if (ble != null) {
       throw SidekickException('Remote control needs both devices on the same Wi-Fi. Bluetooth is too slow for it.');
     }
+    // Ask first, so a missing permission on the other side comes back as a
+    // clear message rather than a failed WebSocket upgrade.
+    try {
+      await _getJson('/v1/input/status');
+    } on SidekickException catch (e) {
+      if (e.status != 404) rethrow; // 404: an older Sidekick without the check.
+    }
     final channel = IOWebSocketChannel.connect(
       Uri(scheme: 'ws', host: host, port: port, path: '/v1/input'),
       headers: {if (token != null) 'authorization': 'Bearer $token'},

@@ -96,8 +96,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           leading: const Icon(Icons.mouse_outlined),
                           title: const Text('Accessibility'),
                           subtitle: const Text(
-                            'So your phone can move the mouse, click and type on this Mac. After an update, '
-                            'you may need to switch Sidekick off and on again in that list.',
+                            'So your other devices can move the mouse, click and type on this Mac. If Sidekick is '
+                            'already switched on in that list but this still asks for it (common after an update), '
+                            'select Sidekick, remove it with −, then add it again.',
                           ),
                           isThreeLine: true,
                           trailing: MacBridge.accessibility

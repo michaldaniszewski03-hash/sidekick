@@ -171,7 +171,10 @@ void main() {
       await phone.start(port: 0, address: InternetAddress.loopbackIPv4);
       try {
         final wifi = PeerClient(host: '127.0.0.1', port: phone.port, token: token);
-        await expectLater(wifi.startHotspot(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 400)));
+        await expectLater(
+          wifi.startHotspot(),
+          throwsA(isA<SidekickException>().having((e) => e.status, 'status', 400)),
+        );
       } finally {
         await phone.stop();
       }

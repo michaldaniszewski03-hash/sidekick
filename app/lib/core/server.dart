@@ -52,6 +52,13 @@ class FileReceived extends ServerEvent {
   final int size;
 }
 
+/// A peer tried remote control, but this device can't accept it yet (e.g.
+/// the Mac's Accessibility permission is missing).
+class InputBlocked extends ServerEvent {
+  InputBlocked(this.peer);
+  final TrustedPeer peer;
+}
+
 /// A peer opened or closed a remote-control session with us.
 class RemoteSessionChanged extends ServerEvent {
   RemoteSessionChanged(this.peer, {required this.active});
@@ -74,7 +81,9 @@ class SidekickServer {
     required this.receiveDir,
     Permissions Function()? permissions,
     DirectLink? link,
-  }) : permissions = permissions ?? (() => const Permissions()),
+    Future<bool> Function()? inputReady,
+  }) : inputReady = inputReady ?? (() async => input.supported),
+       permissions = permissions ?? (() => const Permissions()),
        link = link ?? NoDirectLink();
 
   /// Our own identity; called on every request so name changes apply live.
@@ -85,6 +94,10 @@ class SidekickServer {
   final InputInjector input;
   final Future<String> Function() receiveDir;
   final Permissions Function() permissions;
+
+  /// Whether we can inject input right now. Re-checks the OS permission, so
+  /// granting it takes effect without restarting.
+  final Future<bool> Function() inputReady;
 
   /// Opens or joins a direct Wi-Fi link when a peer asks over Bluetooth.
   final DirectLink link;
@@ -160,6 +173,7 @@ class SidekickServer {
       ..post('/v1/fs/upload', _authed(_upload, (p) => p.files))
       ..get('/v1/media', _authed(_mediaStatus, (p) => p.media))
       ..post('/v1/media', _authed(_mediaAction, (p) => p.media))
+      ..get('/v1/input/status', _authed(_inputStatus, (p) => p.input))
       ..get('/v1/input', _authed(_inputSocket, (p) => p.input))
       ..post('/v1/link/hotspot', _authed(_linkHotspot))
       ..post('/v1/link/join', _authed(_linkJoin))
@@ -398,7 +412,22 @@ class SidekickServer {
 
   // -------------------------------------------------------------- input
 
-  FutureOr<Response> _inputSocket(Request r) {
+  /// Checked before opening the input socket, so the controlling device can
+  /// say *why* remote control doesn't work instead of a generic failure.
+  Future<Response> _inputStatus(Request r) async {
+    if (await inputReady()) return _json({'ok': true});
+    _events.add(InputBlocked(_peer(r)));
+    final me = self();
+    final where = switch (me.platform) {
+      DevicePlatform.macos => 'Settings → Accessibility',
+      DevicePlatform.android => 'Settings → Remote control (Accessibility)',
+      _ => 'Settings',
+    };
+    return _error(503, "${me.name} hasn't allowed remote control yet. On ${me.name}, open Sidekick → $where.");
+  }
+
+  FutureOr<Response> _inputSocket(Request r) async {
+    if (!await inputReady()) return _error(503, "This device hasn't allowed remote control yet.");
     final peer = _peer(r);
     return webSocketHandler((channel, _) {
       _events.add(RemoteSessionChanged(peer, active: true));

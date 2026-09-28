@@ -47,6 +47,9 @@ dependencies:
   desktop_drop: ^0.8.4
   material_ui: ^1.4.0
   bluetooth_low_energy: ^6.2.1
+  basic_utils: ^5.8.2
+  pointycastle: ^4.0.0
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
