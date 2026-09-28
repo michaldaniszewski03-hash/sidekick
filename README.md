@@ -9,6 +9,79 @@ Sidekick combines LocalSend and KDE Connect in one app. It links your phone and 
 
 Platforms: **Android, iOS, Windows, macOS** (Linux comes almost free with the same stack).
 
+## Windows app (v0.1)
+
+The Flutter app lives in `app/`. Windows is the first target; the same code will later build for Android, macOS and iOS.
+
+### Get it running
+
+**Download a build:** every push runs the **Windows app** workflow on GitHub Actions. Open the latest run, download `sidekick-windows-x64`, unzip it, and run `sidekick.exe`.
+
+**Or build it yourself** on a Windows PC:
+
+1. Install [Flutter](https://docs.flutter.dev/get-started/install/windows/desktop) and Visual Studio 2022 with the **Desktop development with C++** workload.
+2. Run:
+   ```sh
+   cd app
+   flutter pub get
+   flutter run -d windows
+   ```
+
+The first time Sidekick starts, Windows Firewall asks whether to allow it. Choose **Private networks**, otherwise other devices can't find it.
+
+**Trying it without a phone:** run Sidekick on two Windows PCs on the same Wi-Fi. They find each other, you pair them, and each can control the other.
+
+### What works
+
+| Tab | What it does |
+|---|---|
+| **Devices** | Finds Sidekick devices on your Wi-Fi, pairs with a 6-digit code, **Add by IP** if discovery is blocked, drag files onto a device card to send them |
+| **Files** | Browse the other device's folders and drives, download files, upload into the open folder (button or drag and drop), transfer progress |
+| **Remote** | Touchpad (drag to move, click, right-click, scroll), a **Hold** toggle for dragging, live keyboard capture, a send-text box, shortcuts (Alt+Tab, Win+D, Ctrl+C/V…) |
+| **Media** | Title, artist and app of whatever's playing, play/pause, previous/next, ±10 s, a seek bar, a volume slider, mute |
+| **Settings** | Device name, the folder received files go to, switches for what paired devices may do, light/dark mode |
+
+When a paired device is controlling this PC, a banner says so, with a button that unpairs it and stops the session right away.
+
+### How it works
+
+```
+app/lib/
+├── main.dart            Material 3 theme (uses the Windows accent color)
+├── app_state.dart       all app state: devices, pairing, transfers, settings
+├── core/
+│   ├── models.dart      JSON types shared by every platform
+│   ├── discovery.dart   UDP multicast announcements (224.0.0.168:53318)
+│   ├── server.dart      HTTP + WebSocket server every device runs (port 53318)
+│   ├── client.dart      talks to another device's server
+│   └── trust.dart       pairing codes, tokens, trusted devices
+├── platform/
+│   ├── input.dart       mouse/keyboard via Win32 SendInput (dart:ffi)
+│   ├── media.dart       Windows media sessions + volume via a PowerShell helper
+│   └── files.dart       folder listing, safe file names
+└── ui/                  one file per tab
+```
+
+- **Pairing:** device A asks B to pair; B shows a 6-digit code; you type it on A. Both devices then hold a random token for each other. Pairing works both ways, so either device can control the other. After 5 wrong codes, or 2 minutes, the code stops working.
+- **Every request except `/v1/info` and pairing needs a token.** Unpairing revokes the token straight away, including any live remote-control session.
+- **Media control** uses Windows' Global System Media Transport Controls, the same thing behind the volume flyout, so it works with Spotify, browsers, VLC, the Media Player app and so on. If that helper can't start, play/pause, next/previous and volume still work through media keys.
+
+### Known limits (v0.1)
+
+- **Not tried on a real Windows PC yet.** The code is analyzed and unit-tested (pairing, auth, files, media and input protocol), and CI builds it on Windows. But `SendInput` and the media helper need a real Windows machine to confirm.
+- **Traffic is plain HTTP on your local network.** Tokens stop strangers from controlling your PC, but someone on the same Wi-Fi could read the traffic. The next security step is TLS with the certificate fingerprint pinned during pairing.
+- **Windows won't let Sidekick control elevated (admin) windows**, such as Task Manager, unless Sidekick itself runs as administrator.
+- **There's no screen view yet**, so you control the PC blind (fine for media and presentations). Screen streaming with WebRTC is next.
+
+### Development
+
+```sh
+cd app
+flutter analyze
+flutter test                              # protocol tests (run anywhere)
+flutter test tool/screenshots_test.dart   # renders every tab to build/screenshots/
+```
+
 ## Website
 
 `website/index.html` is a self-contained landing page built with Material You (Material 3). It has:
