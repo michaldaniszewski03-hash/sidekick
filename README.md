@@ -9,7 +9,7 @@ Sidekick combines LocalSend and KDE Connect in one app. It links your phone and 
 
 Platforms: **Android, iOS, Windows, macOS** (Linux comes almost free with the same stack).
 
-## Apps (v0.2): Windows, Android, macOS and iOS
+## Apps (v0.3): Windows, Android, macOS and iOS
 
 The Flutter app lives in `app/`. One codebase builds all four apps.
 
