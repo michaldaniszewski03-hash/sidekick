@@ -219,7 +219,7 @@ img, svg { display: block; }
 .nav a:hover { background: var(--surface-container-high); color: var(--on-surface); }
 .topbar .spacer { flex: 1; }
 @media (max-width: 860px) { .nav { display: none; } }
-@media (max-width: 420px) { .topbar .btn { display: none; } }
+@media (max-width: 360px) { .topbar .btn { display: none; } }
 
 /* ------------------------------------------------------------------ hero */
 .hero { padding: 56px 0 72px; }
@@ -658,16 +658,15 @@ section { scroll-margin-top: 80px; }
 .step h3 { margin-top: 20px; font-size: 20px; font-weight: 650; }
 .step p { margin-top: 6px; color: var(--on-surface-variant); }
 
-/* waitlist */
+/* download */
 .cta-card {
   position: relative; overflow: hidden;
-  padding: clamp(32px, 6vw, 72px); border-radius: 40px;
+  padding: clamp(28px, 5vw, 64px); border-radius: 40px;
   background: var(--primary-container); color: var(--on-primary-container);
-  display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 32px; align-items: center;
 }
-@media (max-width: 860px) { .cta-card { grid-template-columns: minmax(0, 1fr); border-radius: 32px; } }
-.cta-card h2 { font-size: clamp(32px, 4.4vw, 52px); line-height: 1.05; letter-spacing: -.03em; font-weight: 740; font-stretch: 110%; text-wrap: balance; }
-.cta-card p { margin-top: 12px; font-size: 18px; opacity: .85; }
+@media (max-width: 860px) { .cta-card { border-radius: 32px; } }
+.cta-card h2 { position: relative; font-size: clamp(32px, 4.4vw, 52px); line-height: 1.05; letter-spacing: -.03em; font-weight: 740; font-stretch: 110%; text-wrap: balance; }
+.cta-card > p { position: relative; margin-top: 12px; font-size: 18px; opacity: .85; max-width: 40em; }
 .cta-card::before {
   content: ""; position: absolute; right: -80px; top: -80px; width: 280px; height: 280px;
   background: color-mix(in oklab, var(--primary) 18%, transparent);
@@ -675,23 +674,35 @@ section { scroll-margin-top: 80px; }
   animation: blob 14s var(--ease) infinite alternate;
 }
 @keyframes blob { to { transform: rotate(40deg) scale(1.15); border-radius: 60% 40% 45% 55% / 55% 60% 40% 45%; } }
-.form { position: relative; display: flex; gap: 10px; flex-wrap: wrap; }
-.field { position: relative; flex: 1 1 220px; }
-.field input {
-  width: 100%; height: 56px; padding: 18px 16px 0;
-  border-radius: 16px; border: 1px solid color-mix(in oklab, var(--on-primary-container) 40%, transparent);
+.downloads {
+  position: relative; margin-top: 32px;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+}
+@media (max-width: 1000px) { .downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .downloads { grid-template-columns: minmax(0, 1fr); } }
+.dl {
+  position: relative; display: flex; flex-direction: column; gap: 4px;
+  padding: 20px; border-radius: 24px; text-decoration: none;
   background: var(--surface); color: var(--on-surface);
-  transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+  border: 2px solid transparent;
+  transition: border-radius .35s var(--ease), transform .35s var(--ease-spring), box-shadow .2s var(--ease);
 }
-.field input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
-.field label {
-  position: absolute; left: 17px; top: 17px; font-size: 16px; color: var(--on-surface-variant);
-  pointer-events: none; transform-origin: left top; transition: transform .2s var(--ease), color .2s var(--ease);
+.dl:hover { border-radius: 32px; transform: translateY(-2px); box-shadow: var(--shadow); }
+.dl .icon { font-size: 28px; color: var(--primary); margin-bottom: 8px; }
+.dl b { font-size: 18px; font-weight: 650; }
+.dl small { font-size: 13px; color: var(--on-surface-variant); line-height: 1.4; }
+.dl .dl-go { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--primary); }
+.dl .dl-go .icon { font-size: 18px; margin: 0; }
+.dl.mine { border-color: var(--primary); }
+.dl .badge {
+  position: absolute; top: 16px; right: 16px; display: none;
+  padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--primary); color: var(--on-primary);
 }
-.field input:focus + label, .field input:not(:placeholder-shown) + label { transform: translateY(-10px) scale(.75); color: var(--primary); }
-.form .btn { height: 56px; border-radius: 16px; }
-.form .btn:active { border-radius: 28px; }
-.fine { position: relative; margin-top: 12px; font-size: 13px; opacity: .8; }
+.dl.mine .badge { display: inline-block; }
+.dl-meta { margin-top: 12px; font-size: 14px; color: var(--on-surface-variant); }
+.dl-meta a { color: var(--primary); font-weight: 600; }
+.fine { position: relative; margin-top: 20px; font-size: 13px; opacity: .8; }
 
 /* footer */
 footer { padding: 40px 0 56px; color: var(--on-surface-variant); font-size: 14px; }
@@ -741,7 +752,7 @@ footer nav a:hover { color: var(--on-surface); }
     <button class="icon-btn" id="themeBtn" type="button" aria-label="Toggle dark mode">
       <span class="icon" id="themeIcon">dark_mode</span>
     </button>
-    <a class="btn btn-filled btn-sm" href="#waitlist">Get early access</a>
+    <a class="btn btn-filled btn-sm" id="navDownload" href="#download">Download</a>
   </div>
 </header>
 
@@ -758,9 +769,10 @@ footer nav a:hover { color: var(--on-surface); }
           play, pause, or skip whatever is on either screen.
         </p>
         <div class="cta-row">
-          <a class="btn btn-filled" href="#waitlist"><span class="icon">notifications_active</span>Join the waitlist</a>
+          <a class="btn btn-filled" id="heroDownload" href="#download"><span class="icon" id="heroDownloadIcon">download</span><span id="heroDownloadLabel">Download Sidekick</span></a>
           <a class="btn btn-tonal" href="#features">See what it does</a>
         </div>
+        <p class="dl-meta" id="heroDownloadMeta">Free · Windows, macOS, Android and iPhone · <a href="#download">All downloads</a></p>
         <div class="chips" aria-label="Supported platforms">
           <span class="chip"><span class="icon">android</span>Android</span>
           <span class="chip"><span class="icon">phone_iphone</span>iOS</span>
@@ -1017,25 +1029,45 @@ footer nav a:hover { color: var(--on-surface); }
     </div>
   </section>
 
-  <!-- ============================================================ WAITLIST -->
-  <section class="section" id="waitlist" style="padding-top:0">
+  <!-- ============================================================ DOWNLOAD -->
+  <section class="section" id="download" style="padding-top:0">
     <div class="wrap">
       <div class="cta-card reveal">
-        <div style="position:relative">
-          <h2>Want to try Sidekick early?</h2>
-          <p>Join the beta list and we'll email you when the first build is ready.</p>
+        <h2>Get Sidekick</h2>
+        <p>Free, with no account. Install it on your computer and your phone, then pair them with a 6-digit code.</p>
+        <!-- Links are filled in from RELEASE in the script below; these
+             fallbacks point at the release page for visitors without JS. -->
+        <div class="downloads">
+          <a class="dl" data-os="windows" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
+            <span class="badge">Your device</span>
+            <span class="icon">desktop_windows</span>
+            <b>Windows</b>
+            <small>Windows 10 &amp; 11 · installer</small>
+            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .exe</span></span>
+          </a>
+          <a class="dl" data-os="macos" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
+            <span class="badge">Your device</span>
+            <span class="icon">laptop_mac</span>
+            <b>macOS</b>
+            <small>macOS 12+ · first launch: right-click → Open</small>
+            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .dmg</span></span>
+          </a>
+          <a class="dl" data-os="android" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
+            <span class="badge">Your device</span>
+            <span class="icon">android</span>
+            <b>Android</b>
+            <small>Android 8.0+ · allow installing from your browser</small>
+            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .apk</span></span>
+          </a>
+          <a class="dl" data-os="ios" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
+            <span class="badge">Your device</span>
+            <span class="icon">phone_iphone</span>
+            <b>iPhone &amp; iPad</b>
+            <small>iOS 15+ · install with AltStore or Sideloadly</small>
+            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .ipa</span></span>
+          </a>
         </div>
-        <div>
-          <!-- TODO: connect this form to a real waitlist service (Formspree, Buttondown, Supabase, etc.). -->
-          <form class="form" id="waitForm" novalidate>
-            <div class="field">
-              <input id="email" type="email" placeholder=" " autocomplete="email" required>
-              <label for="email">Email address</label>
-            </div>
-            <button class="btn btn-filled" type="submit"><span class="icon">arrow_forward</span>Notify me</button>
-          </form>
-          <p class="fine">We'll only email you about Sidekick. No spam.</p>
-        </div>
+        <p class="fine" id="releaseNote">Version 0.2.0 · <a href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">Release notes and older versions</a></p>
       </div>
     </div>
   </section>
@@ -1221,7 +1253,7 @@ files.forEach(f => f.addEventListener('click', () => {
 $('#sendBtn').addEventListener('click', () => snack('Demo only. In the app, the files would save to your PC.'));
 updateSelection();
 
-/* ---------- snackbar + waitlist */
+/* ---------- snackbar */
 const snackbar = $('#snackbar');
 let snackTimer;
 function snack(msg) {
@@ -1230,14 +1262,57 @@ function snack(msg) {
   clearTimeout(snackTimer);
   snackTimer = setTimeout(() => snackbar.classList.remove('show'), 3200);
 }
-$('#waitForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const email = $('#email');
-  if (!email.value || !email.checkValidity()) { email.focus(); snack('Please enter a valid email address.'); return; }
-  // TODO: send email.value to your waitlist backend here.
-  email.value = '';
-  snack("Thanks! We'll email you when the beta is ready.");
-});
+
+/* ---------- downloads: one place to update for each release */
+const RELEASE = {
+  version: '0.2.0',
+  page: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/tag/v0.2.0',
+  files: {
+    windows: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v0.2.0/SidekickSetup-0.2.0.exe',
+    macos: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v0.2.0/Sidekick-0.2.0.dmg',
+    android: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v0.2.0/Sidekick-0.2.0.apk',
+    ios: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v0.2.0/Sidekick-0.2.0.ipa',
+  },
+};
+
+/** 'windows' | 'macos' | 'android' | 'ios' | 'other' */
+function detectOS() {
+  const ua = navigator.userAgent || '';
+  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+  if (/android/i.test(ua)) return 'android';
+  // iPadOS pretends to be a Mac; touch support gives it away.
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Mac/i.test(platform) && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua)) return 'macos';
+  if (/Win/i.test(platform) || /Windows/i.test(ua)) return 'windows';
+  return 'other';
+}
+
+const OS_INFO = {
+  windows: { label: 'Download for Windows', icon: 'desktop_windows', meta: 'Windows 10 & 11 · free' },
+  macos: { label: 'Download for Mac', icon: 'laptop_mac', meta: 'macOS 12 or newer · free' },
+  android: { label: 'Download for Android', icon: 'android', meta: 'Android 8.0 or newer · free' },
+  // An .ipa can't be installed straight from Safari, so explain first.
+  ios: { label: 'Get it for iPhone & iPad', icon: 'phone_iphone', meta: 'Installs with AltStore or Sideloadly', href: '#download' },
+  other: { label: 'Download Sidekick', icon: 'download', meta: 'Windows, macOS, Android and iPhone', href: '#download' },
+};
+
+(function setUpDownloads() {
+  const os = detectOS();
+  const info = OS_INFO[os];
+  const href = info.href || RELEASE.files[os];
+  const hero = $('#heroDownload');
+  hero.href = href;
+  $('#heroDownloadLabel').textContent = info.label;
+  $('#heroDownloadIcon').textContent = info.icon;
+  $('#navDownload').href = href;
+  $('#heroDownloadMeta').innerHTML = `${info.meta} · v${RELEASE.version} · <a href="#download">All downloads</a>`;
+  document.querySelectorAll('.dl').forEach(tile => {
+    tile.href = RELEASE.files[tile.dataset.os];
+    tile.classList.toggle('mine', tile.dataset.os === os);
+  });
+  const note = $('#releaseNote');
+  note.innerHTML = `Version ${RELEASE.version} · <a href="${RELEASE.page}">Release notes and older versions</a>`;
+})();
 
 /* ---------- reveal on scroll */
 const io = new IntersectionObserver(entries => {
