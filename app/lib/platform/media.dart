@@ -163,6 +163,8 @@ class PowerShellHelper {
       if (reply['ok'] == false) lastError = reply['error'] as String?;
       return reply;
     } catch (e) {
+      // Give stderr a moment to arrive so the error says what went wrong.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       lastError = _describe(e);
       await _kill();
       _failures++;
@@ -182,21 +184,42 @@ class PowerShellHelper {
     return detail.isEmpty ? '$e' : '$e: $detail';
   }
 
+  /// Detached (no console window) unless that has failed on this PC before.
+  bool _useConsole = false;
+
   Future<StreamIterator<String>?> _ensureStarted() async {
     if (_lines != null) return _lines;
     if (_retryAfter != null && DateTime.now().isBefore(_retryAfter!)) return null;
     _retryAfter = null;
-    _stderr.clear();
 
-    final script = File(p.join(Directory.systemTemp.path, 'sidekick_media_v2.ps1'));
+    final script = File(p.join(Directory.systemTemp.path, 'sidekick_media_v3.ps1'));
     await script.writeAsString(_script);
-    final process = await Process.start(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', script.path],
+    if (_useConsole) return _lines = await _start(script, ProcessStartMode.normal);
+    try {
       // Detached keeps a console window from popping up behind the app while
       // still giving us stdin/stdout.
-      mode: ProcessStartMode.detachedWithStdio,
-    );
+      return _lines = await _start(script, ProcessStartMode.detachedWithStdio);
+    } catch (_) {
+      // Some PCs won't run PowerShell without a console. A normal start may
+      // flash a window once, which beats not working.
+      await _kill();
+      _useConsole = true;
+      return _lines = await _start(script, ProcessStartMode.normal);
+    }
+  }
+
+  Future<StreamIterator<String>> _start(File script, ProcessStartMode mode) async {
+    _stderr.clear();
+    final process = await Process.start('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      script.path,
+    ], mode: mode);
     _process = process;
     process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
       _stderr.add(line);
@@ -212,9 +235,10 @@ class PowerShellHelper {
     } on FormatException {
       throw StateError('unexpected output from the helper: $first');
     }
-    if (hello is! Map || hello['ready'] != true) throw StateError('the helper did not start: $first');
+    if (hello is! Map || hello['ready'] != true) {
+      throw StateError('the helper did not start: ${hello is Map ? hello['fatal'] ?? first : first}');
+    }
     initErrors = [for (final e in (hello['errors'] as List? ?? const [])) '$e'];
-    _lines = lines;
     return lines;
   }
 
@@ -231,7 +255,15 @@ class PowerShellHelper {
 
 const _script = r'''
 $ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+# Plain UTF-8 streams: Sidekick starts us without a console, and console
+# APIs such as [Console]::OutputEncoding fail without one.
+$utf8 = New-Object System.Text.UTF8Encoding $false
+$out = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $utf8)
+$out.AutoFlush = $true
+$in = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), $utf8)
+function Send($obj) { $out.WriteLine(($obj | ConvertTo-Json -Compress)) }
+# Anything unexpected: tell Sidekick why instead of exiting silently.
+trap { Send @{ ready = $false; fatal = "$($_.Exception.Message)" }; exit 1 }
 $inv = [Globalization.CultureInfo]::InvariantCulture
 $initErrors = @()
 
@@ -354,11 +386,10 @@ function Get-Status {
 
 function Ok($op) { if (-not (Await $op ([bool]))) { throw 'The app refused the command' } }
 
-[Console]::Out.WriteLine((@{ ready = $true; errors = @($initErrors) } | ConvertTo-Json -Compress))
-[Console]::Out.Flush()
+Send @{ ready = $true; errors = @($initErrors) }
 
 while ($true) {
-  $line = [Console]::In.ReadLine()
+  $line = $in.ReadLine()
   if ($line -eq $null) { break }
   $parts = $line.Trim().Split(' ', 2)
   $arg = if ($parts.Length -gt 1) { $parts[1] } else { '' }
@@ -380,7 +411,6 @@ while ($true) {
   } catch {
     $result = @{ ok = $false; error = $_.Exception.Message }
   }
-  [Console]::Out.WriteLine(($result | ConvertTo-Json -Compress))
-  [Console]::Out.Flush()
+  Send $result
 }
 ''';
