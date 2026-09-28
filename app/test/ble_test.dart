@@ -10,6 +10,7 @@ import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/platform/files.dart';
+import 'package:sidekick/platform/hotspot.dart';
 import 'package:sidekick/platform/input.dart';
 import 'package:sidekick/platform/media.dart';
 
@@ -24,6 +25,31 @@ PeerClient bluetoothClient(SidekickServer server, {String? token, int mtu = 23})
     send: (chunk) => dispatcher.onChunk('central-1', chunk, maxChunk: mtu - 3, sendChunk: (c) async => toClient.add(c)),
   );
   return PeerClient.bluetooth(rpc, token: token);
+}
+
+/// Pretends to be a phone that opens hotspots and a PC that joins them.
+class FakeLink extends DirectLink {
+  final events = <String>[];
+  @override
+  bool get canHost => true;
+  @override
+  bool get canJoin => true;
+  @override
+  Future<HotspotCredentials> host() async {
+    events.add('host');
+    return const HotspotCredentials(ssid: 'DIRECT-sk', passphrase: 'secret123', addresses: ['192.168.49.1']);
+  }
+
+  @override
+  Future<List<String>> join(HotspotCredentials c) async {
+    events.add('join ${c.ssid} ${c.passphrase}');
+    return ['192.168.49.20'];
+  }
+
+  @override
+  Future<void> stopHosting() async => events.add('stop');
+  @override
+  Future<void> leave() async => events.add('leave');
 }
 
 void main() {
@@ -112,6 +138,57 @@ void main() {
 
       expect((await client.mediaStatus()).available, isFalse);
       expect(() => client.openInput(), throwsA(isA<SidekickException>()));
+    });
+
+    test('direct link: hotspot and join only over Bluetooth, only for paired devices', () async {
+      final link = FakeLink();
+      final phone = SidekickServer(
+        self: () => DeviceInfo(id: pcId, name: 'Phone', platform: DevicePlatform.android, port: sidekickPort),
+        trust: trust,
+        files: FileService(home: home.path),
+        media: UnsupportedMediaController(),
+        input: UnsupportedInputInjector(),
+        receiveDir: () async => home.path,
+        link: link,
+      );
+      final token = newToken();
+      trust.add(TrustedPeer(id: newDeviceId(), name: 'PC', platform: DevicePlatform.windows, token: token));
+
+      expect(() => bluetoothClient(phone).startHotspot(), throwsA(isA<SidekickException>()));
+
+      final client = bluetoothClient(phone, token: token);
+      final creds = await client.startHotspot();
+      expect(creds.ssid, 'DIRECT-sk');
+      expect(creds.addresses, ['192.168.49.1']);
+      expect(await client.joinHotspot(creds), ['192.168.49.20']);
+      expect(link.events, ['host', 'join DIRECT-sk secret123']);
+
+      await client.releaseLink();
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(link.events, containsAll(['stop', 'leave']));
+
+      // On a shared network there's nothing to set up.
+      await phone.start(port: 0, address: InternetAddress.loopbackIPv4);
+      try {
+        final wifi = PeerClient(host: '127.0.0.1', port: phone.port, token: token);
+        await expectLater(wifi.startHotspot(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 400)));
+      } finally {
+        await phone.stop();
+      }
+    });
+
+    test('credentials round-trip', () {
+      const c = HotspotCredentials(ssid: 'a"b', passphrase: 'p', security: 'wpa3', addresses: ['1.2.3.4']);
+      final back = HotspotCredentials.fromJson(c.toJson());
+      expect(
+        [back.ssid, back.passphrase, back.security, back.addresses],
+        [
+          'a"b',
+          'p',
+          'wpa3',
+          ['1.2.3.4'],
+        ],
+      );
     });
   });
 }

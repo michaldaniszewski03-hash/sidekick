@@ -81,6 +81,8 @@ class _RemoteState extends State<_Remote> {
       _error = null;
     });
     try {
+      // Remote control needs Wi-Fi; over Bluetooth, set up a direct link.
+      if (widget.state.viaBluetooth(widget.device.id)) await widget.state.connectDirect(widget.device);
       final session = await widget.state.clientFor(widget.device).openInput();
       if (!mounted) {
         await session.close();

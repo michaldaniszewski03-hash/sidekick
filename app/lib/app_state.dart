@@ -15,6 +15,7 @@ import 'core/server.dart';
 import 'core/trust.dart';
 import 'platform/android.dart';
 import 'platform/files.dart';
+import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
 import 'platform/media.dart';
@@ -94,6 +95,15 @@ class AppState extends ChangeNotifier {
   final Map<String, BleSighting> _bleSeen = {};
   final Map<String, PeerClient> _bleClients = {};
   Timer? _bleTimer;
+
+  /// AirDrop-style direct Wi-Fi: Bluetooth hands over a hotspot's name and
+  /// password, then everything runs over Wi-Fi.
+  final directLink = DirectLink.forCurrentPlatform();
+  final Map<String, Future<bool>> _directConnecting = {};
+  final Map<String, Timer> _directIdle = {};
+
+  /// Devices we're setting up a direct link with right now.
+  Set<String> get connectingDirect => _directConnecting.keys.toSet();
 
   final _pairRequests = StreamController<PairingRequest>.broadcast();
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
@@ -185,6 +195,7 @@ class AppState extends ChangeNotifier {
       input: input,
       receiveDir: receiveDir,
       permissions: () => permissions,
+      link: directLink,
     );
     server.events.listen(_onServerEvent);
     try {
@@ -234,6 +245,11 @@ class AppState extends ChangeNotifier {
     _presenceTimer?.cancel();
     _scanTimer?.cancel();
     _bleTimer?.cancel();
+    for (final t in _directIdle.values) {
+      t.cancel();
+    }
+    directLink.stopHosting();
+    directLink.leave();
     bluetooth?.stop();
     discovery.stop();
     server.stop();
@@ -377,6 +393,107 @@ class AppState extends ChangeNotifier {
     return PeerClient.bluetooth(bt.clientFor(sighting.peripheral));
   }
 
+  /// Whether this device and [d] can set up a direct Wi-Fi link: an
+  /// Android phone opens a hotspot, a Windows PC or Mac joins it.
+  bool canConnectDirect(PairedDevice d) {
+    final peerHosts = d.platform == DevicePlatform.android;
+    final peerJoins = d.platform == DevicePlatform.windows || d.platform == DevicePlatform.macos;
+    return (directLink.canHost && peerJoins) || (directLink.canJoin && peerHosts);
+  }
+
+  /// Makes [d] reachable over Wi-Fi if it's only nearby over Bluetooth, by
+  /// setting up a direct link. True when Wi-Fi works afterwards.
+  Future<bool> connectDirect(PairedDevice d) {
+    if (reachableViaWifi(d.id)) {
+      _keepDirect(d);
+      return Future.value(true);
+    }
+    if (!viaBluetooth(d.id) || !canConnectDirect(d)) return Future.value(false);
+    final pending = _directConnecting[d.id];
+    if (pending != null) return pending;
+    final attempt = _directConnecting[d.id] = _connectDirect(d);
+    notifyListeners();
+    return attempt.whenComplete(() {
+      _directConnecting.remove(d.id);
+      notifyListeners();
+    });
+  }
+
+  Future<bool> _connectDirect(PairedDevice d) async {
+    final ble = clientFor(d);
+    final port = _bleSeen[d.id]?.info.port ?? d.lastPort;
+    List<String> candidates;
+    try {
+      if (directLink.canHost) {
+        final creds = await directLink.host();
+        candidates = await ble.joinHotspot(creds);
+      } else {
+        final creds = await ble.startHotspot();
+        await directLink.join(creds);
+        candidates = creds.addresses;
+      }
+    } catch (e) {
+      await _releaseDirect(d, ble);
+      _notices.add(Notice("Couldn't set up a direct Wi-Fi link: $e"));
+      return false;
+    }
+    // Give both sides a moment to finish getting on the network.
+    for (var attempt = 0; attempt < 8; attempt++) {
+      for (final host in candidates) {
+        try {
+          final info = await PeerClient(host: host, port: port).info(timeout: const Duration(seconds: 2));
+          if (info.id == d.id) {
+            _onFound(info);
+            _keepDirect(d);
+            return true;
+          }
+        } catch (_) {}
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    await _releaseDirect(d, ble);
+    _notices.add(Notice("Joined ${d.name}'s hotspot but couldn't reach it. Check the firewall."));
+    return false;
+  }
+
+  /// Keeps a direct link while it's in use; closes it after a quiet spell.
+  void _keepDirect(PairedDevice d) {
+    final timer = _directIdle[d.id];
+    if (timer == null && !_directConnecting.containsKey(d.id)) return; // Not a direct link.
+    timer?.cancel();
+    _directIdle[d.id] = Timer(const Duration(minutes: 3), () {
+      if (transfers.any((t) => t.state == TransferState.running && t.deviceName == d.name) ||
+          activeRemoteSessions.isNotEmpty) {
+        _keepDirect(d);
+      } else {
+        unawaited(_releaseDirect(d, PeerClient.forDevice(d)));
+      }
+    });
+  }
+
+  Future<void> _releaseDirect(PairedDevice d, PeerClient peer) async {
+    _directIdle.remove(d.id)?.cancel();
+    try {
+      await peer.releaseLink();
+    } catch (_) {}
+    await directLink.stopHosting();
+    await directLink.leave();
+    _lastContact.remove(d.id);
+    notifyListeners();
+  }
+
+  /// Before a big transfer or remote control over Bluetooth, try to switch
+  /// to a direct Wi-Fi link. Small things just go over Bluetooth.
+  Future<PeerClient> _clientForTransfer(PairedDevice d, int bytes) async {
+    if (viaBluetooth(d.id) && bytes > directLinkThreshold) await connectDirect(d);
+    if (_directIdle.containsKey(d.id)) _keepDirect(d);
+    return clientFor(d);
+  }
+
+  /// Bigger transfers than this set up a direct Wi-Fi link when they'd
+  /// otherwise crawl over Bluetooth.
+  static const directLinkThreshold = 2 * 1024 * 1024;
+
   void _onBluetoothSighting(BleSighting sighting) {
     final id = sighting.info.id;
     final previous = _bleSeen[id];
@@ -427,7 +544,7 @@ class AppState extends ChangeNotifier {
   Future<void> _checkPresence() async {
     await Future.wait([
       for (final d in _paired.values)
-        if (!isOnline(d.id) && d.lastAddress != null)
+        if (!reachableViaWifi(d.id) && d.lastAddress != null)
           PeerClient(host: d.lastAddress!, port: d.lastPort)
               .info(timeout: const Duration(seconds: 2))
               .then((info) {
@@ -564,7 +681,13 @@ class AppState extends ChangeNotifier {
   /// Sends local files to [d]. With [remoteDir] they go into that folder on
   /// the other device; otherwise into its receive folder.
   Future<void> sendFiles(PairedDevice d, List<File> localFiles, {String? remoteDir}) async {
-    final client = clientFor(d);
+    var total = 0;
+    for (final file in localFiles) {
+      try {
+        total += await file.length();
+      } catch (_) {}
+    }
+    final client = await _clientForTransfer(d, total);
     for (final file in localFiles) {
       final t = _startTransfer(p.basename(file.path), d, upload: true);
       try {
@@ -590,7 +713,8 @@ class AppState extends ChangeNotifier {
       final dir = await receiveDir();
       await Directory(dir).create(recursive: true);
       final dest = await uniqueFile(dir, sanitizeFileName(entry.name));
-      final file = await clientFor(d).download(entry.path, dest, onProgress: (a, b) => _progress(t, a, b));
+      final client = await _clientForTransfer(d, entry.size);
+      final file = await client.download(entry.path, dest, onProgress: (a, b) => _progress(t, a, b));
       t
         ..state = TransferState.done
         ..localPath = file.path;

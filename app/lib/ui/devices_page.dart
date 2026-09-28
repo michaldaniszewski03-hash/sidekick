@@ -355,6 +355,8 @@ class _PairedCardState extends State<_PairedCard> {
                           Text(
                             _dragging
                                 ? 'Drop to send'
+                                : state.connectingDirect.contains(device.id)
+                                ? 'Setting up direct Wi-Fi…'
                                 : state.viaBluetooth(device.id)
                                 ? 'Connected via Bluetooth'
                                 : (online ? 'Connected' : 'Offline'),

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:web_socket_channel/io.dart';
 
+import '../platform/hotspot.dart';
 import 'ble_protocol.dart';
 import 'models.dart';
 import 'trust.dart';
@@ -128,13 +129,14 @@ class PeerClient {
     return jsonDecode(await utf8.decodeStream(res));
   }
 
-  Future<dynamic> _postJson(String path, Object body) async {
+  Future<dynamic> _postJson(String path, Object body, {Duration timeout = const Duration(seconds: 30)}) async {
     if (ble != null) {
       final res = await _bleSend(
         'POST',
         path,
         body: utf8.encode(jsonEncode(body)),
         headers: {'content-type': 'application/json'},
+        timeout: timeout,
       );
       return jsonDecode(utf8.decode(res.body));
     }
@@ -188,6 +190,23 @@ class PeerClient {
   }
 
   Future<void> unpair() => _postJson('/v1/unpair', const {});
+
+  // ------------------------------------------------------------ direct link
+
+  /// Asks the device (over Bluetooth) to open a hotspot for us.
+  Future<HotspotCredentials> startHotspot() async => HotspotCredentials.fromJson(
+    await _postJson('/v1/link/hotspot', const {}, timeout: const Duration(seconds: 40)) as Map<String, dynamic>,
+  );
+
+  /// Asks the device (over Bluetooth) to join our hotspot. Returns our
+  /// addresses it can reach.
+  Future<List<String>> joinHotspot(HotspotCredentials creds) async {
+    final json = await _postJson('/v1/link/join', creds.toJson(), timeout: const Duration(seconds: 60)) as Map;
+    return [for (final a in (json['addresses'] as List?) ?? const []) '$a'];
+  }
+
+  /// Tells the device we're done with the direct link.
+  Future<void> releaseLink() => _postJson('/v1/link/release', const {}, timeout: const Duration(seconds: 5));
 
   // ------------------------------------------------------------ files
 

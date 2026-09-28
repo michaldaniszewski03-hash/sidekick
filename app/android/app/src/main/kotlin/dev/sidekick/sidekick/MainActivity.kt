@@ -10,6 +10,8 @@ import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -22,6 +24,7 @@ import io.flutter.plugin.common.MethodChannel
  */
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
+    private var hotspot: WifiManager.LocalOnlyHotspotReservation? = null
     private lateinit var media: MediaBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -33,6 +36,12 @@ class MainActivity : FlutterActivity() {
                     when (call.method) {
                         "acquireMulticastLock" -> {
                             acquireMulticastLock()
+                            result.success(null)
+                        }
+                        "startHotspot" -> startHotspot(result)
+                        "stopHotspot" -> {
+                            hotspot?.close()
+                            hotspot = null
                             result.success(null)
                         }
                         "permissions" -> result.success(permissions())
@@ -77,6 +86,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        hotspot?.close()
+        hotspot = null
         multicastLock?.release()
         multicastLock = null
         super.onDestroy()
@@ -93,6 +104,78 @@ class MainActivity : FlutterActivity() {
             setReferenceCounted(false)
             acquire()
         }
+    }
+
+    /**
+     * Opens a local-only hotspot: a private Wi-Fi network with a random name
+     * and password that doesn't share mobile data. A PC joins it for a
+     * direct link when the two devices aren't on the same Wi-Fi.
+     */
+    private fun startHotspot(result: MethodChannel.Result) {
+        hotspot?.let {
+            result.success(describe(it))
+            return
+        }
+        val needed = if (Build.VERSION.SDK_INT >= 33) {
+            Manifest.permission.NEARBY_WIFI_DEVICES
+        } else {
+            Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (checkSelfPermission(needed) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(needed), 2)
+            result.error("permission", "Allow Sidekick to find nearby devices on your phone, then try again.", null)
+            return
+        }
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        var answered = false
+        try {
+            wifi.startLocalOnlyHotspot(object : WifiManager.LocalOnlyHotspotCallback() {
+                override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
+                    hotspot = reservation
+                    if (!answered) {
+                        answered = true
+                        result.success(describe(reservation))
+                    }
+                }
+
+                override fun onStopped() {
+                    hotspot = null
+                }
+
+                override fun onFailed(reason: Int) {
+                    if (answered) return
+                    answered = true
+                    val why = when (reason) {
+                        WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED -> "hotspots are turned off on this phone"
+                        WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE -> "turn off your regular hotspot first"
+                        else -> "error $reason"
+                    }
+                    result.error("hotspot", "Couldn't open a hotspot: $why.", null)
+                }
+            }, Handler(Looper.getMainLooper()))
+        } catch (e: SecurityException) {
+            result.error("permission", "Turn on Location, then try again.", null)
+        } catch (e: IllegalStateException) {
+            result.error("hotspot", "A hotspot is already open.", null)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun describe(reservation: WifiManager.LocalOnlyHotspotReservation): Map<String, String?> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val config = reservation.softApConfiguration
+            val security = when (config.securityType) {
+                android.net.wifi.SoftApConfiguration.SECURITY_TYPE_WPA3_SAE -> "wpa3"
+                else -> "wpa2"
+            }
+            return mapOf("ssid" to config.ssid, "passphrase" to config.passphrase, "security" to security)
+        }
+        val config = reservation.wifiConfiguration
+        return mapOf(
+            "ssid" to config?.SSID?.trim('"'),
+            "passphrase" to config?.preSharedKey?.trim('"'),
+            "security" to "wpa2",
+        )
     }
 
     private fun permissions(): Map<String, Boolean> = mapOf(

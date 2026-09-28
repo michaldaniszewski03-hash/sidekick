@@ -244,21 +244,36 @@ class OfflineBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (state.viaBluetooth(device.id)) {
+      final connecting = state.connectingDirect.contains(device.id);
+      final direct = state.canConnectDirect(device);
       return Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
-            Icon(Icons.bluetooth, color: scheme.onSecondaryContainer),
+            if (connecting)
+              SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: scheme.onSecondaryContainer),
+              )
+            else
+              Icon(Icons.bluetooth, color: scheme.onSecondaryContainer),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Connected to ${device.name} over Bluetooth because you\'re not on the same Wi-Fi. '
-                'Files and media work but are slower; remote control needs Wi-Fi.',
+                connecting
+                    ? 'Setting up a direct Wi-Fi link with ${device.name}…'
+                    : direct
+                    ? 'Connected to ${device.name} over Bluetooth because you\'re not on the same Wi-Fi. '
+                          'Big files and remote control switch to a direct Wi-Fi link automatically.'
+                    : 'Connected to ${device.name} over Bluetooth because you\'re not on the same Wi-Fi. '
+                          'Files and media work but are slower; remote control needs Wi-Fi.',
                 style: TextStyle(color: scheme.onSecondaryContainer),
               ),
             ),
+            if (direct && !connecting)
+              TextButton(onPressed: () => state.connectDirect(device), child: const Text('Use Wi-Fi')),
           ],
         ),
       );

@@ -11,6 +11,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 
 import '../platform/files.dart';
+import '../platform/hotspot.dart';
 import '../platform/input.dart';
 import '../platform/media.dart';
 import 'ble_protocol.dart';
@@ -72,7 +73,9 @@ class SidekickServer {
     required this.input,
     required this.receiveDir,
     Permissions Function()? permissions,
-  }) : permissions = permissions ?? (() => const Permissions());
+    DirectLink? link,
+  }) : permissions = permissions ?? (() => const Permissions()),
+       link = link ?? NoDirectLink();
 
   /// Our own identity; called on every request so name changes apply live.
   final DeviceInfo Function() self;
@@ -82,6 +85,9 @@ class SidekickServer {
   final InputInjector input;
   final Future<String> Function() receiveDir;
   final Permissions Function() permissions;
+
+  /// Opens or joins a direct Wi-Fi link when a peer asks over Bluetooth.
+  final DirectLink link;
 
   final _events = StreamController<ServerEvent>.broadcast();
   Stream<ServerEvent> get events => _events.stream;
@@ -154,7 +160,10 @@ class SidekickServer {
       ..post('/v1/fs/upload', _authed(_upload, (p) => p.files))
       ..get('/v1/media', _authed(_mediaStatus, (p) => p.media))
       ..post('/v1/media', _authed(_mediaAction, (p) => p.media))
-      ..get('/v1/input', _authed(_inputSocket, (p) => p.input));
+      ..get('/v1/input', _authed(_inputSocket, (p) => p.input))
+      ..post('/v1/link/hotspot', _authed(_linkHotspot))
+      ..post('/v1/link/join', _authed(_linkJoin))
+      ..post('/v1/link/release', _authed(_linkRelease));
     return const Pipeline().addMiddleware(_errors).addHandler(router.call);
   }
 
@@ -264,6 +273,44 @@ class SidekickServer {
     final peer = _peer(r);
     trust.remove(peer.id);
     _events.add(Unpaired(peer.id));
+    return _json({'ok': true});
+  }
+
+  // -------------------------------------------------------------- direct link
+
+  static bool _overBluetooth(Request r) => r.context['sidekick.transport'] == 'bluetooth';
+
+  /// Opens a hotspot for the asking peer and returns how to join it. Only
+  /// over Bluetooth: on a shared network there's no point.
+  Future<Response> _linkHotspot(Request r) async {
+    if (!_overBluetooth(r)) return _error(400, 'Already on the same network');
+    if (!link.canHost) return _error(501, "This device can't open a hotspot");
+    try {
+      return _json((await link.host()).toJson());
+    } on DirectLinkException catch (e) {
+      return _error(503, e.message);
+    }
+  }
+
+  /// Joins the asking peer's hotspot and returns its addresses we reach.
+  Future<Response> _linkJoin(Request r) async {
+    if (!_overBluetooth(r)) return _error(400, 'Already on the same network');
+    if (!link.canJoin) return _error(501, "This device can't join a hotspot");
+    final creds = HotspotCredentials.fromJson(await _body(r));
+    try {
+      return _json({'addresses': await link.join(creds)});
+    } on DirectLinkException catch (e) {
+      return _error(503, e.message);
+    }
+  }
+
+  /// The peer is done: close our hotspot, or go back to our usual network.
+  Future<Response> _linkRelease(Request r) async {
+    // Answer first; leaving the network may cut this very connection.
+    Timer(const Duration(milliseconds: 300), () {
+      unawaited(link.stopHosting());
+      unawaited(link.leave());
+    });
     return _json({'ok': true});
   }
 

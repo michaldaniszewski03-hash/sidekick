@@ -37,8 +37,10 @@ Every push also builds both on GitHub Actions (**Build** workflow → run → **
 
 Sidekick prefers Wi-Fi. When two devices can't reach each other over Wi-Fi (no router, a different network, or Wi-Fi off), they find each other over Bluetooth instead:
 
-- Pairing, sending and browsing files, and media controls all work over Bluetooth. Bluetooth runs at tens of KB/s, so it's meant for texts, photos and documents; files over 50 MB need Wi-Fi.
-- Remote control (mouse and keyboard) needs Wi-Fi; Bluetooth is too slow for it.
+- Pairing, browsing files, small files and media controls work straight over Bluetooth.
+- **Direct Wi-Fi link (like AirDrop):** for files over 2 MB and for remote control, an Android phone and a Windows PC or Mac use Bluetooth only to hand over the name and password of a private hotspot. The phone opens it (no mobile data is shared), the computer joins it on its own, and the transfer runs at full Wi-Fi speed. After 3 quiet minutes the phone closes the hotspot and the computer goes back to its usual network. You can also start it yourself with **Use Wi-Fi** in the Bluetooth banner.
+- Without a direct link (e.g. iPhone ↔ PC, or phone ↔ phone), Bluetooth runs at tens of KB/s: fine for texts, photos and documents; files over 50 MB and remote control need Wi-Fi.
+- The phone asks for **Nearby devices** permission (Location on Android 12 and older) the first time it opens a hotspot. Some phones can't open one while connected to another Wi-Fi network.
 - Both devices need Bluetooth on and Sidekick open. Android asks for Bluetooth permission on first start; iPhone and Mac ask the first time Sidekick uses Bluetooth.
 - The device card says **Connected via Bluetooth** while it's in use, and switches back to Wi-Fi automatically when that becomes available.
 
