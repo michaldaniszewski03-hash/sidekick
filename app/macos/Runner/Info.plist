@@ -22,6 +22,11 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<!-- The screen flickered between the current and a stale frame on some
+	     Macs (seen while the pairing dialog was open). Use the older renderer
+	     until that's resolved; Flutter ignores this if it isn't available. -->
+	<key>FLTEnableImpeller</key>
+	<false/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Sidekick finds and talks to your other devices on this network.</string>
 	<key>LSApplicationCategoryType</key>

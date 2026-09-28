@@ -6,9 +6,11 @@ import 'models.dart';
 
 /// Finds other Sidekick devices on the local network with UDP multicast.
 ///
-/// Every device announces itself on start-up and every few seconds. A
-/// start-up announcement asks others to answer right away, so new devices
-/// show up in about a second instead of waiting for the next round.
+/// Every device announces itself on start-up and every few seconds, by
+/// multicast and broadcast. Whoever hears an announcement answers the sender
+/// directly by unicast: a PC with several network adapters (Hyper-V, WSL,
+/// VPNs) often sends multicast out of the wrong one, but a direct reply is
+/// routed correctly, so both sides still find each other.
 class Discovery {
   Discovery({required this.self, this.port = sidekickPort, this.interval = const Duration(seconds: 5)});
 
@@ -23,12 +25,20 @@ class Discovery {
 
   RawDatagramSocket? _socket;
   Timer? _timer;
-  DateTime _lastReply = DateTime.fromMillisecondsSinceEpoch(0);
   final _group = InternetAddress(multicastGroup);
+  final _broadcast = InternetAddress('255.255.255.255');
+
+  /// When we last answered each address directly, to keep replies rare.
+  final Map<String, DateTime> _lastDirectReply = {};
 
   Future<void> start() async {
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port, reuseAddress: true);
     socket.multicastLoopback = false;
+    try {
+      socket.broadcastEnabled = true;
+    } catch (_) {
+      // Not allowed on this platform; multicast and direct replies remain.
+    }
     // Join on every IPv4 interface so we hear peers on Wi-Fi *and* Ethernet.
     final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
     var joined = false;
@@ -65,24 +75,36 @@ class Discovery {
       final device = DeviceInfo.fromJson(msg['device'] as Map<String, dynamic>, address: datagram.address.address);
       if (device.id == self().id) return;
       _found.add(device);
-      if (msg['reply'] == true && DateTime.now().difference(_lastReply) > const Duration(seconds: 1)) {
-        _lastReply = DateTime.now();
-        announce();
+      final from = datagram.address.address;
+      final last = _lastDirectReply[from];
+      final now = DateTime.now();
+      final due = last == null || now.difference(last) > const Duration(seconds: 10);
+      final asked = msg['reply'] == true && (last == null || now.difference(last) > const Duration(seconds: 1));
+      if (due || asked) {
+        _lastDirectReply[from] = now;
+        _send(_payload(), datagram.address);
       }
     } catch (_) {
       // Not ours, or malformed.
     }
   }
 
-  void announce({bool askForReplies = false}) {
-    final data = utf8.encode(
-      jsonEncode({'type': 'sidekick.announce', 'reply': askForReplies, 'device': self().toJson()}),
-    );
+  List<int> _payload({bool askForReplies = false}) =>
+      utf8.encode(jsonEncode({'type': 'sidekick.announce', 'reply': askForReplies, 'device': self().toJson()}));
+
+  void _send(List<int> data, InternetAddress to) {
     try {
-      _socket?.send(data, _group, port);
+      _socket?.send(data, to, port);
     } catch (_) {
-      // Network went away (sleep, Wi-Fi switch). Next tick will retry.
+      // Network went away (sleep, Wi-Fi switch), or broadcast isn't allowed.
+      // Next tick will retry.
     }
+  }
+
+  void announce({bool askForReplies = false}) {
+    final data = _payload(askForReplies: askForReplies);
+    _send(data, _group);
+    _send(data, _broadcast);
   }
 
   Future<void> stop() async {
