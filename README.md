@@ -33,12 +33,14 @@ Every push also builds both on GitHub Actions (**Build** workflow → run → **
 
 ### Release a new version
 
-```sh
-git tag v0.2.0
-git push origin v0.2.0
-```
+1. Bump `version:` in `app/pubspec.yaml`, for example `0.2.0+2`.
+2. On GitHub, go to **Releases → Draft a new release**, create a tag (for example `v0.2.0`), and click **Publish release**.
 
-The **Build** workflow then publishes a Release with the Windows installer and the APK attached.
+Within about 6 minutes the **Build** workflow attaches `SidekickSetup-<version>.exe` and `Sidekick-<version>.apk` to that release. Pushing a `v*` tag from the command line (`git tag v0.2.0 && git push origin v0.2.0`) does the same and creates the release for you.
+
+To attach builds to a release that's missing them, go to **Actions → Build → Run workflow** and enter the release's tag.
+
+With a `v` tag the file names take the version from the tag; otherwise they use the version in `pubspec.yaml`.
 
 **Android signing (do this once):** until you add a signing key, each APK is signed with a throwaway key. Android then refuses to install one version over another, so you'd have to uninstall first. To fix that, create a key once and keep it safe:
 

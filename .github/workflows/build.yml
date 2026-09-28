@@ -1,14 +1,29 @@
 name: Build
 
 # Every push builds the Windows installer and the Android APK (download them
-# from the run's Artifacts). Pushing a tag like v0.2.0 also publishes them as
-# a GitHub Release.
+# from the run's Artifacts). They're attached to a GitHub Release when:
+#   - you publish a release on GitHub (any tag name), or
+#   - you push a tag like v0.2.0 (a release is created for it), or
+#   - you run this workflow by hand with "release_tag" set.
 on:
   push:
     branches: ["**"]
     tags: ["v*"]
   pull_request:
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Attach the builds to this existing release (its tag name). Leave empty to just build."
+        required: false
+        default: ""
+
+# Publishing a release on GitHub with a new tag fires both a tag push and a
+# release event; keep only the newest run for the same ref.
+concurrency:
+  group: build-${{ github.ref }}-${{ inputs.release_tag }}
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: 3.47.5
@@ -133,7 +148,10 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     needs: [test, windows, android]
     runs-on: ubuntu-latest
     permissions:
@@ -145,6 +163,7 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.event.release.tag_name || github.ref_name }}
           files: dist/*
           generate_release_notes: true
           body: |
