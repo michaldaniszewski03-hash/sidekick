@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/bluetooth.dart';
 import 'core/client.dart';
 import 'core/discovery.dart';
 import 'core/models.dart';
@@ -86,6 +87,13 @@ class AppState extends ChangeNotifier {
   late final FileService files;
   late final SidekickServer server;
   late final Discovery discovery;
+
+  /// Bluetooth, for when devices don't share a Wi-Fi network. Null on
+  /// platforms without support (and in tests).
+  BluetoothService? bluetooth;
+  final Map<String, BleSighting> _bleSeen = {};
+  final Map<String, PeerClient> _bleClients = {};
+  Timer? _bleTimer;
 
   final _pairRequests = StreamController<PairingRequest>.broadcast();
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
@@ -207,6 +215,14 @@ class AppState extends ChangeNotifier {
       _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) => scanNetwork());
     }
 
+    if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows) {
+      final bt = bluetooth = BluetoothService(self: () => me, server: server);
+      bt.found.listen(_onBluetoothSighting);
+      bt.statusChanges.listen((_) => notifyListeners());
+      unawaited(bt.start().then((_) => _maybeScanBluetooth()).catchError((_) {}));
+      _bleTimer = Timer.periodic(const Duration(seconds: 20), (_) => _maybeScanBluetooth());
+    }
+
     addresses = await localAddresses();
     _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) => _checkPresence());
     unawaited(_checkPresence());
@@ -217,6 +233,8 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _presenceTimer?.cancel();
     _scanTimer?.cancel();
+    _bleTimer?.cancel();
+    bluetooth?.stop();
     discovery.stop();
     server.stop();
     media.dispose();
@@ -249,6 +267,8 @@ class AppState extends ChangeNotifier {
     if (scanning) return;
     scanning = true;
     notifyListeners();
+    // Look over Bluetooth at the same time.
+    final bluetoothScan = bluetooth?.scan() ?? Future<void>.value();
     try {
       final queue = <String>[];
       for (final address in await localAddresses()) {
@@ -271,7 +291,7 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      await Future.wait(List.generate(32, (_) => worker()));
+      await Future.wait([...List.generate(32, (_) => worker()), bluetoothScan]);
     } finally {
       scanning = false;
       notifyListeners();
@@ -285,24 +305,44 @@ class AppState extends ChangeNotifier {
 
   List<PairedDevice> get paired => _paired.values.toList()..sort((a, b) => a.name.compareTo(b.name));
 
-  /// Devices we've heard from recently that we haven't paired with.
+  /// Devices we've heard from recently that we haven't paired with. Ones
+  /// seen only over Bluetooth have no [DeviceInfo.address].
   List<DeviceInfo> get nearby {
     final cutoff = DateTime.now().subtract(const Duration(seconds: 20));
-    return [
+    final wifi = {
       for (final n in _nearby.values)
-        if (n.lastSeen.isAfter(cutoff) && !_paired.containsKey(n.info.id)) n.info,
+        if (n.lastSeen.isAfter(cutoff) && !_paired.containsKey(n.info.id)) n.info.id: n.info,
+    };
+    final bleCutoff = DateTime.now().subtract(const Duration(seconds: 60));
+    return [
+      ...wifi.values,
+      for (final s in _bleSeen.values)
+        if (s.seen.isAfter(bleCutoff) && !_paired.containsKey(s.info.id) && !wifi.containsKey(s.info.id)) s.info,
     ]..sort((a, b) => a.name.compareTo(b.name));
   }
 
   PairedDevice? pairedById(String? id) => id == null ? null : _paired[id];
 
   /// Capabilities the device last announced, if we've seen it.
-  Capabilities? capabilitiesOf(String id) => _nearby[id]?.info.capabilities;
+  Capabilities? capabilitiesOf(String id) => _nearby[id]?.info.capabilities ?? _bleSeen[id]?.info.capabilities;
 
-  bool isOnline(String id) {
+  /// Reachable over the local network (fast, all features).
+  bool reachableViaWifi(String id) {
     final t = _lastContact[id];
     return t != null && DateTime.now().difference(t) < const Duration(seconds: 25);
   }
+
+  /// Seen over Bluetooth in the last minute.
+  bool reachableViaBluetooth(String id) {
+    final s = _bleSeen[id];
+    return s != null && DateTime.now().difference(s.seen) < const Duration(seconds: 60);
+  }
+
+  /// Wi-Fi isn't available for this device but Bluetooth is, so requests go
+  /// over Bluetooth (slower, no remote control).
+  bool viaBluetooth(String id) => !reachableViaWifi(id) && reachableViaBluetooth(id);
+
+  bool isOnline(String id) => reachableViaWifi(id) || reachableViaBluetooth(id);
 
   PairedDevice? get selected {
     final d = pairedById(selectedId);
@@ -317,7 +357,45 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  PeerClient clientFor(PairedDevice d) => PeerClient.forDevice(d);
+  /// Wi-Fi when the device is reachable there; otherwise Bluetooth if it's
+  /// nearby; otherwise Wi-Fi again (which fails with a helpful message).
+  PeerClient clientFor(PairedDevice d) {
+    final sighting = _bleSeen[d.id];
+    final bt = bluetooth;
+    if (reachableViaWifi(d.id) || sighting == null || bt == null || !reachableViaBluetooth(d.id)) {
+      return PeerClient.forDevice(d);
+    }
+    return _bleClients[d.id] ??= PeerClient.bluetooth(bt.clientFor(sighting.peripheral), token: d.token);
+  }
+
+  PeerClient _clientForTarget(DeviceInfo target) {
+    final address = target.address;
+    if (address != null) return PeerClient(host: address, port: target.port);
+    final sighting = _bleSeen[target.id];
+    final bt = bluetooth;
+    if (sighting == null || bt == null) throw SidekickException('${target.name} is out of reach.');
+    return PeerClient.bluetooth(bt.clientFor(sighting.peripheral));
+  }
+
+  void _onBluetoothSighting(BleSighting sighting) {
+    final id = sighting.info.id;
+    final previous = _bleSeen[id];
+    _bleSeen[id] = sighting;
+    // A new Bluetooth address (phone restarted Bluetooth) needs a new link.
+    if (previous != null && previous.peripheral.uuid != sighting.peripheral.uuid) _bleClients.remove(id);
+    notifyListeners();
+  }
+
+  /// Bluetooth is only for when Wi-Fi can't do the job: this device has no
+  /// network, a paired device isn't reachable over it, or nothing's nearby.
+  Future<void> _maybeScanBluetooth() async {
+    final bt = bluetooth;
+    if (bt == null || bt.status != BluetoothStatus.on) return;
+    addresses = await localAddresses();
+    final needed =
+        addresses.isEmpty || _paired.keys.any((id) => !reachableViaWifi(id)) || (_paired.isEmpty && nearby.isEmpty);
+    if (needed) await bt.scan();
+  }
 
   void _onFound(DeviceInfo info) {
     final existing = _nearby[info.id];
@@ -373,11 +451,10 @@ class AppState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- pairing
 
-  Future<void> requestPairing(DeviceInfo target) =>
-      PeerClient(host: target.address!, port: target.port).requestPairing(me);
+  Future<void> requestPairing(DeviceInfo target) => _clientForTarget(target).requestPairing(me);
 
   Future<PairedDevice> confirmPairing(DeviceInfo target, String pin) async {
-    final result = await PeerClient(host: target.address!, port: target.port).confirmPairing(id, pin);
+    final result = await _clientForTarget(target).confirmPairing(id, pin);
     trust.add(
       TrustedPeer(
         id: result.device.id,
@@ -392,7 +469,8 @@ class AppState extends ChangeNotifier {
 
   void _addPaired(PairedDevice d) {
     _paired[d.id] = d;
-    _lastContact[d.id] = DateTime.now();
+    // Paired over Bluetooth there's no IP yet; Wi-Fi discovery fills it in.
+    if (d.lastAddress != null) _lastContact[d.id] = DateTime.now();
     selectedId ??= d.id;
     _savePaired();
     _pairedEvents.add(d);

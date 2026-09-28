@@ -27,6 +27,8 @@
 	     until that's resolved; Flutter ignores this if it isn't available. -->
 	<key>FLTEnableImpeller</key>
 	<false/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Sidekick uses Bluetooth to find and connect to your phone when you're not on the same Wi-Fi.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Sidekick finds and talks to your other devices on this network.</string>
 	<key>LSApplicationCategoryType</key>

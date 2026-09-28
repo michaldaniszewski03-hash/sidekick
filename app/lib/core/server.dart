@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
@@ -12,6 +13,7 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import '../platform/files.dart';
 import '../platform/input.dart';
 import '../platform/media.dart';
+import 'ble_protocol.dart';
 import 'models.dart';
 import 'trust.dart';
 
@@ -90,7 +92,7 @@ class SidekickServer {
   int get port => _server?.port ?? 0;
 
   Future<void> start({int port = sidekickPort, Object? address}) async {
-    _server = await shelf_io.serve(_handler(), address ?? InternetAddress.anyIPv4, port, shared: false);
+    _server = await shelf_io.serve(handler, address ?? InternetAddress.anyIPv4, port, shared: false);
     _server!.idleTimeout = const Duration(seconds: 30);
   }
 
@@ -101,6 +103,44 @@ class SidekickServer {
 
   /// Cancels a pairing request, e.g. when the user dismisses the PIN dialog.
   void cancelPairing(String deviceId) => _pending.remove(deviceId)?.cancelled = true;
+
+  /// The request handler, shared by the Wi-Fi (HTTP) server and Bluetooth.
+  late final Handler handler = _handler();
+
+  /// Runs a request that arrived over Bluetooth through [handler], so it gets
+  /// exactly the same auth, permission checks and behaviour as over Wi-Fi.
+  Future<BleResponse> handleBle(BleMessage request) async {
+    final h = request.header;
+    final query = {for (final e in ((h['query'] as Map?) ?? const {}).entries) '${e.key}': '${e.value}'};
+    final uri = Uri(
+      scheme: 'http',
+      host: 'bluetooth',
+      path: (h['path'] as String?) ?? '/',
+      queryParameters: query.isEmpty ? null : query,
+    );
+    final headers = {
+      for (final e in ((h['headers'] as Map?) ?? const {}).entries) '${e.key}'.toLowerCase(): '${e.value}',
+      'content-length': '${request.body.length}',
+    };
+    final response = await handler(
+      Request(
+        ((h['method'] as String?) ?? 'GET').toUpperCase(),
+        uri,
+        headers: headers,
+        body: request.body,
+        context: {'sidekick.transport': 'bluetooth'},
+      ),
+    );
+    final body = BytesBuilder(copy: false);
+    await for (final chunk in response.read()) {
+      body.add(chunk);
+      if (body.length > bleMaxBody) throw StateError('Too large for Bluetooth. Use Wi-Fi for big files.');
+    }
+    return BleResponse(response.statusCode, {
+      for (final e in response.headers.entries)
+        if (e.key != 'transfer-encoding') e.key: e.value,
+    }, body.takeBytes());
+  }
 
   Handler _handler() {
     final router = Router()

@@ -242,8 +242,28 @@ class OfflineBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.isOnline(device.id)) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
+    if (state.viaBluetooth(device.id)) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(16)),
+        child: Row(
+          children: [
+            Icon(Icons.bluetooth, color: scheme.onSecondaryContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Connected to ${device.name} over Bluetooth because you\'re not on the same Wi-Fi. '
+                'Files and media work but are slower; remote control needs Wi-Fi.',
+                style: TextStyle(color: scheme.onSecondaryContainer),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (state.isOnline(device.id)) return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -254,7 +274,8 @@ class OfflineBanner extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              "${device.name} isn't reachable. Make sure Sidekick is open on it and both devices are on the same Wi-Fi.",
+              "${device.name} isn't reachable. Make sure Sidekick is open on it, and that both devices are on the same "
+              'Wi-Fi or have Bluetooth on.',
               style: TextStyle(color: scheme.onErrorContainer),
             ),
           ),

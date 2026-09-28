@@ -72,7 +72,7 @@ class DevicesPage extends StatelessWidget {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                           leading: CircleAvatar(child: Icon(platformIcon(d.platform))),
                           title: Text(d.name),
-                          subtitle: Text('${d.platform.name} · ${d.address}'),
+                          subtitle: Text('${d.platform.name} · ${d.address ?? 'nearby over Bluetooth'}'),
                           trailing: FilledButton(
                             onPressed: () => pairWith(context, state, d),
                             child: const Text('Pair'),
@@ -353,7 +353,11 @@ class _PairedCardState extends State<_PairedCard> {
                           Icon(Icons.circle, size: 8, color: online ? Colors.green : scheme.outline),
                           const SizedBox(width: 6),
                           Text(
-                            _dragging ? 'Drop to send' : (online ? 'Connected' : 'Offline'),
+                            _dragging
+                                ? 'Drop to send'
+                                : state.viaBluetooth(device.id)
+                                ? 'Connected via Bluetooth'
+                                : (online ? 'Connected' : 'Offline'),
                             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
                           ),
                         ],

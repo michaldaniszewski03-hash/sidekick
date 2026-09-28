@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:web_socket_channel/io.dart';
 
+import 'ble_protocol.dart';
 import 'models.dart';
 import 'trust.dart';
 
@@ -21,9 +22,13 @@ class SidekickException implements Exception {
 /// Progress callback for transfers: bytes done out of [total] (0 if unknown).
 typedef Progress = void Function(int done, int total);
 
-/// Talks to one remote Sidekick device.
+/// Talks to one remote Sidekick device, over Wi-Fi (HTTP) or, when there's
+/// no shared network, over Bluetooth ([ble]).
 class PeerClient {
-  PeerClient({required this.host, this.port = sidekickPort, this.token});
+  PeerClient({required this.host, this.port = sidekickPort, this.token, this.ble});
+
+  /// Same API over a Bluetooth connection. Slower, and no remote control.
+  PeerClient.bluetooth(BleRpcClient this.ble, {this.token}) : host = 'bluetooth', port = 0;
 
   factory PeerClient.forDevice(PairedDevice device) =>
       PeerClient(host: device.lastAddress ?? '', port: device.lastPort, token: device.token);
@@ -31,6 +36,12 @@ class PeerClient {
   final String host;
   final int port;
   final String? token;
+  final BleRpcClient? ble;
+
+  bool get viaBluetooth => ble != null;
+
+  /// The IP address to remember for this device (none over Bluetooth).
+  String? get _address => ble == null ? host : null;
 
   static final HttpClient _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 4)
@@ -74,12 +85,59 @@ class PeerClient {
     return SidekickException(message, status: res.statusCode);
   }
 
+  Map<String, String> get _authHeaders => {if (token != null) 'authorization': 'Bearer $token'};
+
+  /// A request over Bluetooth, with the same error handling as HTTP.
+  Future<BleResponse> _bleSend(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    List<int> body = const [],
+    Map<String, String> headers = const {},
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final BleResponse res;
+    try {
+      res = await ble!.request(
+        method,
+        path,
+        query: query,
+        headers: {..._authHeaders, ...headers},
+        body: body,
+        timeout: timeout,
+      );
+    } on TimeoutException {
+      throw SidekickException('The device took too long to answer over Bluetooth.');
+    } on StateError catch (e) {
+      throw SidekickException(e.message);
+    }
+    if (res.status >= 400) {
+      var message = 'Request failed (${res.status})';
+      try {
+        final json = jsonDecode(utf8.decode(res.body));
+        if (json is Map && json['error'] is String) message = json['error'] as String;
+      } catch (_) {}
+      throw SidekickException(message, status: res.status);
+    }
+    return res;
+  }
+
   Future<dynamic> _getJson(String path, [Map<String, String>? query]) async {
+    if (ble != null) return jsonDecode(utf8.decode((await _bleSend('GET', path, query: query)).body));
     final res = await _send('GET', path, query: query);
     return jsonDecode(await utf8.decodeStream(res));
   }
 
   Future<dynamic> _postJson(String path, Object body) async {
+    if (ble != null) {
+      final res = await _bleSend(
+        'POST',
+        path,
+        body: utf8.encode(jsonEncode(body)),
+        headers: {'content-type': 'application/json'},
+      );
+      return jsonDecode(utf8.decode(res.body));
+    }
     final res = await _send('POST', path, json: body);
     return jsonDecode(await utf8.decodeStream(res));
   }
@@ -88,6 +146,10 @@ class PeerClient {
 
   /// Fetches the device's identity. Works without pairing.
   Future<DeviceInfo> info({Duration timeout = const Duration(seconds: 3)}) async {
+    if (ble != null) {
+      final res = await _bleSend('GET', '/v1/info', timeout: const Duration(seconds: 15));
+      return DeviceInfo.fromJson(jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>);
+    }
     final res = await _send('GET', '/v1/info', timeout: timeout);
     final json = jsonDecode(await utf8.decodeStream(res)) as Map<String, dynamic>;
     return DeviceInfo.fromJson(json, address: host);
@@ -98,7 +160,7 @@ class PeerClient {
   /// Asks the device to show a pairing code. Returns its identity.
   Future<DeviceInfo> requestPairing(DeviceInfo me) async {
     final json = await _postJson('/v1/pair/request', {'device': me.toJson()}) as Map<String, dynamic>;
-    return DeviceInfo.fromJson(json['device'] as Map<String, dynamic>, address: host);
+    return DeviceInfo.fromJson(json['device'] as Map<String, dynamic>, address: _address);
   }
 
   /// Sends the code the user typed. On success returns a [PairedDevice] we
@@ -111,14 +173,14 @@ class PeerClient {
       'pin': pin.replaceAll(RegExp(r'\s'), ''),
       'token': tokenForThem,
     }) as Map<String, dynamic>;
-    final info = DeviceInfo.fromJson(json['device'] as Map<String, dynamic>, address: host);
+    final info = DeviceInfo.fromJson(json['device'] as Map<String, dynamic>, address: _address);
     return (
       device: PairedDevice(
         id: info.id,
         name: info.name,
         platform: info.platform,
         token: json['token'] as String,
-        lastAddress: host,
+        lastAddress: _address,
         lastPort: info.port,
       ),
       tokenForThem: tokenForThem,
@@ -139,6 +201,18 @@ class PeerClient {
   /// Downloads [remotePath] into [destination]. The file is written under a
   /// temporary name and only renamed once complete.
   Future<File> download(String remotePath, File destination, {Progress? onProgress}) async {
+    if (ble != null) {
+      final res = await _bleSend(
+        'GET',
+        '/v1/fs/download',
+        query: {'path': remotePath},
+        timeout: const Duration(minutes: 30),
+      );
+      final partial = File('${destination.path}.sidekick-part');
+      await partial.writeAsBytes(res.body, flush: true);
+      onProgress?.call(res.body.length, res.body.length);
+      return partial.rename(destination.path);
+    }
     final res = await _send(
       'GET',
       '/v1/fs/download',
@@ -172,6 +246,21 @@ class PeerClient {
   Future<String> upload(File file, {String? name, String? remoteDir, Progress? onProgress}) async {
     final total = await file.length();
     final query = {'name': name ?? file.uri.pathSegments.last, 'dir': ?remoteDir};
+    if (ble != null) {
+      if (total > bleMaxBody) {
+        throw SidekickException('This file is too big for Bluetooth. Connect both devices to the same Wi-Fi.');
+      }
+      onProgress?.call(0, total);
+      final res = await _bleSend(
+        'POST',
+        '/v1/fs/upload',
+        query: query,
+        body: await file.readAsBytes(),
+        timeout: const Duration(minutes: 30),
+      );
+      onProgress?.call(total, total);
+      return (jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>)['path'] as String;
+    }
     try {
       final req = await _http.openUrl('POST', _uri('/v1/fs/upload', query));
       if (token != null) req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
@@ -208,6 +297,9 @@ class PeerClient {
   // ------------------------------------------------------------ input
 
   Future<InputSession> openInput() async {
+    if (ble != null) {
+      throw SidekickException('Remote control needs both devices on the same Wi-Fi. Bluetooth is too slow for it.');
+    }
     final channel = IOWebSocketChannel.connect(
       Uri(scheme: 'ws', host: host, port: port, path: '/v1/input'),
       headers: {if (token != null) 'authorization': 'Bearer $token'},

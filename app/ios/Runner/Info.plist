@@ -24,6 +24,8 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Sidekick uses Bluetooth to find and connect to your computer when you're not on the same Wi-Fi.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Sidekick finds and talks to your computer on this Wi-Fi network.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

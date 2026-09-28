@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
+import '../core/bluetooth.dart';
 import '../core/server.dart';
 import '../platform/android.dart';
 import '../platform/macos.dart';
@@ -105,6 +106,35 @@ class _SettingsPageState extends State<SettingsPage> {
                                   onPressed: MacBridge.requestAccessibility,
                                   child: const Text('Grant'),
                                 ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (state.bluetooth case final bt?) ...[
+                    const SectionLabel('Bluetooth'),
+                    _Group(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.bluetooth),
+                          title: const Text('Connect without Wi-Fi'),
+                          subtitle: Text(switch (bt.status) {
+                            BluetoothStatus.on =>
+                              "On. When your devices aren't on the same Wi-Fi, Sidekick connects over Bluetooth "
+                                  'for pairing, files and media.',
+                            BluetoothStatus.off => 'Bluetooth is off. Turn it on to connect without Wi-Fi.',
+                            BluetoothStatus.unauthorized => "Sidekick isn't allowed to use Bluetooth.",
+                            BluetoothStatus.unsupported => "This device doesn't support Bluetooth LE.",
+                            BluetoothStatus.starting => 'Starting…',
+                          }),
+                          isThreeLine: true,
+                          trailing: switch (bt.status) {
+                            BluetoothStatus.on => const Icon(Icons.check_circle, color: Colors.green),
+                            BluetoothStatus.unauthorized => FilledButton.tonal(
+                              onPressed: bt.requestPermission,
+                              child: const Text('Allow'),
+                            ),
+                            _ => null,
+                          },
                         ),
                       ],
                     ),

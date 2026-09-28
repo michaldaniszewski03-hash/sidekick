@@ -33,6 +33,17 @@ Every push also builds both on GitHub Actions (**Build** workflow → run → **
    - **Notification access:** the PC sees what's playing on the phone and can seek. Play/pause/next and volume work without it.
    - **Remote control (Accessibility):** the PC can tap, scroll and type on the phone. A dot shows where the "mouse" is. On Android 13 and newer, sideloaded apps need one extra step first: **App info → ⋮ → Allow restricted settings**.
 
+### Without Wi-Fi: Bluetooth
+
+Sidekick prefers Wi-Fi. When two devices can't reach each other over Wi-Fi (no router, a different network, or Wi-Fi off), they find each other over Bluetooth instead:
+
+- Pairing, sending and browsing files, and media controls all work over Bluetooth. Bluetooth runs at tens of KB/s, so it's meant for texts, photos and documents; files over 50 MB need Wi-Fi.
+- Remote control (mouse and keyboard) needs Wi-Fi; Bluetooth is too slow for it.
+- Both devices need Bluetooth on and Sidekick open. Android asks for Bluetooth permission on first start; iPhone and Mac ask the first time Sidekick uses Bluetooth.
+- The device card says **Connected via Bluetooth** while it's in use, and switches back to Wi-Fi automatically when that becomes available.
+
+How it works: every device offers a small Bluetooth service. Requests travel over it in chunks and go through exactly the same code as on Wi-Fi, so pairing, tokens and permissions behave the same way (see `app/lib/core/ble_protocol.dart` and `bluetooth.dart`).
+
 ### Set up a Mac
 
 To let your phone control the Mac, open **Settings** in Sidekick and click **Grant** next to **Accessibility**. Then turn Sidekick on in the list that opens. After updating the app you may need to switch it off and on again there, because macOS ties the permission to the app's signature.
