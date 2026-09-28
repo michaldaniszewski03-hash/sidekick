@@ -60,9 +60,12 @@ jobs:
 
       - name: Work out the version
         id: version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
         shell: bash
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          elif [[ "$RELEASE_TAG" == v* ]]; then v="${RELEASE_TAG#v}"
           else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
@@ -114,8 +117,11 @@ jobs:
 
       - name: Work out the version
         id: version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          elif [[ "$RELEASE_TAG" == v* ]]; then v="${RELEASE_TAG#v}"
           else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
@@ -162,8 +168,11 @@ jobs:
 
       - name: Work out the version
         id: version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          elif [[ "$RELEASE_TAG" == v* ]]; then v="${RELEASE_TAG#v}"
           else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
@@ -206,8 +215,11 @@ jobs:
 
       - name: Work out the version
         id: version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          elif [[ "$RELEASE_TAG" == v* ]]; then v="${RELEASE_TAG#v}"
           else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
