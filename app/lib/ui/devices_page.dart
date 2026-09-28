@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:desktop_drop/desktop_drop.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
@@ -27,6 +25,13 @@ class DevicesPage extends StatelessWidget {
         return PageFrame(
           title: 'Devices',
           actions: [
+            TextButton.icon(
+              onPressed: state.scanning ? null : state.scanNetwork,
+              icon: state.scanning
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.wifi_find_outlined),
+              label: const Text('Scan network'),
+            ),
             TextButton.icon(
               onPressed: () => _addByIp(context),
               icon: const Icon(Icons.add_link),
@@ -288,11 +293,7 @@ class _PairedCardState extends State<_PairedCard> {
   }
 
   Future<void> _pickAndSend() async {
-    final picked = await FilePicker.pickFiles(dialogTitle: 'Send to ${device.name}');
-    final files = [
-      for (final f in picked)
-        if (f.path != null) File(f.path!),
-    ];
+    final files = await pickFilesToSend(context, title: 'Send to ${device.name}');
     if (files.isNotEmpty) await state.sendFiles(device, files);
   }
 
@@ -317,13 +318,9 @@ class _PairedCardState extends State<_PairedCard> {
     final online = state.isOnline(device.id);
     final caps = state.capabilitiesOf(device.id);
 
-    return DropTarget(
-      onDragEntered: (_) => setState(() => _dragging = true),
-      onDragExited: (_) => setState(() => _dragging = false),
-      onDragDone: (details) {
-        setState(() => _dragging = false);
-        state.sendFiles(device, [for (final f in details.files) File(f.path)]);
-      },
+    return MaybeDropTarget(
+      onHover: (hovering) => setState(() => _dragging = hovering),
+      onFiles: (files) => state.sendFiles(device, files),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(20),

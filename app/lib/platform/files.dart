@@ -20,6 +20,9 @@ class FileService {
   /// internal storage (Android).
   Future<List<RemoteEntry>> roots() async {
     final entries = <RemoteEntry>[];
+    // iOS apps only see their own sandbox: Sidekick's Documents folder, which
+    // is also what the Files app shows under On My iPhone → Sidekick.
+    if (Platform.isIOS) return [RemoteEntry(name: 'Sidekick files', path: _home, isDir: true)];
     final folders = Platform.isAndroid
         ? ['DCIM', 'Pictures', 'Download', 'Documents', 'Music', 'Movies']
         : ['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Videos'];

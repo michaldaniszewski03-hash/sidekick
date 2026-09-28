@@ -187,6 +187,7 @@ class MediaStatus {
     this.canSeek = false,
     this.volume,
     this.muted = false,
+    this.nowPlaying = true,
   });
 
   /// False when nothing is playing or the platform can't report it.
@@ -205,6 +206,10 @@ class MediaStatus {
   final double? volume;
   final bool muted;
 
+  /// False when the platform can't report what's playing at all (macOS),
+  /// as opposed to nothing playing right now.
+  final bool nowPlaying;
+
   bool get isPlaying => status == PlaybackStatus.playing;
 
   Map<String, dynamic> toJson() => {
@@ -218,6 +223,7 @@ class MediaStatus {
     'canSeek': canSeek,
     'volume': volume,
     'muted': muted,
+    'nowPlaying': nowPlaying,
   };
 
   factory MediaStatus.fromJson(Map<String, dynamic> json) => MediaStatus(
@@ -231,6 +237,7 @@ class MediaStatus {
     canSeek: json['canSeek'] == true,
     volume: (json['volume'] as num?)?.toDouble(),
     muted: json['muted'] == true,
+    nowPlaying: json['nowPlaying'] != false,
   );
 }
 

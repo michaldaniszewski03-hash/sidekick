@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../app_state.dart';
 import '../core/server.dart';
 import '../platform/android.dart';
+import '../platform/macos.dart';
 import 'widgets.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -86,6 +87,28 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SectionLabel('Android permissions'),
                     _Group(children: _androidPermissions()),
                   ],
+                  if (Platform.isMacOS) ...[
+                    const SectionLabel('Mac permissions'),
+                    _Group(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.mouse_outlined),
+                          title: const Text('Accessibility'),
+                          subtitle: const Text(
+                            'So your phone can move the mouse, click and type on this Mac. After an update, '
+                            'you may need to switch Sidekick off and on again in that list.',
+                          ),
+                          isThreeLine: true,
+                          trailing: MacBridge.accessibility
+                              ? const Icon(Icons.check_circle, color: Colors.green)
+                              : FilledButton.tonal(
+                                  onPressed: MacBridge.requestAccessibility,
+                                  child: const Text('Grant'),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SectionLabel('What paired devices can do here'),
                   _Group(
                     children: [
@@ -163,15 +186,20 @@ class _SettingsPageState extends State<SettingsPage> {
                           onSelectionChanged: (s) => state.setThemeMode(s.first),
                         ),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.palette_outlined),
-                        title: Text(
-                          Platform.isAndroid
-                              ? 'Colors follow your wallpaper (Android 12 and newer)'
-                              : 'Colors follow your Windows accent color',
+                      if (!Platform.isIOS)
+                        ListTile(
+                          leading: const Icon(Icons.palette_outlined),
+                          title: Text(switch (Platform.operatingSystem) {
+                            'android' => 'Colors follow your wallpaper (Android 12 and newer)',
+                            'macos' => "Colors follow your Mac's accent color",
+                            _ => 'Colors follow your Windows accent color',
+                          }),
+                          subtitle: switch (Platform.operatingSystem) {
+                            'macos' => const Text('System Settings → Appearance'),
+                            'windows' => const Text('Settings → Personalization → Colors'),
+                            _ => null,
+                          },
                         ),
-                        subtitle: Platform.isAndroid ? null : const Text('Settings → Personalization → Colors'),
-                      ),
                     ],
                   ),
                   const SectionLabel('About'),

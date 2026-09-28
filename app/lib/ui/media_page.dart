@@ -343,14 +343,20 @@ class _NowPlaying extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                nothing ? 'Nothing playing' : (status.title.isEmpty ? 'Unknown title' : status.title),
+                !status.nowPlaying
+                    ? 'Media controls'
+                    : nothing
+                    ? 'Nothing playing'
+                    : (status.title.isEmpty ? 'Unknown title' : status.title),
                 style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 6),
               Text(
-                nothing
+                !status.nowPlaying
+                    ? "This device doesn't share what's playing, but play/pause, skip and volume work."
+                    : nothing
                     ? 'Start something in Spotify, YouTube, VLC or any other player.'
                     : [status.artist, status.app].where((x) => x.isNotEmpty).join(' · '),
                 style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),

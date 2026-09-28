@@ -14,6 +14,7 @@ import 'core/server.dart';
 import 'core/trust.dart';
 import 'platform/android.dart';
 import 'platform/files.dart';
+import 'platform/macos.dart';
 import 'platform/input.dart';
 import 'platform/media.dart';
 
@@ -82,7 +83,7 @@ class AppState extends ChangeNotifier {
 
   late final InputInjector input = InputInjector.forCurrentPlatform();
   late final MediaController media = MediaController.forCurrentPlatform(input);
-  final files = FileService();
+  late final FileService files;
   late final SidekickServer server;
   late final Discovery discovery;
 
@@ -98,6 +99,7 @@ class AppState extends ChangeNotifier {
   Stream<Notice> get notices => _notices.stream;
 
   Timer? _presenceTimer;
+  Timer? _scanTimer;
 
   static Future<AppState> load() async {
     final state = AppState._(await SharedPreferences.getInstance());
@@ -160,6 +162,13 @@ class AppState extends ChangeNotifier {
         // Discovery may be flaky, but Add by IP still works.
       }
     }
+    if (Platform.isMacOS) {
+      try {
+        await MacBridge.refresh();
+      } catch (_) {}
+    }
+    // iOS apps can only share their own Documents folder.
+    files = Platform.isIOS ? FileService(home: (await getApplicationDocumentsDirectory()).path) : FileService();
     server = SidekickServer(
       self: () => me,
       trust: trust,
@@ -186,8 +195,16 @@ class AppState extends ChangeNotifier {
     discovery.found.listen(_onFound);
     try {
       await discovery.start();
-    } on SocketException catch (e) {
-      networkError ??= "Couldn't search the network: ${e.message}. You can still add devices by IP address.";
+    } catch (e) {
+      // iOS needs a special Apple entitlement for multicast; the scan below
+      // covers it. Elsewhere, say why devices may not show up.
+      if (!Platform.isIOS) {
+        networkError ??= "Couldn't search the network ($e). Use Scan network or Add by IP.";
+      }
+    }
+    if (Platform.isIOS) {
+      unawaited(scanNetwork());
+      _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) => scanNetwork());
     }
 
     addresses = await localAddresses();
@@ -199,6 +216,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _presenceTimer?.cancel();
+    _scanTimer?.cancel();
     discovery.stop();
     server.stop();
     media.dispose();
@@ -208,15 +226,60 @@ class AppState extends ChangeNotifier {
   /// Re-reads things the user may have changed in system settings while we
   /// were in the background (Android permissions).
   Future<void> refreshPlatform() async {
-    if (!Platform.isAndroid) return;
     try {
-      await AndroidBridge.refresh();
+      if (Platform.isAndroid) {
+        await AndroidBridge.refresh();
+      } else if (Platform.isMacOS) {
+        await MacBridge.refresh();
+      } else {
+        return;
+      }
     } catch (_) {
       return;
     }
     discovery.announce();
     notifyListeners();
   }
+
+  bool scanning = false;
+
+  /// Asks every address on this device's /24 networks for `/v1/info`. Finds
+  /// devices where multicast discovery doesn't work (iOS, some routers).
+  Future<void> scanNetwork() async {
+    if (scanning) return;
+    scanning = true;
+    notifyListeners();
+    try {
+      final queue = <String>[];
+      for (final address in await localAddresses()) {
+        final parts = address.split('.');
+        if (parts.length != 4 || !_isPrivate(address)) continue;
+        for (var i = 1; i < 255; i++) {
+          final host = '${parts[0]}.${parts[1]}.${parts[2]}.$i';
+          if (host != address) queue.add(host);
+        }
+      }
+      Future<void> worker() async {
+        while (queue.isNotEmpty) {
+          final host = queue.removeLast();
+          try {
+            final info = await PeerClient(host: host).info(timeout: const Duration(milliseconds: 800));
+            if (info.id != id) _onFound(info);
+          } catch (_) {
+            // Nothing there, or not Sidekick.
+          }
+        }
+      }
+
+      await Future.wait(List.generate(32, (_) => worker()));
+    } finally {
+      scanning = false;
+      notifyListeners();
+    }
+  }
+
+  static bool _isPrivate(String a) =>
+      a.startsWith('10.') || a.startsWith('192.168.') || RegExp(r'^172\.(1[6-9]|2\d|3[01])\.').hasMatch(a);
 
   // ---------------------------------------------------------------- devices
 
@@ -383,6 +446,8 @@ class AppState extends ChangeNotifier {
 
   Future<String> receiveDir() async {
     if (_receiveDir != null) return _receiveDir!;
+    // Shows up in the Files app under On My iPhone → Sidekick.
+    if (Platform.isIOS) return (await getApplicationDocumentsDirectory()).path;
     if (Platform.isAndroid) {
       // The public Download folder needs "All files access"; otherwise use
       // Sidekick's own folder under Android/data.

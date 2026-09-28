@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'package:desktop_drop/desktop_drop.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
@@ -99,11 +97,7 @@ class _BrowserState extends State<_Browser> {
   }
 
   Future<void> _pickAndUpload() async {
-    final picked = await FilePicker.pickFiles(dialogTitle: 'Upload to ${widget.device.name}');
-    await _send([
-      for (final f in picked)
-        if (f.path != null) File(f.path!),
-    ]);
+    await _send(await pickFilesToSend(context, title: 'Upload to ${widget.device.name}'));
   }
 
   @override
@@ -147,14 +141,10 @@ class _BrowserState extends State<_Browser> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: DropTarget(
+            child: MaybeDropTarget(
               enable: _current != null,
-              onDragEntered: (_) => setState(() => _dragging = true),
-              onDragExited: (_) => setState(() => _dragging = false),
-              onDragDone: (d) {
-                setState(() => _dragging = false);
-                _send([for (final f in d.files) File(f.path)]);
-              },
+              onHover: (hovering) => setState(() => _dragging = hovering),
+              onFiles: _send,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(

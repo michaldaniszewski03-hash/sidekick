@@ -9,9 +9,9 @@ Sidekick combines LocalSend and KDE Connect in one app. It links your phone and 
 
 Platforms: **Android, iOS, Windows, macOS** (Linux comes almost free with the same stack).
 
-## Apps (v0.1): Windows and Android
+## Apps (v0.2): Windows, Android, macOS and iOS
 
-The Flutter app lives in `app/`. One codebase builds both apps, and the macOS and iOS versions will come from it later.
+The Flutter app lives in `app/`. One codebase builds all four apps.
 
 ### Install
 
@@ -19,6 +19,8 @@ Download both from the [**Releases** page](https://github.com/michaldaniszewski0
 
 - **Windows 10/11:** run **`SidekickSetup-<version>.exe`**. It installs Sidekick with Start menu and desktop shortcuts, allows it through Windows Firewall on private networks, and adds an uninstaller. The installer isn't code-signed yet, so Windows may say "Windows protected your PC": click **More info → Run anyway**.
 - **Android 8.0+:** open **`Sidekick-<version>.apk`** on your phone. If asked, allow your browser or Files app to install apps.
+- **macOS 12+:** open **`Sidekick-<version>.dmg`** and drag Sidekick into Applications. The app isn't notarized yet, so the first time, right-click it → **Open** → **Open**. On macOS 15 and newer, try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+- **iPhone/iPad (iOS 15+):** the **`Sidekick-<version>.ipa`** is unsigned, because signing needs a paid Apple Developer account. Install it with [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io), which sign it with your own Apple ID. With a free Apple ID the app has to be re-signed every 7 days; those tools can do that automatically.
 
 Every push also builds both on GitHub Actions (**Build** workflow → run → **Artifacts**), for testing between releases.
 
@@ -30,6 +32,21 @@ Every push also builds both on GitHub Actions (**Build** workflow → run → **
    - **All files access:** the PC can browse the phone's storage, and received files go to `Download/Sidekick`.
    - **Notification access:** the PC sees what's playing on the phone and can seek. Play/pause/next and volume work without it.
    - **Remote control (Accessibility):** the PC can tap, scroll and type on the phone. A dot shows where the "mouse" is. On Android 13 and newer, sideloaded apps need one extra step first: **App info → ⋮ → Allow restricted settings**.
+
+### Set up a Mac
+
+To let your phone control the Mac, open **Settings** in Sidekick and click **Grant** next to **Accessibility**. Then turn Sidekick on in the list that opens. After updating the app you may need to switch it off and on again there, because macOS ties the permission to the app's signature.
+
+The Mac's media controls use the play/pause and skip media keys plus the system volume. macOS doesn't let apps read what's playing, so the Media tab shows controls without a title.
+
+### iPhone and iPad
+
+On iOS, Sidekick **controls your computer and shares files both ways**:
+- Send photos, videos or files to a paired device: **Devices → Send**, then choose **Photos & videos** or **Files**.
+- Files sent to the iPhone land in the **Files** app under **On My iPhone → Sidekick**.
+- A paired computer can browse that Sidekick folder from its **Files** tab, and upload into it.
+
+iOS doesn't allow other devices to control an iPhone, so the Remote and Media tabs only work *from* the iPhone. iOS also blocks the multicast discovery the other apps use, so the iPhone scans the Wi-Fi network instead (every 30 seconds, or tap **Scan network**). Allow **Local Network** access when iOS asks.
 
 ### Release a new version
 
@@ -93,6 +110,7 @@ app/lib/
 │   ├── input.dart       mouse/keyboard via Win32 SendInput (dart:ffi)
 │   ├── media.dart       Windows media sessions + volume via a PowerShell helper
 │   ├── android.dart     bridge to the Kotlin side on Android
+│   ├── macos.dart       bridge to the Swift side on macOS
 │   └── files.dart       folder listing, safe file names
 └── ui/                  one file per tab
 
@@ -100,18 +118,21 @@ app/android/app/src/main/kotlin/dev/sidekick/sidekick/
 ├── MainActivity.kt                    permissions, multicast lock, method channel
 ├── SidekickAccessibilityService.kt    PC → phone taps, swipes, keys, typing
 └── MediaBridge.kt                     phone media sessions and volume
+app/macos/Runner/MainFlutterWindow.swift  Mac input (CGEvent), media keys, volume
 app/windows/installer/sidekick.iss     Windows installer (Inno Setup)
+app/tool/make_icons.py                 app icons for every platform from your logo
 ```
 
 - **Pairing:** device A asks B to pair; B shows a 6-digit code; you type it on A. Both devices then hold a random token for each other. Pairing works both ways, so either device can control the other. After 5 wrong codes, or 2 minutes, the code stops working.
 - **Every request except `/v1/info` and pairing needs a token.** Unpairing revokes the token straight away, including any live remote-control session.
 - **Media control** uses Windows' Global System Media Transport Controls, the same thing behind the volume flyout, so it works with Spotify, browsers, VLC, the Media Player app and so on. If that helper can't start, play/pause, next/previous and volume still work through media keys.
 
-### Known limits (v0.1)
+### Known limits
 
 - **Not tried on real devices yet.** The code is analyzed and unit-tested (pairing, auth, files, media and input protocol), and CI builds the Windows installer and the APK. But the Windows input and media helper, and the Android accessibility and media code, need real hardware to confirm.
 - **The phone has to be running Sidekick** (it can be in the background) for the PC to reach it. Android may stop it after a long time in the background.
-- **Sharing from other Android apps** (Share → Sidekick) isn't in yet. Use **Send** in Sidekick.
+- **Sharing from other apps** (Share → Sidekick) isn't in yet on Android or iOS. Use **Send** in Sidekick.
+- **The macOS and iOS apps aren't signed or notarized**, since that needs a paid Apple Developer account. See Install above for how to open them.
 - **Traffic is plain HTTP on your local network.** Tokens stop strangers from controlling your PC, but someone on the same Wi-Fi could read the traffic. The next security step is TLS with the certificate fingerprint pinned during pairing.
 - **Windows won't let Sidekick control elevated (admin) windows**, such as Task Manager, unless Sidekick itself runs as administrator.
 - **There's no screen view yet**, so you control the PC blind (fine for media and presentations). Screen streaming with WebRTC is next.
@@ -123,6 +144,7 @@ cd app
 flutter analyze
 flutter test                              # protocol tests (run anywhere)
 flutter test tool/screenshots_test.dart   # renders every tab to build/screenshots/
+python tool/make_icons.py                 # rebuilds all app icons from website/1.png and 3.png
 ```
 
 ## Website

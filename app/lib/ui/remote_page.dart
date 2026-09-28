@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -113,11 +115,16 @@ class _RemoteState extends State<_Remote> {
     final s = _s;
     if (s == null || event is KeyUpEvent) return KeyEventResult.ignored;
     final keyboard = HardwareKeyboard.instance;
+    // A Mac user presses Cmd where a Windows user presses Ctrl. Translate
+    // so Cmd+C on a Mac copies on a Windows PC, and Control stays Control
+    // when Mac controls Mac.
+    final targetMac = widget.device.platform == DevicePlatform.macos;
+    final fromMac = Platform.isMacOS;
     final mods = [
-      if (keyboard.isControlPressed) 'ctrl',
+      if (keyboard.isControlPressed) fromMac && targetMac ? 'macctrl' : 'ctrl',
       if (keyboard.isAltPressed) 'alt',
       if (keyboard.isShiftPressed) 'shift',
-      if (keyboard.isMetaPressed) 'win',
+      if (keyboard.isMetaPressed) fromMac ? (targetMac ? 'cmd' : 'ctrl') : 'win',
     ];
     final special = _specialKeys[event.logicalKey];
     if (special != null) {
@@ -353,8 +360,30 @@ class _RemoteState extends State<_Remote> {
 
   static List<(String, String, List<String>)> _shortcutsFor(DevicePlatform target) => switch (target) {
     DevicePlatform.android || DevicePlatform.ios => _phoneShortcuts,
+    DevicePlatform.macos => _macShortcuts,
     _ => _shortcuts,
   };
+
+  static const _macShortcuts = <(String, String, List<String>)>[
+    ('Esc', 'esc', []),
+    ('Tab', 'tab', []),
+    ('Return', 'enter', []),
+    ('Delete', 'backspace', []),
+    ('←', 'left', []),
+    ('→', 'right', []),
+    ('↑', 'up', []),
+    ('↓', 'down', []),
+    ('Spotlight', 'space', ['cmd']),
+    ('Switch app', 'tab', ['cmd']),
+    ('Mission Control', 'up', ['macctrl']),
+    ('Show desktop', 'f11', []),
+    ('Copy', 'c', ['cmd']),
+    ('Paste', 'v', ['cmd']),
+    ('Undo', 'z', ['cmd']),
+    ('Full screen', 'f', ['cmd', 'macctrl']),
+    ('Close window', 'w', ['cmd']),
+    ('Lock Mac', 'q', ['cmd', 'macctrl']),
+  ];
 
   static const _phoneShortcuts = <(String, String, List<String>)>[
     ('Back', 'back', []),

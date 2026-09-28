@@ -146,12 +146,13 @@ class _ShellState extends State<Shell> {
             labelType: NavigationRailLabelType.all,
             groupAlignment: -0.85,
             leading: Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 8),
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(16)),
-                child: Icon(Icons.phonelink, color: scheme.onPrimary),
+              padding: const EdgeInsets.only(top: 22, bottom: 14),
+              // The wordmark is white-on-transparent; tint it to the theme.
+              child: Image.asset(
+                'assets/logo/wordmark.png',
+                width: 64,
+                color: scheme.onSurface,
+                semanticLabel: 'Sidekick',
               ),
             ),
             destinations: [

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 import 'android.dart';
+import 'macos.dart';
 
 enum MouseButton { left, right, middle }
 
@@ -34,6 +35,7 @@ abstract class InputInjector {
   static InputInjector forCurrentPlatform() {
     if (Platform.isWindows) return WindowsInputInjector();
     if (Platform.isAndroid) return AndroidInputInjector();
+    if (Platform.isMacOS) return MacInputInjector();
     return UnsupportedInputInjector();
   }
 }
@@ -46,6 +48,8 @@ const List<String> keyNames = [
   'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
   // Android only: global actions.
   'back', 'home', 'recents', 'notifications', 'quicksettings', 'lock',
+  // Mac only: modifiers ("ctrl" and "win" already mean Command on a Mac).
+  'cmd', 'macctrl',
   // single letters and digits are accepted too: 'a'..'z', '0'..'9'
 ];
 

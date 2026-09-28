@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
@@ -260,6 +262,69 @@ class OfflineBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Drag-and-drop target, except on iOS where the plugin doesn't exist.
+class MaybeDropTarget extends StatelessWidget {
+  const MaybeDropTarget({super.key, required this.child, required this.onFiles, this.onHover, this.enable = true});
+
+  final Widget child;
+  final void Function(List<File> files) onFiles;
+
+  /// Called with true when files are dragged over, false when they leave.
+  final void Function(bool hovering)? onHover;
+  final bool enable;
+
+  @override
+  Widget build(BuildContext context) {
+    if (Platform.isIOS) return child;
+    return DropTarget(
+      enable: enable,
+      onDragEntered: (_) => onHover?.call(true),
+      onDragExited: (_) => onHover?.call(false),
+      onDragDone: (details) {
+        onHover?.call(false);
+        onFiles([for (final f in details.files) File(f.path)]);
+      },
+      child: child,
+    );
+  }
+}
+
+/// Lets the user pick files to send. Phones get a choice between the photo
+/// gallery and the file browser.
+Future<List<File>> pickFilesToSend(BuildContext context, {required String title}) async {
+  var type = FileType.any;
+  if (isMobile) {
+    final choice = await showModalBottomSheet<FileType>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photos & videos'),
+              onTap: () => Navigator.pop(context, FileType.media),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('Files'),
+              onTap: () => Navigator.pop(context, FileType.any),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null) return const [];
+    type = choice;
+  }
+  final picked = await FilePicker.pickFiles(dialogTitle: title, type: type);
+  return [
+    for (final f in picked)
+      if (f.path != null) File(f.path!),
+  ];
 }
 
 void showError(BuildContext context, Object error) {

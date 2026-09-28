@@ -1,7 +1,7 @@
 name: Build
 
-# Every push builds the Windows installer and the Android APK (download them
-# from the run's Artifacts). They're attached to a GitHub Release when:
+# Every push builds the Windows installer, Android APK, macOS disk image and
+# iOS app (download them from the run's Artifacts). They're attached to a GitHub Release when:
 #   - you publish a release on GitHub (any tag name), or
 #   - you push a tag like v0.2.0 (a release is created for it), or
 #   - you run this workflow by hand with "release_tag" set.
@@ -147,12 +147,93 @@ jobs:
           path: app/build/dist/*.apk
           if-no-files-found: error
 
+  macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+      - run: flutter build macos --release --build-name=${{ steps.version.outputs.version }} --build-number=${{ github.run_number }}
+
+      # A disk image with the app and a shortcut to Applications to drag it to.
+      - name: Package the .dmg
+        run: |
+          app="$(ls -d build/macos/Build/Products/Release/*.app | head -1)"
+          mkdir -p build/dmg build/dist
+          cp -R "$app" build/dmg/Sidekick.app
+          ln -s /Applications build/dmg/Applications
+          dmg="build/dist/Sidekick-${{ steps.version.outputs.version }}.dmg"
+          # hdiutil is occasionally "busy" on CI machines; retry a few times.
+          for i in 1 2 3; do
+            hdiutil create -volname Sidekick -srcfolder build/dmg -ov -format UDZO "$dmg" && break
+            sleep 5
+          done
+          test -f "$dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidekick-macos
+          path: app/build/dist/*.dmg
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+      # Unsigned: sideloading tools (AltStore, Sideloadly) sign it with your
+      # own Apple ID when installing. See README.
+      - run: flutter build ios --release --no-codesign --build-name=${{ steps.version.outputs.version }} --build-number=${{ github.run_number }}
+
+      - name: Package the .ipa
+        run: |
+          mkdir -p build/ipa/Payload build/dist
+          cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
+          cd build/ipa && zip -qry "../dist/Sidekick-${{ steps.version.outputs.version }}.ipa" Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidekick-ios
+          path: app/build/dist/*.ipa
+          if-no-files-found: error
+
   release:
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
       github.event_name == 'release' ||
       (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-    needs: [test, windows, android]
+    needs: [test, windows, android, macos, ios]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -172,5 +253,9 @@ jobs:
             **Windows 10/11:** download the **SidekickSetup** `.exe` below and run it. The installer adds Start menu and desktop shortcuts, and allows Sidekick through Windows Firewall on private networks.
 
             **Android 8.0+:** on your phone, download the **Sidekick** `.apk` below and open it. If asked, allow your browser or Files app to install apps.
+
+            **macOS 12+:** open the **Sidekick** `.dmg` and drag Sidekick into Applications. The first time, right-click Sidekick → **Open** → **Open** (it isn't notarized yet). On macOS 15 and newer: try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+
+            **iPhone/iPad (iOS 15+):** the **Sidekick** `.ipa` is unsigned, so install it with [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io), which sign it with your Apple ID. On iPhone, Sidekick controls your computer and sends and receives files.
 
             Windows may show "Windows protected your PC" because the installer isn't code-signed yet. Click **More info → Run anyway**.

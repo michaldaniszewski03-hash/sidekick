@@ -40,7 +40,14 @@ class Discovery {
         // Some virtual adapters refuse multicast; skip them.
       }
     }
-    if (!joined) socket.joinMulticast(_group);
+    if (!joined) {
+      try {
+        socket.joinMulticast(_group);
+      } catch (_) {
+        // No multicast (e.g. iOS without Apple's multicast entitlement). We
+        // can still announce; AppState.scanNetwork finds the rest.
+      }
+    }
     socket.listen((event) {
       if (event == RawSocketEvent.read) _onRead(socket);
     });
