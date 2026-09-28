@@ -129,6 +129,12 @@ class WindowsMediaController implements MediaController {
 /// while on the first run (or while antivirus scans it), so it gets its own
 /// generous timeout.
 class PowerShellHelper {
+  PowerShellHelper({this.trace = false, this.callTimeout = const Duration(seconds: 8)});
+
+  /// Makes the script log each step with timings to stderr ([stderrLines]).
+  final bool trace;
+  final Duration callTimeout;
+
   Process? _process;
   StreamIterator<String>? _lines;
   Future<void> _lock = Future.value();
@@ -144,7 +150,9 @@ class PowerShellHelper {
   List<String> initErrors = const [];
 
   static const startTimeout = Duration(seconds: 45);
-  static const callTimeout = Duration(seconds: 8);
+
+  /// The helper's recent stderr output, for diagnostics.
+  List<String> get stderrLines => List.unmodifiable(_stderr);
 
   Future<Map<String, dynamic>?> call(String command) {
     final result = _lock.then((_) => _call(command));
@@ -219,11 +227,12 @@ class PowerShellHelper {
       'Bypass',
       '-File',
       script.path,
+      if (trace) '-Trace',
     ], mode: mode);
     _process = process;
     process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
       _stderr.add(line);
-      if (_stderr.length > 30) _stderr.removeAt(0);
+      if (_stderr.length > 200) _stderr.removeAt(0);
     }, onError: (_) {});
     final lines = StreamIterator(process.stdout.transform(utf8.decoder).transform(const LineSplitter()));
 
@@ -254,6 +263,7 @@ class PowerShellHelper {
 }
 
 const _script = r'''
+param([switch]$Trace)
 $ErrorActionPreference = 'Stop'
 # Plain UTF-8 streams: Sidekick starts us without a console, and console
 # APIs such as [Console]::OutputEncoding fail without one.
@@ -262,6 +272,10 @@ $out = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $utf8)
 $out.AutoFlush = $true
 $in = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), $utf8)
 function Send($obj) { $out.WriteLine(($obj | ConvertTo-Json -Compress)) }
+$err = New-Object System.IO.StreamWriter([Console]::OpenStandardError(), $utf8)
+$err.AutoFlush = $true
+function Log($msg) { if ($Trace) { $err.WriteLine("[$([DateTime]::Now.ToString('HH:mm:ss.fff'))] $msg") } }
+Log 'started'
 # Anything unexpected: tell Sidekick why instead of exiting silently.
 trap { Send @{ ready = $false; fatal = "$($_.Exception.Message)" }; exit 1 }
 $inv = [Globalization.CultureInfo]::InvariantCulture
@@ -284,6 +298,7 @@ try {
   $mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
   $propsType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]
   $mgr = Await ($mgrType::RequestAsync()) $mgrType
+  Log 'media sessions ready'
 } catch {
   $mgr = $null
   $initErrors += "media: $($_.Exception.Message)"
@@ -336,6 +351,7 @@ public class SidekickAudio {
 }
 "@
   $hasVolume = $true
+  Log 'volume ready'
 } catch {
   $initErrors += "volume: $($_.Exception.Message)"
 }
@@ -356,10 +372,13 @@ function Get-Status {
   $o = @{ ok = $true; available = $false; muted = $false }
   if ($initErrors.Count -gt 0) { $o.note = ($initErrors -join '; ') }
   if ($hasVolume) {
-    try { $o.volume = [double][SidekickAudio]::Volume; $o.muted = [SidekickAudio]::Mute } catch {}
+    Log 'status: volume'
+    try { $o.volume = [double][SidekickAudio]::Volume; $o.muted = [SidekickAudio]::Mute } catch { Log "status: volume failed: $($_.Exception.Message)" }
   }
   if ($mgr -eq $null) { return $o }
-  try { $s = Get-Session } catch { return $o }
+  Log 'status: session'
+  try { $s = Get-Session } catch { Log "status: no session: $($_.Exception.Message)"; return $o }
+  Log 'status: properties'
   $o.available = $true
   $o.app = $s.SourceAppUserModelId
   try {
@@ -389,13 +408,16 @@ function Ok($op) { if (-not (Await $op ([bool]))) { throw 'The app refused the c
 Send @{ ready = $true; errors = @($initErrors) }
 
 while ($true) {
+  Log 'waiting for a command'
   $line = $in.ReadLine()
   if ($line -eq $null) { break }
+  Log "command: $line"
   $parts = $line.Trim().Split(' ', 2)
   $arg = if ($parts.Length -gt 1) { $parts[1] } else { '' }
   $result = @{ ok = $true }
   try {
     switch ($parts[0]) {
+      'ping'       { }
       'status'     { $result = Get-Status }
       'playPause'  { Ok ((Get-Session).TryTogglePlayPauseAsync()) }
       'play'       { Ok ((Get-Session).TryPlayAsync()) }
@@ -411,6 +433,7 @@ while ($true) {
   } catch {
     $result = @{ ok = $false; error = $_.Exception.Message }
   }
+  Log 'replying'
   Send $result
 }
 ''';
