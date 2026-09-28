@@ -2,7 +2,7 @@
 
 Sidekick combines LocalSend and KDE Connect in one app. It links your phone and computer over your local network so you can:
 
-- **Remote control, both ways:** use your phone as a touchpad and keyboard for your PC, or control your phone from your PC.
+- **Remote control, both ways:** use your phone as a touchpad and keyboard for your PC, or control your Android phone from your PC.
 - **Browse files:** open the other device's storage and pull files across.
 - **Share files:** send files of any size with drag and drop or the share sheet. No cloud involved.
 - **Control media:** play, pause, seek, skip, and change the volume of whatever is playing on the other device.
@@ -52,12 +52,12 @@ Why Flutter fits:
 | Discovery and pairing | mDNS (`nsd` package) | mDNS (Bonjour) | mDNS | Bonjour |
 | File transfer | HTTPS server/client (`shelf`, `dio`) | same | same | same |
 | Browse remote files | SAF / all-files access | App sandbox + Files app | Full file system | Full file system (with user permission) |
-| **Control this device** | `AccessibilityService.dispatchGesture` | ❌ not allowed by iOS | `SendInput` (Win32 via FFI) | `CGEvent` (needs Accessibility permission) |
-| **Stream this device's screen** | `MediaProjection` | ReplayKit broadcast (view-only) | Desktop Duplication / `screen_capturer` | ScreenCaptureKit |
-| **Media control of this device** | `MediaSessionManager` + notification listener | Only Sidekick's own audio | `GlobalSystemMediaTransportControls` (SMTC) | `MediaRemote` (private) / AppleScript fallback |
+| **Control this device** | `AccessibilityService.dispatchGesture` | — (not in the iOS app) | `SendInput` (Win32 via FFI) | `CGEvent` (needs Accessibility permission) |
+| **Stream this device's screen** | `MediaProjection` | — (not in the iOS app) | Desktop Duplication / `screen_capturer` | ScreenCaptureKit |
+| **Media control of this device** | `MediaSessionManager` + notification listener | — (not in the iOS app) | `GlobalSystemMediaTransportControls` (SMTC) | `MediaRemote` (private) / AppleScript fallback |
 | Video for remote screen | `flutter_webrtc` | same | same | same |
 
-**iOS limitation:** Apple doesn't let third-party apps inject touches into other apps or control another app's media. The iPhone can **control** other devices, but it can't **be controlled**. The website says this up front so users know before they install.
+**iOS scope:** the iOS app only controls the PC (remote, files, media). It doesn't include being controlled, screen sharing, or media control of the iPhone itself. iOS doesn't allow third-party apps to do these, so none of the iOS-side plugins are needed.
 
 ### Suggested build order
 

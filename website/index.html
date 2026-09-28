@@ -634,9 +634,6 @@ section { scroll-margin-top: 80px; }
 .caps { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 10px; }
 .caps li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
 .caps .icon { font-size: 20px; color: var(--primary); }
-.caps li.limited { color: var(--on-surface-variant); }
-.caps li.limited .icon { color: var(--outline); }
-.caps small { display: block; font-size: 12px; color: var(--on-surface-variant); }
 
 /* steps */
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; counter-reset: step; }
@@ -890,7 +887,7 @@ footer nav a:hover { color: var(--on-surface); }
         <article class="card span-7 reveal">
           <div class="card-icon"><span class="icon">touch_app</span></div>
           <h3>Remote control, both ways</h3>
-          <p>Turn your phone into a touchpad and keyboard for your PC. From your computer, you can control your phone and see its screen.</p>
+          <p>Turn your phone into a touchpad and keyboard for your PC. From your computer, you can control your Android phone and see its screen.</p>
           <div class="pad-demo">
             <div class="trackpad" id="trackpad" aria-label="Touchpad demo, move your pointer or finger here">
               <div class="cursor" id="cursor"></div>
@@ -962,7 +959,6 @@ footer nav a:hover { color: var(--on-surface); }
           <div class="platform-head"><div class="card-icon"><span class="icon">phone_iphone</span></div><h3>iOS &amp; iPadOS</h3></div>
           <ul class="caps">
             <li><span class="icon">check_circle</span>Control your PC</li>
-            <li class="limited"><span class="icon">do_not_disturb_on</span><span>Be controlled from your PC<small>Not allowed by iOS; you can still view the screen</small></span></li>
             <li><span class="icon">check_circle</span>Browse and share files</li>
             <li><span class="icon">check_circle</span>Media controller</li>
           </ul>
