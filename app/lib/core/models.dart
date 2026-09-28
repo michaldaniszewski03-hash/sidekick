@@ -188,6 +188,9 @@ class MediaStatus {
     this.volume,
     this.muted = false,
     this.nowPlaying = true,
+    this.canNext = true,
+    this.canPrevious = true,
+    this.note,
   });
 
   /// False when nothing is playing or the platform can't report it.
@@ -210,6 +213,14 @@ class MediaStatus {
   /// as opposed to nothing playing right now.
   final bool nowPlaying;
 
+  /// Whether the playing app accepts next/previous. YouTube, for example,
+  /// only offers "next" in a playlist or with autoplay's up-next.
+  final bool canNext;
+  final bool canPrevious;
+
+  /// Why now-playing info is missing, if something went wrong.
+  final String? note;
+
   bool get isPlaying => status == PlaybackStatus.playing;
 
   Map<String, dynamic> toJson() => {
@@ -224,6 +235,9 @@ class MediaStatus {
     'volume': volume,
     'muted': muted,
     'nowPlaying': nowPlaying,
+    'canNext': canNext,
+    'canPrevious': canPrevious,
+    'note': note,
   };
 
   factory MediaStatus.fromJson(Map<String, dynamic> json) => MediaStatus(
@@ -238,6 +252,9 @@ class MediaStatus {
     volume: (json['volume'] as num?)?.toDouble(),
     muted: json['muted'] == true,
     nowPlaying: json['nowPlaying'] != false,
+    canNext: json['canNext'] != false,
+    canPrevious: json['canPrevious'] != false,
+    note: json['note'] as String?,
   );
 }
 

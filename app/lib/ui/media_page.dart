@@ -40,6 +40,31 @@ class _MediaState extends State<_Media> {
   Timer? _poll;
   Timer? _tick;
   double? _seekDrag;
+
+  /// What we expect right after a play/pause tap, until the device confirms
+  /// it, so the button reacts instantly.
+  bool? _optimistic;
+  DateTime _optimisticUntil = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// When the device can't report playback state, remember the user's last
+  /// play/pause so the button still flips.
+  bool _guessPlaying = false;
+
+  bool _isPlaying(MediaStatus s) {
+    if (_optimistic != null && DateTime.now().isBefore(_optimisticUntil)) return _optimistic!;
+    return s.available ? s.isPlaying : _guessPlaying;
+  }
+
+  void _togglePlay(MediaStatus s) {
+    final next = !_isPlaying(s);
+    setState(() {
+      _optimistic = next;
+      _optimisticUntil = DateTime.now().add(const Duration(seconds: 2));
+      if (!s.available) _guessPlaying = next;
+    });
+    _do(MediaAction.playPause);
+  }
+
   double? _volumeDrag;
   DateTime _lastVolumeSend = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -70,6 +95,7 @@ class _MediaState extends State<_Media> {
       final status = await widget.state.clientFor(widget.device).mediaStatus();
       if (!mounted) return;
       setState(() {
+        if (status.available && status.isPlaying == _optimistic) _optimistic = null;
         _status = status;
         _fetchedAt = DateTime.now();
         _error = null;
@@ -189,9 +215,14 @@ class _MediaState extends State<_Media> {
     );
   }
 
+  static String _appName(MediaStatus s) => s.app.isEmpty ? 'this app' : s.app;
+
   Widget _controls(MediaStatus s) {
     final scheme = Theme.of(context).colorScheme;
-    final playing = s.isPlaying;
+    final playing = _isPlaying(s);
+    // Only trust "can't skip" when the device actually knows what's playing.
+    final canPrevious = !s.available || s.canPrevious;
+    final canNext = !s.available || s.canNext;
     // Scales down on narrow phones instead of overflowing.
     return FittedBox(
       fit: BoxFit.scaleDown,
@@ -200,8 +231,8 @@ class _MediaState extends State<_Media> {
         children: [
           IconButton(
             iconSize: 32,
-            tooltip: 'Previous',
-            onPressed: () => _do(MediaAction.previous),
+            tooltip: canPrevious ? 'Previous' : "Previous isn't available in ${_appName(s)}",
+            onPressed: canPrevious ? () => _do(MediaAction.previous) : null,
             icon: const Icon(Icons.skip_previous_rounded),
           ),
           const SizedBox(width: 8),
@@ -224,11 +255,24 @@ class _MediaState extends State<_Media> {
               type: MaterialType.transparency,
               child: InkWell(
                 borderRadius: BorderRadius.circular(playing ? 36 : 22),
-                onTap: () => _do(MediaAction.playPause),
-                child: Icon(
-                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  size: 40,
-                  color: scheme.onPrimary,
+                onTap: () => _togglePlay(s),
+                child: Tooltip(
+                  message: playing ? 'Pause' : 'Play',
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    switchInCurve: Curves.easeOutBack,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, animation) => RotationTransition(
+                      turns: Tween(begin: 0.75, end: 1.0).animate(animation),
+                      child: ScaleTransition(scale: animation, child: child),
+                    ),
+                    child: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      key: ValueKey(playing),
+                      size: 40,
+                      color: scheme.onPrimary,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -243,8 +287,8 @@ class _MediaState extends State<_Media> {
           const SizedBox(width: 8),
           IconButton(
             iconSize: 32,
-            tooltip: 'Next',
-            onPressed: () => _do(MediaAction.next),
+            tooltip: canNext ? 'Next' : "Next isn't available in ${_appName(s)} right now",
+            onPressed: canNext ? () => _do(MediaAction.next) : null,
             icon: const Icon(Icons.skip_next_rounded),
           ),
         ],
@@ -356,6 +400,8 @@ class _NowPlaying extends StatelessWidget {
               Text(
                 !status.nowPlaying
                     ? "This device doesn't share what's playing, but play/pause, skip and volume work."
+                    : nothing && status.note != null
+                    ? "Couldn't read what's playing (${status.note}). Play/pause and volume still work."
                     : nothing
                     ? 'Start something in Spotify, YouTube, VLC or any other player.'
                     : [status.artist, status.app].where((x) => x.isNotEmpty).join(' · '),

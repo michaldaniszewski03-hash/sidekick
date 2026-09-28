@@ -66,15 +66,18 @@ class WindowsMediaController implements MediaController {
   WindowsMediaController(this._keys);
 
   final InputInjector _keys;
-  final _helper = _PowerShellHelper();
+  final helper = PowerShellHelper();
 
   @override
   bool get supported => true;
 
   @override
   Future<MediaStatus> status() async {
-    final r = await _helper.call('status');
-    if (r == null || r['ok'] == false) return const MediaStatus();
+    final r = await helper.call('status');
+    if (r == null || r['ok'] == false) {
+      // Keys still work; tell the user why there's no title.
+      return MediaStatus(note: helper.lastError ?? "Couldn't start the media helper");
+    }
     final json = Map<String, dynamic>.from(r);
     final app = json['app'];
     if (app is String) json['app'] = prettyAppName(app);
@@ -85,23 +88,23 @@ class WindowsMediaController implements MediaController {
   Future<void> perform(MediaAction action, {Duration? position, double? volume}) async {
     switch (action) {
       case MediaAction.seek:
-        if (position != null) await _helper.call('seek ${position.inMilliseconds}');
+        if (position != null) await helper.call('seek ${position.inMilliseconds}');
         return;
       case MediaAction.setVolume:
-        if (volume != null) await _helper.call('setVolume ${volume.clamp(0.0, 1.0).toStringAsFixed(3)}');
+        if (volume != null) await helper.call('setVolume ${volume.clamp(0.0, 1.0).toStringAsFixed(3)}');
         return;
       case MediaAction.volumeUp:
       case MediaAction.volumeDown:
         final current = (await status()).volume;
         if (current != null) {
           final next = current + (action == MediaAction.volumeUp ? 0.05 : -0.05);
-          final ok = await _helper.call('setVolume ${next.clamp(0.0, 1.0).toStringAsFixed(3)}');
+          final ok = await helper.call('setVolume ${next.clamp(0.0, 1.0).toStringAsFixed(3)}');
           if (ok?['ok'] == true) return;
         }
         _keys.virtualKey(action == MediaAction.volumeUp ? MediaKeys.volumeUp : MediaKeys.volumeDown);
         return;
       default:
-        final r = await _helper.call(action.name);
+        final r = await helper.call(action.name);
         if (r?['ok'] == true) return;
         final vk = switch (action) {
           MediaAction.playPause || MediaAction.play || MediaAction.pause => MediaKeys.playPause,
@@ -116,16 +119,32 @@ class WindowsMediaController implements MediaController {
   }
 
   @override
-  Future<void> dispose() => _helper.dispose();
+  Future<void> dispose() => helper.dispose();
 }
 
 /// A long-running `powershell.exe` that answers one JSON line per command.
-class _PowerShellHelper {
+///
+/// On start it prints `{"ready":true,"errors":[...]}` once its set-up is
+/// done. Set-up compiles a little C# for the volume API, which can take a
+/// while on the first run (or while antivirus scans it), so it gets its own
+/// generous timeout.
+class PowerShellHelper {
   Process? _process;
   StreamIterator<String>? _lines;
   Future<void> _lock = Future.value();
   int _failures = 0;
   DateTime? _retryAfter;
+  final _stderr = <String>[];
+
+  /// Why the last call failed, for the UI and for bug reports.
+  String? lastError;
+
+  /// Parts of the set-up that failed but didn't stop the helper, e.g.
+  /// "volume: ..." on a PC without speakers.
+  List<String> initErrors = const [];
+
+  static const startTimeout = Duration(seconds: 45);
+  static const callTimeout = Duration(seconds: 8);
 
   Future<Map<String, dynamic>?> call(String command) {
     final result = _lock.then((_) => _call(command));
@@ -139,12 +158,12 @@ class _PowerShellHelper {
       if (lines == null) return null;
       _process!.stdin.writeln(command);
       await _process!.stdin.flush();
-      final hasLine = await lines.moveNext().timeout(const Duration(seconds: 6));
-      if (!hasLine) throw const ProcessException('powershell.exe', [], 'helper exited');
-      final line = lines.current.replaceFirst('﻿', '').trim();
+      final reply = jsonDecode(await _nextLine(lines, callTimeout)) as Map<String, dynamic>;
       _failures = 0;
-      return jsonDecode(line) as Map<String, dynamic>;
-    } catch (_) {
+      if (reply['ok'] == false) lastError = reply['error'] as String?;
+      return reply;
+    } catch (e) {
+      lastError = _describe(e);
       await _kill();
       _failures++;
       // Back off if the helper keeps failing (e.g. PowerShell is blocked).
@@ -153,12 +172,23 @@ class _PowerShellHelper {
     }
   }
 
+  Future<String> _nextLine(StreamIterator<String> lines, Duration timeout) async {
+    if (!await lines.moveNext().timeout(timeout)) throw StateError('the helper exited');
+    return lines.current.replaceFirst('﻿', '').trim();
+  }
+
+  String _describe(Object e) {
+    final detail = _stderr.where((l) => l.trim().isNotEmpty).take(6).join(' ');
+    return detail.isEmpty ? '$e' : '$e: $detail';
+  }
+
   Future<StreamIterator<String>?> _ensureStarted() async {
     if (_lines != null) return _lines;
     if (_retryAfter != null && DateTime.now().isBefore(_retryAfter!)) return null;
     _retryAfter = null;
+    _stderr.clear();
 
-    final script = File(p.join(Directory.systemTemp.path, 'sidekick_media_v1.ps1'));
+    final script = File(p.join(Directory.systemTemp.path, 'sidekick_media_v2.ps1'));
     await script.writeAsString(_script);
     final process = await Process.start(
       'powershell.exe',
@@ -167,10 +197,25 @@ class _PowerShellHelper {
       // still giving us stdin/stdout.
       mode: ProcessStartMode.detachedWithStdio,
     );
-    process.stderr.drain<void>();
     _process = process;
-    _lines = StreamIterator(process.stdout.transform(utf8.decoder).transform(const LineSplitter()));
-    return _lines;
+    process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+      _stderr.add(line);
+      if (_stderr.length > 30) _stderr.removeAt(0);
+    }, onError: (_) {});
+    final lines = StreamIterator(process.stdout.transform(utf8.decoder).transform(const LineSplitter()));
+
+    // Wait for the ready line; anything else means set-up failed.
+    final first = await _nextLine(lines, startTimeout);
+    final Object? hello;
+    try {
+      hello = jsonDecode(first);
+    } on FormatException {
+      throw StateError('unexpected output from the helper: $first');
+    }
+    if (hello is! Map || hello['ready'] != true) throw StateError('the helper did not start: $first');
+    initErrors = [for (final e in (hello['errors'] as List? ?? const [])) '$e'];
+    _lines = lines;
+    return lines;
   }
 
   Future<void> _kill() async {
@@ -188,24 +233,34 @@ const _script = r'''
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $inv = [Globalization.CultureInfo]::InvariantCulture
+$initErrors = @()
 
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
-  $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and
-  $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
-})[0]
-function Await($op, [Type]$type) {
-  $task = $asTaskGeneric.MakeGenericMethod($type).Invoke($null, @($op))
-  $null = $task.Wait(5000)
-  $task.Result
+# --- Media sessions (Windows.Media.Control, the API behind the volume flyout)
+$mgr = $null
+try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and
+    $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+  })[0]
+  function Await($op, [Type]$type) {
+    $task = $asTaskGeneric.MakeGenericMethod($type).Invoke($null, @($op))
+    $null = $task.Wait(5000)
+    $task.Result
+  }
+  $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
+  $mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
+  $propsType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]
+  $mgr = Await ($mgrType::RequestAsync()) $mgrType
+} catch {
+  $mgr = $null
+  $initErrors += "media: $($_.Exception.Message)"
 }
 
-$null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
-$mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
-$propsType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]
-$mgr = Await ($mgrType::RequestAsync()) $mgrType
-
-Add-Type -TypeDefinition @"
+# --- System volume (Core Audio via a little C#)
+$hasVolume = $false
+try {
+  Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -248,12 +303,31 @@ public class SidekickAudio {
   }
 }
 "@
+  $hasVolume = $true
+} catch {
+  $initErrors += "volume: $($_.Exception.Message)"
+}
+
+# Prefer the session that's actually playing; Windows' "current" session can
+# be a paused app you used earlier.
+function Get-Session {
+  if ($mgr -eq $null) { throw 'Media sessions are not available on this PC' }
+  foreach ($s in $mgr.GetSessions()) {
+    if ($s.GetPlaybackInfo().PlaybackStatus.ToString() -eq 'Playing') { return $s }
+  }
+  $current = $mgr.GetCurrentSession()
+  if ($current -eq $null) { throw 'Nothing is playing' }
+  return $current
+}
 
 function Get-Status {
   $o = @{ ok = $true; available = $false; muted = $false }
-  try { $o.volume = [double][SidekickAudio]::Volume; $o.muted = [SidekickAudio]::Mute } catch {}
-  $s = $mgr.GetCurrentSession()
-  if ($s -eq $null) { return $o }
+  if ($initErrors.Count -gt 0) { $o.note = ($initErrors -join '; ') }
+  if ($hasVolume) {
+    try { $o.volume = [double][SidekickAudio]::Volume; $o.muted = [SidekickAudio]::Mute } catch {}
+  }
+  if ($mgr -eq $null) { return $o }
+  try { $s = Get-Session } catch { return $o }
   $o.available = $true
   $o.app = $s.SourceAppUserModelId
   try {
@@ -266,6 +340,8 @@ function Get-Status {
     'Playing' { 'playing' } 'Paused' { 'paused' } 'Stopped' { 'stopped' } default { 'unknown' }
   }
   $o.canSeek = [bool]$info.Controls.IsPlaybackPositionEnabled
+  $o.canNext = [bool]$info.Controls.IsNextEnabled
+  $o.canPrevious = [bool]$info.Controls.IsPreviousEnabled
   $t = $s.GetTimelineProperties()
   $dur = $t.EndTime - $t.StartTime
   $pos = $t.Position
@@ -278,6 +354,9 @@ function Get-Status {
 
 function Ok($op) { if (-not (Await $op ([bool]))) { throw 'The app refused the command' } }
 
+[Console]::Out.WriteLine((@{ ready = $true; errors = @($initErrors) } | ConvertTo-Json -Compress))
+[Console]::Out.Flush()
+
 while ($true) {
   $line = [Console]::In.ReadLine()
   if ($line -eq $null) { break }
@@ -287,13 +366,13 @@ while ($true) {
   try {
     switch ($parts[0]) {
       'status'     { $result = Get-Status }
-      'playPause'  { Ok ($mgr.GetCurrentSession().TryTogglePlayPauseAsync()) }
-      'play'       { Ok ($mgr.GetCurrentSession().TryPlayAsync()) }
-      'pause'      { Ok ($mgr.GetCurrentSession().TryPauseAsync()) }
-      'next'       { Ok ($mgr.GetCurrentSession().TrySkipNextAsync()) }
-      'previous'   { Ok ($mgr.GetCurrentSession().TrySkipPreviousAsync()) }
-      'stop'       { Ok ($mgr.GetCurrentSession().TryStopAsync()) }
-      'seek'       { Ok ($mgr.GetCurrentSession().TryChangePlaybackPositionAsync([long]([double]::Parse($arg, $inv) * 10000))) }
+      'playPause'  { Ok ((Get-Session).TryTogglePlayPauseAsync()) }
+      'play'       { Ok ((Get-Session).TryPlayAsync()) }
+      'pause'      { Ok ((Get-Session).TryPauseAsync()) }
+      'next'       { Ok ((Get-Session).TrySkipNextAsync()) }
+      'previous'   { Ok ((Get-Session).TrySkipPreviousAsync()) }
+      'stop'       { Ok ((Get-Session).TryStopAsync()) }
+      'seek'       { Ok ((Get-Session).TryChangePlaybackPositionAsync([long]([double]::Parse($arg, $inv) * 10000))) }
       'setVolume'  { [SidekickAudio]::Volume = [float][double]::Parse($arg, $inv) }
       'toggleMute' { [SidekickAudio]::Mute = -not [SidekickAudio]::Mute }
       default      { throw "Unknown command: $($parts[0])" }
