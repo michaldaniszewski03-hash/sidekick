@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 
@@ -128,6 +129,8 @@ class WindowsMediaController implements MediaController {
 /// done. Set-up compiles a little C# for the volume API, which can take a
 /// while on the first run (or while antivirus scans it), so it gets its own
 /// generous timeout.
+final _random = Random.secure();
+
 class PowerShellHelper {
   PowerShellHelper({this.trace = false, this.callTimeout = const Duration(seconds: 8)});
 
@@ -136,6 +139,11 @@ class PowerShellHelper {
   final Duration callTimeout;
 
   Process? _process;
+
+  /// Commands and replies go over a loopback TCP connection the helper opens
+  /// back to us. PowerShell doesn't reliably hand piped stdin to a script,
+  /// so stdin/stdout can't be used.
+  Socket? _socket;
   StreamIterator<String>? _lines;
   Future<void> _lock = Future.value();
   int _failures = 0;
@@ -164,8 +172,8 @@ class PowerShellHelper {
     try {
       final lines = await _ensureStarted();
       if (lines == null) return null;
-      _process!.stdin.writeln(command);
-      await _process!.stdin.flush();
+      _socket!.write('$command\n');
+      await _socket!.flush();
       final reply = jsonDecode(await _nextLine(lines, callTimeout)) as Map<String, dynamic>;
       _failures = 0;
       if (reply['ok'] == false) lastError = reply['error'] as String?;
@@ -200,12 +208,11 @@ class PowerShellHelper {
     if (_retryAfter != null && DateTime.now().isBefore(_retryAfter!)) return null;
     _retryAfter = null;
 
-    final script = File(p.join(Directory.systemTemp.path, 'sidekick_media_v3.ps1'));
+    final script = File(p.join(Directory.systemTemp.path, 'sidekick_media_v4.ps1'));
     await script.writeAsString(_script);
     if (_useConsole) return _lines = await _start(script, ProcessStartMode.normal);
     try {
-      // Detached keeps a console window from popping up behind the app while
-      // still giving us stdin/stdout.
+      // Detached keeps a console window from popping up behind the app.
       return _lines = await _start(script, ProcessStartMode.detachedWithStdio);
     } catch (_) {
       // Some PCs won't run PowerShell without a console. A normal start may
@@ -218,6 +225,10 @@ class PowerShellHelper {
 
   Future<StreamIterator<String>> _start(File script, ProcessStartMode mode) async {
     _stderr.clear();
+    // The helper connects back to this one-off port and proves who it is
+    // with a random token, so no other local program can pose as it.
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final token = List.generate(4, (_) => _random.nextInt(1 << 32).toRadixString(16)).join();
     final process = await Process.start('powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
@@ -227,14 +238,28 @@ class PowerShellHelper {
       'Bypass',
       '-File',
       script.path,
+      '-Port',
+      '${server.port}',
+      '-Token',
+      token,
       if (trace) '-Trace',
     ], mode: mode);
     _process = process;
+    final exited = process.stdout.drain<void>();
     process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
       _stderr.add(line);
       if (_stderr.length > 200) _stderr.removeAt(0);
     }, onError: (_) {});
-    final lines = StreamIterator(process.stdout.transform(utf8.decoder).transform(const LineSplitter()));
+
+    final Socket socket;
+    try {
+      socket = await Future.any([server.first, exited.then<Socket>((_) => throw StateError('the helper exited'))])
+          .timeout(startTimeout);
+    } finally {
+      await server.close();
+    }
+    _socket = socket;
+    final lines = StreamIterator(socket.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter()));
 
     // Wait for the ready line; anything else means set-up failed.
     final first = await _nextLine(lines, startTimeout);
@@ -247,6 +272,7 @@ class PowerShellHelper {
     if (hello is! Map || hello['ready'] != true) {
       throw StateError('the helper did not start: ${hello is Map ? hello['fatal'] ?? first : first}');
     }
+    if (hello['token'] != token) throw StateError('an unexpected program answered instead of the helper');
     initErrors = [for (final e in (hello['errors'] as List? ?? const [])) '$e'];
     return lines;
   }
@@ -254,6 +280,8 @@ class PowerShellHelper {
   Future<void> _kill() async {
     final lines = _lines;
     _lines = null;
+    _socket?.destroy();
+    _socket = null;
     _process?.kill();
     _process = null;
     await lines?.cancel();
@@ -263,14 +291,18 @@ class PowerShellHelper {
 }
 
 const _script = r'''
-param([switch]$Trace)
+param([switch]$Trace, [int]$Port, [string]$Token)
 $ErrorActionPreference = 'Stop'
 # Plain UTF-8 streams: Sidekick starts us without a console, and console
 # APIs such as [Console]::OutputEncoding fail without one.
 $utf8 = New-Object System.Text.UTF8Encoding $false
-$out = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $utf8)
+# Talk to Sidekick over the loopback connection it's waiting on.
+$client = New-Object System.Net.Sockets.TcpClient
+$client.Connect('127.0.0.1', $Port)
+$stream = $client.GetStream()
+$out = New-Object System.IO.StreamWriter($stream, $utf8)
 $out.AutoFlush = $true
-$in = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), $utf8)
+$in = New-Object System.IO.StreamReader($stream, $utf8)
 function Send($obj) { $out.WriteLine(($obj | ConvertTo-Json -Compress)) }
 $err = New-Object System.IO.StreamWriter([Console]::OpenStandardError(), $utf8)
 $err.AutoFlush = $true
@@ -405,7 +437,7 @@ function Get-Status {
 
 function Ok($op) { if (-not (Await $op ([bool]))) { throw 'The app refused the command' } }
 
-Send @{ ready = $true; errors = @($initErrors) }
+Send @{ ready = $true; token = $Token; errors = @($initErrors) }
 
 while ($true) {
   Log 'waiting for a command'
