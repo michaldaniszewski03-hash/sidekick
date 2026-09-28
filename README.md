@@ -9,27 +9,57 @@ Sidekick combines LocalSend and KDE Connect in one app. It links your phone and 
 
 Platforms: **Android, iOS, Windows, macOS** (Linux comes almost free with the same stack).
 
-## Windows app (v0.1)
+## Apps (v0.1): Windows and Android
 
-The Flutter app lives in `app/`. Windows is the first target; the same code will later build for Android, macOS and iOS.
+The Flutter app lives in `app/`. One codebase builds both apps, and the macOS and iOS versions will come from it later.
 
-### Get it running
+### Install
 
-**Download a build:** every push runs the **Windows app** workflow on GitHub Actions. Open the latest run, download `sidekick-windows-x64`, unzip it, and run `sidekick.exe`.
+Download both from the [**Releases** page](https://github.com/michaldaniszewski03-hash/sidekick/releases):
 
-**Or build it yourself** on a Windows PC:
+- **Windows 10/11:** run **`SidekickSetup-<version>.exe`**. It installs Sidekick with Start menu and desktop shortcuts, allows it through Windows Firewall on private networks, and adds an uninstaller. The installer isn't code-signed yet, so Windows may say "Windows protected your PC": click **More info → Run anyway**.
+- **Android 8.0+:** open **`Sidekick-<version>.apk`** on your phone. If asked, allow your browser or Files app to install apps.
 
-1. Install [Flutter](https://docs.flutter.dev/get-started/install/windows/desktop) and Visual Studio 2022 with the **Desktop development with C++** workload.
-2. Run:
-   ```sh
-   cd app
-   flutter pub get
-   flutter run -d windows
-   ```
+Every push also builds both on GitHub Actions (**Build** workflow → run → **Artifacts**), for testing between releases.
 
-The first time Sidekick starts, Windows Firewall asks whether to allow it. Choose **Private networks**, otherwise other devices can't find it.
+### Set up the phone
 
-**Trying it without a phone:** run Sidekick on two Windows PCs on the same Wi-Fi. They find each other, you pair them, and each can control the other.
+1. Open Sidekick on the phone and on the PC, on the same Wi-Fi. They show up under **Nearby** within a few seconds. If they don't, use **Add by IP**.
+2. Tap **Pair** on one device and type the 6-digit code the other one shows.
+3. That's enough for the phone to control the PC. For the PC to control the phone, open **Settings** on the phone and grant:
+   - **All files access:** the PC can browse the phone's storage, and received files go to `Download/Sidekick`.
+   - **Notification access:** the PC sees what's playing on the phone and can seek. Play/pause/next and volume work without it.
+   - **Remote control (Accessibility):** the PC can tap, scroll and type on the phone. A dot shows where the "mouse" is. On Android 13 and newer, sideloaded apps need one extra step first: **App info → ⋮ → Allow restricted settings**.
+
+### Release a new version
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The **Build** workflow then publishes a Release with the Windows installer and the APK attached.
+
+**Android signing (do this once):** until you add a signing key, each APK is signed with a throwaway key. Android then refuses to install one version over another, so you'd have to uninstall first. To fix that, create a key once and keep it safe:
+
+```sh
+keytool -genkey -v -keystore sidekick-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias sidekick
+base64 -w0 sidekick-release.jks   # copy the output
+```
+
+In GitHub, go to **Settings → Secrets and variables → Actions** and add:
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the base64 output |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+| `ANDROID_KEY_ALIAS` | `sidekick` |
+| `ANDROID_KEY_PASSWORD` | the key password |
+
+### Build it yourself
+
+- **Windows:** install [Flutter](https://docs.flutter.dev/get-started/install/windows/desktop) and Visual Studio 2022 with **Desktop development with C++**, then run `cd app && flutter run -d windows`.
+- **Android:** install Flutter and Android Studio, plug in your phone with USB debugging on, then run `cd app && flutter run`.
 
 ### What works
 
@@ -37,17 +67,19 @@ The first time Sidekick starts, Windows Firewall asks whether to allow it. Choos
 |---|---|
 | **Devices** | Finds Sidekick devices on your Wi-Fi, pairs with a 6-digit code, **Add by IP** if discovery is blocked, drag files onto a device card to send them |
 | **Files** | Browse the other device's folders and drives, download files, upload into the open folder (button or drag and drop), transfer progress |
-| **Remote** | Touchpad (drag to move, click, right-click, scroll), a **Hold** toggle for dragging, live keyboard capture, a send-text box, shortcuts (Alt+Tab, Win+D, Ctrl+C/V…) |
+| **Remote** | Touchpad (drag to move, tap/click, right-click or long-press, scroll or two-finger scroll), a **Hold** toggle for dragging, typing (live keyboard capture on PC, a type-as-you-go box on the phone), shortcuts: Alt+Tab, Win+D, Ctrl+C/V… for a PC; Back, Home, Recent apps, Notifications… for a phone |
 | **Media** | Title, artist and app of whatever's playing, play/pause, previous/next, ±10 s, a seek bar, a volume slider, mute |
 | **Settings** | Device name, the folder received files go to, switches for what paired devices may do, light/dark mode |
 
-When a paired device is controlling this PC, a banner says so, with a button that unpairs it and stops the session right away.
+When a paired device is controlling this device, a banner says so, with a button that unpairs it and stops the session right away.
+
+**Controlling the phone from the PC:** clicks become taps at the dot, the wheel becomes swipes, and Esc/Win map to Back/Home. Typing goes into whatever text field is focused on the phone.
 
 ### How it works
 
 ```
 app/lib/
-├── main.dart            Material 3 theme (uses the Windows accent color)
+├── main.dart            Material 3 theme (Windows accent color / Android wallpaper colors)
 ├── app_state.dart       all app state: devices, pairing, transfers, settings
 ├── core/
 │   ├── models.dart      JSON types shared by every platform
@@ -58,8 +90,15 @@ app/lib/
 ├── platform/
 │   ├── input.dart       mouse/keyboard via Win32 SendInput (dart:ffi)
 │   ├── media.dart       Windows media sessions + volume via a PowerShell helper
+│   ├── android.dart     bridge to the Kotlin side on Android
 │   └── files.dart       folder listing, safe file names
 └── ui/                  one file per tab
+
+app/android/app/src/main/kotlin/dev/sidekick/sidekick/
+├── MainActivity.kt                    permissions, multicast lock, method channel
+├── SidekickAccessibilityService.kt    PC → phone taps, swipes, keys, typing
+└── MediaBridge.kt                     phone media sessions and volume
+app/windows/installer/sidekick.iss     Windows installer (Inno Setup)
 ```
 
 - **Pairing:** device A asks B to pair; B shows a 6-digit code; you type it on A. Both devices then hold a random token for each other. Pairing works both ways, so either device can control the other. After 5 wrong codes, or 2 minutes, the code stops working.
@@ -68,7 +107,9 @@ app/lib/
 
 ### Known limits (v0.1)
 
-- **Not tried on a real Windows PC yet.** The code is analyzed and unit-tested (pairing, auth, files, media and input protocol), and CI builds it on Windows. But `SendInput` and the media helper need a real Windows machine to confirm.
+- **Not tried on real devices yet.** The code is analyzed and unit-tested (pairing, auth, files, media and input protocol), and CI builds the Windows installer and the APK. But the Windows input and media helper, and the Android accessibility and media code, need real hardware to confirm.
+- **The phone has to be running Sidekick** (it can be in the background) for the PC to reach it. Android may stop it after a long time in the background.
+- **Sharing from other Android apps** (Share → Sidekick) isn't in yet. Use **Send** in Sidekick.
 - **Traffic is plain HTTP on your local network.** Tokens stop strangers from controlling your PC, but someone on the same Wi-Fi could read the traffic. The next security step is TLS with the certificate fingerprint pinned during pairing.
 - **Windows won't let Sidekick control elevated (admin) windows**, such as Task Manager, unless Sidekick itself runs as administrator.
 - **There's no screen view yet**, so you control the PC blind (fine for media and presentations). Screen streaming with WebRTC is next.

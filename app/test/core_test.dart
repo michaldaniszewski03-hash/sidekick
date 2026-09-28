@@ -11,6 +11,7 @@ import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/input.dart';
 import 'package:sidekick/platform/media.dart';
+import 'package:sidekick/ui/remote_page.dart';
 
 extension<T> on Stream<T> {
   Stream<S> only<S>() => where((e) => e is S).cast<S>();
@@ -297,6 +298,14 @@ void main() {
       expect(sanitizeFileName('..'), 'file');
       expect(sanitizeFileName('CON.txt'), '_CON.txt');
       expect(sanitizeFileName('trailing. . '), 'trailing');
+    });
+
+    test('typingDiff', () {
+      expect(typingDiff('', 'h'), (0, 'h'));
+      expect(typingDiff('hel', 'hello'), (0, 'lo'));
+      expect(typingDiff('hello', 'hell'), (1, ''));
+      expect(typingDiff('teh ', 'the '), (3, 'he '), reason: 'autocorrect rewrite');
+      expect(typingDiff('abc', ''), (3, ''));
     });
 
     test('prettyAppName', () {

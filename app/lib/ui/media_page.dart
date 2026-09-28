@@ -192,55 +192,63 @@ class _MediaState extends State<_Media> {
   Widget _controls(MediaStatus s) {
     final scheme = Theme.of(context).colorScheme;
     final playing = s.isPlaying;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          iconSize: 32,
-          tooltip: 'Previous',
-          onPressed: () => _do(MediaAction.previous),
-          icon: const Icon(Icons.skip_previous_rounded),
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-          iconSize: 28,
-          tooltip: 'Back 10 seconds',
-          onPressed: s.canSeek ? () => _skip(-10) : null,
-          icon: const Icon(Icons.replay_10_rounded),
-        ),
-        const SizedBox(width: 16),
-        // Material 3 expressive: the button morphs between a rounded square
-        // (paused) and a wider pill (playing).
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeOutBack,
-          width: playing ? 104 : 88,
-          height: 72,
-          decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(playing ? 36 : 22)),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(playing ? 36 : 22),
-              onTap: () => _do(MediaAction.playPause),
-              child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 40, color: scheme.onPrimary),
+    // Scales down on narrow phones instead of overflowing.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            iconSize: 32,
+            tooltip: 'Previous',
+            onPressed: () => _do(MediaAction.previous),
+            icon: const Icon(Icons.skip_previous_rounded),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            iconSize: 28,
+            tooltip: 'Back 10 seconds',
+            onPressed: s.canSeek ? () => _skip(-10) : null,
+            icon: const Icon(Icons.replay_10_rounded),
+          ),
+          const SizedBox(width: 16),
+          // Material 3 expressive: the button morphs between a rounded square
+          // (paused) and a wider pill (playing).
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutBack,
+            width: playing ? 104 : 88,
+            height: 72,
+            decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(playing ? 36 : 22)),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(playing ? 36 : 22),
+                onTap: () => _do(MediaAction.playPause),
+                child: Icon(
+                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  size: 40,
+                  color: scheme.onPrimary,
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 16),
-        IconButton(
-          iconSize: 28,
-          tooltip: 'Forward 10 seconds',
-          onPressed: s.canSeek ? () => _skip(10) : null,
-          icon: const Icon(Icons.forward_10_rounded),
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-          iconSize: 32,
-          tooltip: 'Next',
-          onPressed: () => _do(MediaAction.next),
-          icon: const Icon(Icons.skip_next_rounded),
-        ),
-      ],
+          const SizedBox(width: 16),
+          IconButton(
+            iconSize: 28,
+            tooltip: 'Forward 10 seconds',
+            onPressed: s.canSeek ? () => _skip(10) : null,
+            icon: const Icon(Icons.forward_10_rounded),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            iconSize: 32,
+            tooltip: 'Next',
+            onPressed: () => _do(MediaAction.next),
+            icon: const Icon(Icons.skip_next_rounded),
+          ),
+        ],
+      ),
     );
   }
 

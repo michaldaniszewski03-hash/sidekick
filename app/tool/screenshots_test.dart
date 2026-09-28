@@ -24,6 +24,7 @@ import 'package:sidekick/main.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/input.dart';
 import 'package:sidekick/platform/media.dart';
+import 'package:sidekick/ui/widgets.dart';
 
 class _FakeMedia implements MediaController {
   bool playing = true;
@@ -157,6 +158,15 @@ void main() {
     state.setThemeMode(ThemeMode.dark);
     await tester.tap(find.text('Media').last);
     await shot('6-media-dark');
+
+    // Phone layout.
+    state.setThemeMode(ThemeMode.light);
+    debugForceMobile = true;
+    tester.view.physicalSize = const Size(412, 915);
+    for (final (tab, name) in [('Devices', 'devices'), ('Files', 'files'), ('Remote', 'remote'), ('Media', 'media')]) {
+      await tester.tap(find.text(tab).last);
+      await shot('phone-$name');
+    }
 
     await tester.runAsync(() async {
       await phone.stop();

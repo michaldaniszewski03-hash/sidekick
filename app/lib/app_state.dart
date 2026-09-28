@@ -12,6 +12,7 @@ import 'core/discovery.dart';
 import 'core/models.dart';
 import 'core/server.dart';
 import 'core/trust.dart';
+import 'platform/android.dart';
 import 'platform/files.dart';
 import 'platform/input.dart';
 import 'platform/media.dart';
@@ -144,13 +145,21 @@ class AppState extends ChangeNotifier {
     platform: currentPlatform,
     port: server.port == 0 ? sidekickPort : server.port,
     capabilities: Capabilities(
-      files: permissions.files,
+      files: permissions.files && (!Platform.isAndroid || AndroidBridge.permissions.allFiles),
       media: permissions.media && media.supported,
       input: permissions.input && input.supported,
     ),
   );
 
   Future<void> start() async {
+    if (Platform.isAndroid) {
+      try {
+        await AndroidBridge.acquireMulticastLock();
+        await AndroidBridge.refresh();
+      } catch (_) {
+        // Discovery may be flaky, but Add by IP still works.
+      }
+    }
     server = SidekickServer(
       self: () => me,
       trust: trust,
@@ -194,6 +203,19 @@ class AppState extends ChangeNotifier {
     server.stop();
     media.dispose();
     super.dispose();
+  }
+
+  /// Re-reads things the user may have changed in system settings while we
+  /// were in the background (Android permissions).
+  Future<void> refreshPlatform() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await AndroidBridge.refresh();
+    } catch (_) {
+      return;
+    }
+    discovery.announce();
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------- devices
@@ -361,6 +383,13 @@ class AppState extends ChangeNotifier {
 
   Future<String> receiveDir() async {
     if (_receiveDir != null) return _receiveDir!;
+    if (Platform.isAndroid) {
+      // The public Download folder needs "All files access"; otherwise use
+      // Sidekick's own folder under Android/data.
+      if (AndroidBridge.permissions.allFiles) return '/storage/emulated/0/Download/Sidekick';
+      final own = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+      return p.join(own.path, 'Sidekick');
+    }
     Directory? downloads;
     try {
       downloads = await getDownloadsDirectory();
@@ -476,6 +505,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// Whether [revealInFolder] can do anything on this platform.
+bool get canRevealFiles => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
 /// Opens Explorer (or Finder) with [path] selected.
 Future<void> revealInFolder(String path) async {

@@ -10,18 +10,25 @@ class FileService {
 
   final String _home;
 
-  static String _defaultHome() =>
-      Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? Directory.current.path;
+  static String _defaultHome() {
+    if (Platform.isAndroid) return '/storage/emulated/0';
+    return Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? Directory.current.path;
+  }
 
   /// Starting points shown before the peer picks a folder: common user
-  /// folders first, then every drive (Windows) or `/` (elsewhere).
+  /// folders first, then every drive (Windows), `/` (desktop) or the whole
+  /// internal storage (Android).
   Future<List<RemoteEntry>> roots() async {
     final entries = <RemoteEntry>[];
-    for (final name in ['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Videos']) {
+    final folders = Platform.isAndroid
+        ? ['DCIM', 'Pictures', 'Download', 'Documents', 'Music', 'Movies']
+        : ['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Videos'];
+    for (final name in folders) {
       final dir = Directory(p.join(_home, name));
       if (await dir.exists()) entries.add(RemoteEntry(name: name, path: dir.path, isDir: true));
     }
-    entries.add(RemoteEntry(name: 'Home', path: _home, isDir: true));
+    entries.add(RemoteEntry(name: Platform.isAndroid ? 'Internal storage' : 'Home', path: _home, isDir: true));
+    if (Platform.isAndroid) return entries;
     if (Platform.isWindows) {
       for (var c = 0x41; c <= 0x5A; c++) {
         final drive = '${String.fromCharCode(c)}:\\';

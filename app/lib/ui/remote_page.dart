@@ -7,6 +7,16 @@ import '../core/client.dart';
 import '../core/models.dart';
 import 'widgets.dart';
 
+/// What to send so text that reads [before] ends up reading [after]:
+/// that many backspaces, then [insert]. Handles autocorrect rewrites.
+(int backspaces, String insert) typingDiff(String before, String after) {
+  var common = 0;
+  while (common < before.length && common < after.length && before.codeUnitAt(common) == after.codeUnitAt(common)) {
+    common++;
+  }
+  return (before.length - common, after.substring(common));
+}
+
 class RemotePage extends StatelessWidget {
   const RemotePage({super.key, required this.state, this.onGoToDevices});
   final AppState state;
@@ -44,6 +54,8 @@ class _RemoteState extends State<_Remote> {
   bool _holding = false;
   final _captureFocus = FocusNode();
   final _textController = TextEditingController();
+  final _liveController = TextEditingController();
+  String _live = '';
 
   @override
   void initState() {
@@ -57,6 +69,7 @@ class _RemoteState extends State<_Remote> {
     _session?.close();
     _captureFocus.dispose();
     _textController.dispose();
+    _liveController.dispose();
     super.dispose();
   }
 
@@ -222,72 +235,13 @@ class _RemoteState extends State<_Remote> {
             ],
           ),
           const SectionLabel('Keyboard'),
-          Focus(
-            focusNode: _captureFocus,
-            onKeyEvent: _onKey,
-            child: ListenableBuilder(
-              listenable: _captureFocus,
-              builder: (context, _) {
-                final active = _captureFocus.hasFocus;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: _s == null ? null : () => active ? _captureFocus.unfocus() : _captureFocus.requestFocus(),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: active ? scheme.primaryContainer : scheme.surfaceContainerHigh,
-                      borderRadius: BorderRadius.circular(active ? 28 : 20),
-                      border: Border.all(color: active ? scheme.primary : Colors.transparent, width: 2),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          active ? Icons.keyboard : Icons.keyboard_outlined,
-                          color: active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            active
-                                ? 'Typing on ${widget.device.name}. Everything you type goes there. Click here to stop.'
-                                : 'Click here, then type. Your keystrokes go straight to ${widget.device.name}.',
-                            style: TextStyle(color: active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _textController,
-            enabled: _s != null,
-            decoration: InputDecoration(
-              hintText: 'Or write text here and press Enter to send it all at once',
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: () {
-                  _s?.text(_textController.text);
-                  _textController.clear();
-                },
-              ),
-            ),
-            onSubmitted: (v) {
-              _s?.text(v);
-              _textController.clear();
-            },
-          ),
+          if (isMobile) _liveTyping() else ..._desktopKeyboard(scheme),
           const SectionLabel('Shortcuts'),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final (label, key, mods) in _shortcuts)
+              for (final (label, key, mods) in _shortcutsFor(widget.device.platform))
                 ActionChip(
                   label: _arrows[label] == null ? Text(label) : Icon(_arrows[label], size: 18, semanticLabel: key),
                   onPressed: _s == null ? null : () => _s!.key(key, modifiers: mods),
@@ -298,6 +252,123 @@ class _RemoteState extends State<_Remote> {
       ),
     );
   }
+
+  /// Physical-keyboard capture and a send-text box, for desktops.
+  List<Widget> _desktopKeyboard(ColorScheme scheme) => [
+    Focus(
+      focusNode: _captureFocus,
+      onKeyEvent: _onKey,
+      child: ListenableBuilder(
+        listenable: _captureFocus,
+        builder: (context, _) {
+          final active = _captureFocus.hasFocus;
+          return InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: _s == null ? null : () => active ? _captureFocus.unfocus() : _captureFocus.requestFocus(),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: active ? scheme.primaryContainer : scheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(active ? 28 : 20),
+                border: Border.all(color: active ? scheme.primary : Colors.transparent, width: 2),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    active ? Icons.keyboard : Icons.keyboard_outlined,
+                    color: active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      active
+                          ? 'Typing on ${widget.device.name}. Everything you type goes there. Click here to stop.'
+                          : 'Click here, then type. Your keystrokes go straight to ${widget.device.name}.',
+                      style: TextStyle(color: active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+    const SizedBox(height: 12),
+    TextField(
+      controller: _textController,
+      enabled: _s != null,
+      decoration: InputDecoration(
+        hintText: 'Or write text here and press Enter to send it all at once',
+        border: const OutlineInputBorder(),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.send),
+          onPressed: () {
+            _s?.text(_textController.text);
+            _textController.clear();
+          },
+        ),
+      ),
+      onSubmitted: (v) {
+        _s?.text(v);
+        _textController.clear();
+      },
+    ),
+  ];
+
+  /// On phones: a text field that forwards every change as you type,
+  /// including backspaces and autocorrect rewrites.
+  Widget _liveTyping() => TextField(
+    controller: _liveController,
+    enabled: _s != null,
+    autocorrect: false,
+    enableSuggestions: false,
+    textInputAction: TextInputAction.send,
+    decoration: InputDecoration(
+      hintText: 'Type here to type on ${widget.device.name}',
+      prefixIcon: const Icon(Icons.keyboard_outlined),
+      border: const OutlineInputBorder(),
+    ),
+    onChanged: _onLiveChanged,
+    // Keep the keyboard open after Enter.
+    onEditingComplete: () {},
+    onSubmitted: (_) {
+      _s?.key('enter');
+      _liveController.clear();
+      _live = '';
+    },
+  );
+
+  void _onLiveChanged(String value) {
+    final s = _s;
+    if (s == null) return;
+    final (backspaces, insert) = typingDiff(_live, value);
+    for (var i = 0; i < backspaces; i++) {
+      s.key('backspace');
+    }
+    if (insert.isNotEmpty) s.text(insert);
+    _live = value;
+  }
+
+  static List<(String, String, List<String>)> _shortcutsFor(DevicePlatform target) => switch (target) {
+    DevicePlatform.android || DevicePlatform.ios => _phoneShortcuts,
+    _ => _shortcuts,
+  };
+
+  static const _phoneShortcuts = <(String, String, List<String>)>[
+    ('Back', 'back', []),
+    ('Home', 'home', []),
+    ('Recent apps', 'recents', []),
+    ('Notifications', 'notifications', []),
+    ('Quick settings', 'quicksettings', []),
+    ('Enter', 'enter', []),
+    ('Backspace', 'backspace', []),
+    ('Select all', 'a', ['ctrl']),
+    ('Copy', 'c', ['ctrl']),
+    ('Paste', 'v', ['ctrl']),
+    ('Lock screen', 'lock', []),
+  ];
 
   static const _arrows = {
     '←': Icons.arrow_back,
@@ -440,7 +511,11 @@ class _TouchpadState extends State<_Touchpad> {
                     Icon(Icons.touch_app_outlined, size: 36, color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
                     const SizedBox(height: 8),
                     Text(
-                      widget.enabled ? 'Drag to move · click to click · scroll to scroll' : 'Not connected',
+                      widget.enabled
+                          ? (isMobile
+                                ? 'Drag to move · tap to click · two fingers to scroll'
+                                : 'Drag to move · click to click · scroll to scroll')
+                          : 'Not connected',
                       style: TextStyle(color: scheme.onSurfaceVariant),
                     ),
                   ],

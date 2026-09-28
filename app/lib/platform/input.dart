@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
+import 'android.dart';
+
 enum MouseButton { left, right, middle }
 
 /// Injects mouse and keyboard events into *this* device.
@@ -31,6 +33,7 @@ abstract class InputInjector {
 
   static InputInjector forCurrentPlatform() {
     if (Platform.isWindows) return WindowsInputInjector();
+    if (Platform.isAndroid) return AndroidInputInjector();
     return UnsupportedInputInjector();
   }
 }
@@ -41,6 +44,8 @@ const List<String> keyNames = [
   'left', 'right', 'up', 'down', 'home', 'end', 'pageup', 'pagedown',
   'win', 'ctrl', 'alt', 'shift', 'printscreen', 'menu',
   'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
+  // Android only: global actions.
+  'back', 'home', 'recents', 'notifications', 'quicksettings', 'lock',
   // single letters and digits are accepted too: 'a'..'z', '0'..'9'
 ];
 

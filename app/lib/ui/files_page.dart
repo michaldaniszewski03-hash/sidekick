@@ -387,7 +387,7 @@ class _Transfers extends StatelessWidget {
                           ],
                         ),
                       ),
-                      if (t.localPath != null)
+                      if (t.localPath != null && canRevealFiles)
                         IconButton(
                           tooltip: 'Show in folder',
                           icon: const Icon(Icons.folder_open_outlined, size: 20),

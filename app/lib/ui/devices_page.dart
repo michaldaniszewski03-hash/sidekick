@@ -39,10 +39,19 @@ class DevicesPage extends StatelessWidget {
               _ThisDeviceCard(state: state),
               if (paired.isNotEmpty) ...[
                 const SectionLabel('Paired'),
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [for (final d in paired) _PairedCard(state: state, device: d, onOpen: onOpen)],
+                LayoutBuilder(
+                  // Fixed-width cards on desktop, full width on phones.
+                  builder: (context, constraints) => Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      for (final d in paired)
+                        SizedBox(
+                          width: constraints.maxWidth < 400 ? constraints.maxWidth : 360,
+                          child: _PairedCard(state: state, device: d, onOpen: onOpen),
+                        ),
+                    ],
+                  ),
                 ),
               ],
               const SectionLabel('Nearby'),
@@ -317,7 +326,6 @@ class _PairedCardState extends State<_PairedCard> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: 360,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: _dragging ? scheme.secondaryContainer : scheme.surfaceContainerLow,
@@ -419,8 +427,8 @@ class _Searching extends StatelessWidget {
                 Text('Looking for devices…', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 Text(
-                  'Open Sidekick on your other device and connect it to the same Wi-Fi. '
-                  "If Windows asks, allow Sidekick on private networks.",
+                  'Open Sidekick on your other device and connect it to the same Wi-Fi.'
+                  '${Platform.isWindows ? ' If Windows asks, allow Sidekick on private networks.' : ''}',
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
               ],

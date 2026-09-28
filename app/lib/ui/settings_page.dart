@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
 import '../core/server.dart';
+import '../platform/android.dart';
 import 'widgets.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -79,13 +82,17 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ],
                   ),
+                  if (Platform.isAndroid) ...[
+                    const SectionLabel('Android permissions'),
+                    _Group(children: _androidPermissions()),
+                  ],
                   const SectionLabel('What paired devices can do here'),
                   _Group(
                     children: [
                       SwitchListTile(
                         secondary: const Icon(Icons.folder_open_outlined),
                         title: const Text('Browse and download files'),
-                        subtitle: const Text('Paired devices can open any folder on this computer'),
+                        subtitle: const Text('Paired devices can open any folder on this device'),
                         value: perms.files,
                         onChanged: (v) =>
                             state.setPermissions(Permissions(files: v, media: perms.media, input: perms.input)),
@@ -107,7 +114,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         secondary: const Icon(Icons.mouse_outlined),
                         title: const Text('Control mouse and keyboard'),
                         subtitle: Text(
-                          state.input.supported ? 'Use this computer remotely' : 'Not supported on this platform yet',
+                          state.input.supported ? 'Use this device remotely' : 'Not supported on this platform yet',
                         ),
                         value: perms.input && state.input.supported,
                         onChanged: state.input.supported
@@ -156,10 +163,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           onSelectionChanged: (s) => state.setThemeMode(s.first),
                         ),
                       ),
-                      const ListTile(
-                        leading: Icon(Icons.palette_outlined),
-                        title: Text('Colors follow your Windows accent color'),
-                        subtitle: Text('Settings → Personalization → Colors'),
+                      ListTile(
+                        leading: const Icon(Icons.palette_outlined),
+                        title: Text(
+                          Platform.isAndroid
+                              ? 'Colors follow your wallpaper (Android 12 and newer)'
+                              : 'Colors follow your Windows accent color',
+                        ),
+                        subtitle: Platform.isAndroid ? null : const Text('Settings → Personalization → Colors'),
                       ),
                     ],
                   ),
@@ -180,6 +191,61 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
+  }
+}
+
+extension on _SettingsPageState {
+  /// One row per special permission, each with a button to the system screen
+  /// that grants it. Status refreshes when the user comes back to the app.
+  List<Widget> _androidPermissions() {
+    final perms = AndroidBridge.permissions;
+    Widget row({
+      required IconData icon,
+      required String title,
+      required String why,
+      required bool granted,
+      required Future<void> Function() grant,
+    }) => ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(why),
+      isThreeLine: true,
+      trailing: granted
+          ? const Icon(Icons.check_circle, color: Colors.green)
+          : FilledButton.tonal(onPressed: grant, child: const Text('Grant')),
+    );
+    return [
+      row(
+        icon: Icons.folder_open_outlined,
+        title: 'All files access',
+        why: 'So your PC can browse this phone and received files go to Download/Sidekick.',
+        granted: perms.allFiles,
+        grant: AndroidBridge.requestAllFilesAccess,
+      ),
+      row(
+        icon: Icons.play_circle_outline,
+        title: 'Notification access',
+        why: "So your PC can see what's playing and seek. Sidekick doesn't read your notifications.",
+        granted: perms.notifications,
+        grant: AndroidBridge.openNotificationAccessSettings,
+      ),
+      row(
+        icon: Icons.touch_app_outlined,
+        title: 'Remote control (Accessibility)',
+        why:
+            'So your PC can tap, scroll and type here. In Accessibility, open "Installed apps" → Sidekick remote '
+            'control. If it\'s greyed out: App info → ⋮ → Allow restricted settings.',
+        granted: perms.accessibility,
+        grant: AndroidBridge.openAccessibilitySettings,
+      ),
+      if (!perms.accessibility)
+        ListTile(
+          leading: const SizedBox(),
+          title: const Text('Open App info'),
+          subtitle: const Text('For "Allow restricted settings" on Android 13 and newer'),
+          onTap: AndroidBridge.openAppSettings,
+        ),
+    ];
   }
 }
 

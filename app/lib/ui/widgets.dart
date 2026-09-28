@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
@@ -30,6 +32,15 @@ String formatDuration(Duration d) {
   return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
 }
 
+/// Lets the screenshot tool preview the phone UI on a desktop.
+bool debugForceMobile = false;
+
+/// Running on a phone or tablet (touch-first, soft keyboard).
+bool get isMobile => debugForceMobile || Platform.isAndroid || Platform.isIOS;
+
+/// Screens narrower than this get the compact phone layout.
+const compactWidth = 600.0;
+
 /// Page scaffold with a large title, used by every tab.
 class PageFrame extends StatelessWidget {
   const PageFrame({super.key, required this.title, this.actions = const [], required this.child, this.scroll = true});
@@ -42,18 +53,31 @@ class PageFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final compact = MediaQuery.sizeOf(context).width < compactWidth;
+    final side = compact ? 16.0 : 28.0;
+    final titleText = Text(title, style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w600));
+    // On phones the actions go under the title so they never overflow.
     final header = Padding(
-      padding: const EdgeInsets.fromLTRB(28, 24, 20, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(title, style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w600)),
-          ),
-          ...actions,
-        ],
-      ),
+      padding: EdgeInsets.fromLTRB(side, compact ? 16 : 24, compact ? 16 : 20, 12),
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                titleText,
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: actions),
+                ],
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: titleText),
+                ...actions,
+              ],
+            ),
     );
-    final body = Padding(padding: const EdgeInsets.fromLTRB(28, 4, 28, 28), child: child);
+    final body = Padding(padding: EdgeInsets.fromLTRB(side, 4, side, side), child: child);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

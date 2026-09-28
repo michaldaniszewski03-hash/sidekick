@@ -21,6 +21,8 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   int _index = 0;
   late final List<StreamSubscription<Object>> _subs;
+  // Picks up permissions granted in system settings while we were away.
+  late final AppLifecycleListener _lifecycle;
 
   AppState get state => widget.state;
 
@@ -36,6 +38,7 @@ class _ShellState extends State<Shell> {
   void initState() {
     super.initState();
     _subs = [state.pairRequests.listen(_showPin), state.notices.listen(_showNotice)];
+    _lifecycle = AppLifecycleListener(onResume: state.refreshPlatform);
   }
 
   @override
@@ -43,6 +46,7 @@ class _ShellState extends State<Shell> {
     for (final s in _subs) {
       s.cancel();
     }
+    _lifecycle.dispose();
     super.dispose();
   }
 
@@ -53,7 +57,7 @@ class _ShellState extends State<Shell> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(notice.message),
-        action: notice.revealPath == null
+        action: notice.revealPath == null || !canRevealFiles
             ? null
             : SnackBarAction(label: 'Show in folder', onPressed: () => revealInFolder(notice.revealPath!)),
       ),

@@ -1,0 +1,157 @@
+name: Build
+
+# Every push builds the Windows installer and the Android APK (download them
+# from the run's Artifacts). Pushing a tag like v0.2.0 also publishes them as
+# a GitHub Release.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: 3.47.5
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Work out the version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build windows --release --build-name=${{ steps.version.outputs.version }}
+
+      # Flutter apps need the Visual C++ runtime; ship it so Sidekick runs
+      # on a fresh Windows install too.
+      - name: Bundle the Visual C++ runtime
+        shell: pwsh
+        run: |
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:WINDIR\System32\$dll" build\windows\x64\runner\Release\
+          }
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          # The script needs Inno Setup 6.3+; install or upgrade to be sure.
+          choco upgrade innosetup -y --no-progress
+          $iscc = Get-ChildItem 'C:\Program Files*\Inno Setup*\ISCC.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $iscc) { throw 'Inno Setup (ISCC.exe) not found' }
+          & $iscc.FullName "/DAppVersion=${{ steps.version.outputs.version }}" windows\installer\sidekick.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidekick-windows
+          path: app/build/installer/SidekickSetup-*.exe
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Work out the version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          else v="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      # Optional: sign with your own key so updates install over old versions
+      # (see README). Without these secrets the APK uses a throwaway debug key.
+      - name: Set up the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SIDEKICK_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
+
+      - run: flutter pub get
+      - name: Build the APK
+        env:
+          SIDEKICK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SIDEKICK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SIDEKICK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          flutter build apk --release --build-name=${{ steps.version.outputs.version }} --build-number=${{ github.run_number }}
+          mkdir -p build/dist
+          cp build/app/outputs/flutter-apk/app-release.apk "build/dist/Sidekick-${{ steps.version.outputs.version }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidekick-android
+          path: app/build/dist/*.apk
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, windows, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Download
+
+            **Windows 10/11:** download the **SidekickSetup** `.exe` below and run it. The installer adds Start menu and desktop shortcuts, and allows Sidekick through Windows Firewall on private networks.
+
+            **Android 8.0+:** on your phone, download the **Sidekick** `.apk` below and open it. If asked, allow your browser or Files app to install apps.
+
+            Windows may show "Windows protected your PC" because the installer isn't code-signed yet. Click **More info → Run anyway**.

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../core/models.dart';
+import 'android.dart';
 import 'input.dart';
 
 /// Reads and controls whatever is playing on *this* device.
@@ -21,6 +22,7 @@ abstract class MediaController {
 
   static MediaController forCurrentPlatform(InputInjector input) {
     if (Platform.isWindows) return WindowsMediaController(input);
+    if (Platform.isAndroid) return AndroidMediaController();
     return UnsupportedMediaController();
   }
 }
