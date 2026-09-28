@@ -15,6 +15,7 @@ import '../platform/hotspot.dart';
 import '../platform/input.dart';
 import '../platform/media.dart';
 import 'ble_protocol.dart';
+import 'crypto.dart';
 import 'models.dart';
 import 'trust.dart';
 
@@ -73,6 +74,7 @@ class RemoteSessionChanged extends ServerEvent {
 /// `Authorization: Bearer <token>` from a paired peer.
 class SidekickServer {
   SidekickServer({
+    required this.identity,
     required this.self,
     required this.trust,
     required this.files,
@@ -85,6 +87,9 @@ class SidekickServer {
   }) : inputReady = inputReady ?? (() async => input.supported),
        permissions = permissions ?? (() => const Permissions()),
        link = link ?? NoDirectLink();
+
+  /// Our certificate and key: the server only speaks HTTPS.
+  final Identity identity;
 
   /// Our own identity; called on every request so name changes apply live.
   final DeviceInfo Function() self;
@@ -111,7 +116,13 @@ class SidekickServer {
   int get port => _server?.port ?? 0;
 
   Future<void> start({int port = sidekickPort, Object? address}) async {
-    _server = await shelf_io.serve(handler, address ?? InternetAddress.anyIPv4, port, shared: false);
+    _server = await shelf_io.serve(
+      handler,
+      address ?? InternetAddress.anyIPv4,
+      port,
+      shared: false,
+      securityContext: identity.serverContext(),
+    );
     _server!.idleTimeout = const Duration(seconds: 30);
   }
 
@@ -125,6 +136,12 @@ class SidekickServer {
 
   /// The request handler, shared by the Wi-Fi (HTTP) server and Bluetooth.
   late final Handler handler = _handler();
+
+  /// The pairing key a peer seals its Bluetooth requests with.
+  Uint8List? bleKeyFor(String peerId) {
+    final peer = trust.byId(peerId);
+    return peer == null ? null : base64.decode(peer.key);
+  }
 
   /// Runs a request that arrived over Bluetooth through [handler], so it gets
   /// exactly the same auth, permission checks and behaviour as over Wi-Fi.
@@ -147,7 +164,7 @@ class SidekickServer {
         uri,
         headers: headers,
         body: request.body,
-        context: {'sidekick.transport': 'bluetooth'},
+        context: {'sidekick.transport': 'bluetooth', 'sidekick.sealedBy': ?h['sealedBy'] as String?},
       ),
     );
     final body = BytesBuilder(copy: false);
@@ -165,6 +182,7 @@ class SidekickServer {
     final router = Router()
       ..get('/v1/info', (Request r) => _json(self().toJson()))
       ..post('/v1/pair/request', _pairRequest)
+      ..post('/v1/pair/start', _pairStart)
       ..post('/v1/pair/confirm', _pairConfirm)
       ..post('/v1/unpair', _authed(_unpair))
       ..get('/v1/fs/roots', _authed(_roots, (p) => p.files))
@@ -215,6 +233,11 @@ class SidekickServer {
     final token = header.startsWith('Bearer ') ? header.substring(7) : '';
     final peer = token.isEmpty ? null : trust.byToken(token);
     if (peer == null) return _error(401, 'Not paired');
+    // Over Bluetooth there's no TLS: paired traffic must be sealed with the
+    // key from pairing, by the same peer the token belongs to.
+    if (request.context['sidekick.transport'] == 'bluetooth' && request.context['sidekick.sealedBy'] != peer.id) {
+      return _error(401, 'Bluetooth requests must be encrypted');
+    }
     if (allowed != null && !allowed(permissions())) {
       return _error(403, 'This device has turned that feature off');
     }
@@ -228,46 +251,109 @@ class SidekickServer {
 
   // -------------------------------------------------------------- pairing
 
+  /// Body: `{device, fingerprint}`. Shows a PIN on this device. Returns our
+  /// identity and certificate fingerprint.
   Future<Response> _pairRequest(Request r) async {
     final body = await _body(r);
     final device = DeviceInfo.fromJson(body['device'] as Map<String, dynamic>, address: _remoteAddress(r));
+    final fingerprint = body['fingerprint'];
+    if (fingerprint is! String || fingerprint.length != 64) {
+      return _error(426, 'Update Sidekick on the other device: this version needs encrypted pairing.');
+    }
     if (device.id == self().id) return _error(400, "Can't pair with yourself");
+    final reply = {'ok': true, 'device': self().toJson(), 'fingerprint': identity.fingerprint};
     // A retry while the code is still on screen keeps the same code, and a
     // noisy network can't stack up dialogs.
-    if (_pending[device.id]?.isOpen ?? false) return _json({'ok': true, 'device': self().toJson()});
+    final existing = _pending[device.id];
+    if (existing != null && existing.isOpen && existing.fingerprint == fingerprint) return _json(reply);
     _pending.removeWhere((_, r) => !r.isOpen);
     if (_pending.length >= 3) return _error(429, 'Too many pairing requests. Try again in a minute.');
-    final request = PairingRequest(device);
+    final request = PairingRequest(device, fingerprint: fingerprint);
     _pending[device.id] = request;
     _events.add(PairRequested(request));
-    return _json({'ok': true, 'device': self().toJson()});
+    return _json(reply);
   }
 
-  /// Body: `{id, pin, token}` where `token` is what the caller wants *us* to
-  /// use when we talk to *them*. Returns the token *they* should use with us.
-  Future<Response> _pairConfirm(Request r) async {
+  /// SPAKE2, our half. Body: `{id, msg}`. Each round uses up one of the
+  /// request's attempts, so the PIN can only be guessed online, 5 times.
+  Future<Response> _pairStart(Request r) async {
     final body = await _body(r);
     final id = body['id'];
-    final pin = body['pin'];
-    final theirToken = body['token'];
-    if (id is! String || pin is! String || theirToken is! String || theirToken.length < 32) {
-      return _error(400, 'Missing id, pin or token');
-    }
+    final msg = body['msg'];
+    if (id is! String || msg is! String) return _error(400, 'Missing id or msg');
     final request = _pending[id];
     if (request == null || !request.isOpen) {
       _pending.remove(id);
       return _error(410, 'No open pairing request. Start pairing again.');
     }
     request.attempts++;
-    if (!constantTimeEquals(request.pin, pin)) {
+    final context = pairingContext(
+      idA: request.device.id,
+      fingerprintA: request.fingerprint,
+      idB: self().id,
+      fingerprintB: identity.fingerprint,
+    );
+    final spake = Spake2(isA: false, pin: request.pin, context: context);
+    request
+      ..keys = spake.finish(base64.decode(msg))
+      ..context = context;
+    return _json({'msg': base64.encode(spake.message)});
+  }
+
+  /// Body: `{id, confirm, token}`. [confirm] proves the caller derived the
+  /// same key (so it knew the PIN and saw our real certificate); `token`,
+  /// sealed with that key, is what we use when we talk to *them*. Returns
+  /// our proof and the (sealed) token *they* should use with us.
+  Future<Response> _pairConfirm(Request r) async {
+    final body = await _body(r);
+    final id = body['id'];
+    final confirm = body['confirm'];
+    final sealedToken = body['token'];
+    if (id is! String || confirm is! String || sealedToken is! String) {
+      return _error(400, 'Missing id, confirm or token');
+    }
+    final request = _pending[id];
+    final keys = request?.keys;
+    final context = request?.context;
+    // The last allowed attempt still gets its proof checked, so only look at
+    // cancel and expiry here.
+    if (request == null ||
+        keys == null ||
+        context == null ||
+        request.cancelled ||
+        DateTime.now().isAfter(request.expires)) {
+      return _error(410, 'No open pairing request. Start pairing again.');
+    }
+    // One proof per SPAKE2 round.
+    request
+      ..keys = null
+      ..context = null;
+    if (!tagsEqual(confirmTag(keys.confirmA, context), confirm)) {
       if (!request.isOpen) _pending.remove(id);
       return _error(403, 'Wrong code');
     }
+    final String theirToken;
+    try {
+      theirToken = utf8.decode(unseal(keys.linkKey, base64.decode(sealedToken), aad: utf8.encode('token A')));
+    } on FormatException {
+      return _error(403, 'Wrong code');
+    }
+    if (theirToken.length < 32) return _error(400, 'Token too short');
     _pending.remove(id);
 
     final ourToken = newToken();
     final device = request.device;
-    trust.add(TrustedPeer(id: device.id, name: device.name, platform: device.platform, token: ourToken));
+    final key = base64.encode(keys.linkKey);
+    trust.add(
+      TrustedPeer(
+        id: device.id,
+        name: device.name,
+        platform: device.platform,
+        token: ourToken,
+        fingerprint: request.fingerprint,
+        key: key,
+      ),
+    );
     _events.add(
       Paired(
         PairedDevice(
@@ -275,12 +361,18 @@ class SidekickServer {
           name: device.name,
           platform: device.platform,
           token: theirToken,
+          fingerprint: request.fingerprint,
+          key: key,
           lastAddress: _remoteAddress(r) ?? device.address,
           lastPort: device.port,
         ),
       ),
     );
-    return _json({'token': ourToken, 'device': self().toJson()});
+    return _json({
+      'confirm': confirmTag(keys.confirmB, context),
+      'token': base64.encode(sealBytes(keys.linkKey, utf8.encode(ourToken), aad: utf8.encode('token B'))),
+      'device': self().toJson(),
+    });
   }
 
   Response _unpair(Request r) {

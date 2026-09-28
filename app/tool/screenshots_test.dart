@@ -17,6 +17,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidekick/app_state.dart';
+import 'package:sidekick/core/crypto.dart';
 import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
@@ -89,6 +90,7 @@ void main() {
       File(p.join(home.path, 'Screenshot_0412.png')).writeAsBytesSync(List.filled(312345, 0));
 
       phone = SidekickServer(
+        identity: Identity.generate(),
         self: () => DeviceInfo(
           id: phoneId,
           name: 'Pixel 9',

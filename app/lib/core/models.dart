@@ -1,10 +1,12 @@
-/// Shared data types for the Sidekick protocol (v1).
+/// Shared data types for the Sidekick protocol (v2).
 ///
 /// Everything that crosses the network is plain JSON so that the Android,
 /// iOS and macOS builds of this same codebase can talk to each other.
 library;
 
-const int protocolVersion = 1;
+/// 2: everything is encrypted (HTTPS with pinned certificates, SPAKE2
+/// pairing, sealed Bluetooth). Version 1 devices can't pair with us.
+const int protocolVersion = 2;
 
 /// TCP port for the HTTP/WebSocket server and UDP port for discovery.
 const int sidekickPort = 53318;
@@ -45,7 +47,11 @@ class DeviceInfo {
     required this.port,
     this.capabilities = const Capabilities(),
     this.address,
+    this.version = protocolVersion,
   });
+
+  /// Protocol version the device speaks (see [protocolVersion]).
+  final int version;
 
   final String id;
   final String name;
@@ -59,7 +65,7 @@ class DeviceInfo {
 
   bool get isDesktop => const {DevicePlatform.windows, DevicePlatform.macos, DevicePlatform.linux}.contains(platform);
 
-  Uri baseUri() => Uri(scheme: 'http', host: address, port: port);
+  Uri baseUri() => Uri(scheme: 'https', host: address, port: port);
 
   DeviceInfo copyWith({String? name, String? address, Capabilities? capabilities}) => DeviceInfo(
     id: id,
@@ -68,6 +74,7 @@ class DeviceInfo {
     port: port,
     capabilities: capabilities ?? this.capabilities,
     address: address ?? this.address,
+    version: version,
   );
 
   Map<String, dynamic> toJson() => {
@@ -86,6 +93,7 @@ class DeviceInfo {
     port: (json['port'] as num?)?.toInt() ?? sidekickPort,
     capabilities: Capabilities.fromJson(json['caps'] as Map<String, dynamic>?),
     address: address,
+    version: (json['v'] as num?)?.toInt() ?? 1,
   );
 }
 
@@ -96,6 +104,8 @@ class PairedDevice {
     required this.name,
     required this.platform,
     required this.token,
+    required this.fingerprint,
+    required this.key,
     this.lastAddress,
     this.lastPort = sidekickPort,
   });
@@ -104,6 +114,12 @@ class PairedDevice {
   String name;
   final DevicePlatform platform;
   final String token;
+
+  /// SHA-256 of their TLS certificate; we accept no other.
+  final String fingerprint;
+
+  /// Shared key from pairing (base64), seals Bluetooth traffic.
+  final String key;
   String? lastAddress;
   int lastPort;
 
@@ -112,6 +128,8 @@ class PairedDevice {
     'name': name,
     'platform': platform.name,
     'token': token,
+    'fingerprint': fingerprint,
+    'key': key,
     'lastAddress': lastAddress,
     'lastPort': lastPort,
   };
@@ -121,6 +139,8 @@ class PairedDevice {
     name: json['name'] as String,
     platform: platformFromName(json['platform'] as String?),
     token: json['token'] as String,
+    fingerprint: json['fingerprint'] as String,
+    key: json['key'] as String,
     lastAddress: json['lastAddress'] as String?,
     lastPort: (json['lastPort'] as num?)?.toInt() ?? sidekickPort,
   );
@@ -128,20 +148,42 @@ class PairedDevice {
 
 /// A device that is allowed to control *us*. [token] is what they send us.
 class TrustedPeer {
-  TrustedPeer({required this.id, required this.name, required this.platform, required this.token});
+  TrustedPeer({
+    required this.id,
+    required this.name,
+    required this.platform,
+    required this.token,
+    required this.fingerprint,
+    required this.key,
+  });
 
   final String id;
   String name;
   final DevicePlatform platform;
   final String token;
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'platform': platform.name, 'token': token};
+  /// SHA-256 of their TLS certificate.
+  final String fingerprint;
+
+  /// Shared key from pairing (base64), seals Bluetooth traffic.
+  final String key;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'platform': platform.name,
+    'token': token,
+    'fingerprint': fingerprint,
+    'key': key,
+  };
 
   factory TrustedPeer.fromJson(Map<String, dynamic> json) => TrustedPeer(
     id: json['id'] as String,
     name: json['name'] as String,
     platform: platformFromName(json['platform'] as String?),
     token: json['token'] as String,
+    fingerprint: json['fingerprint'] as String,
+    key: json['key'] as String,
   );
 }
 

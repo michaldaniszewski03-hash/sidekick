@@ -116,7 +116,8 @@ app/lib/
 ├── core/
 │   ├── models.dart      JSON types shared by every platform
 │   ├── discovery.dart   UDP multicast announcements (224.0.0.168:53318)
-│   ├── server.dart      HTTP + WebSocket server every device runs (port 53318)
+│   ├── server.dart      HTTPS + WebSocket server every device runs (port 53318)
+│   ├── crypto.dart      certificates, SPAKE2 pairing, AES-GCM sealing
 │   ├── client.dart      talks to another device's server
 │   └── trust.dart       pairing codes, tokens, trusted devices
 ├── platform/
@@ -138,6 +139,17 @@ app/tool/make_icons.py                 app icons for every platform from your lo
 
 - **Pairing:** device A asks B to pair; B shows a 6-digit code; you type it on A. Both devices then hold a random token for each other. Pairing works both ways, so either device can control the other. After 5 wrong codes, or 2 minutes, the code stops working.
 - **Every request except `/v1/info` and pairing needs a token.** Unpairing revokes the token straight away, including any live remote-control session.
+
+### Encryption
+
+Everything between paired devices is encrypted, on Wi-Fi and on Bluetooth (`app/lib/core/crypto.dart`):
+
+- **Each device has its own certificate** (P-256, made on first start). All Wi-Fi traffic is HTTPS (TLS 1.2+/1.3), including remote control (secure WebSocket).
+- **Pairing proves the certificates.** The 6-digit code runs through **SPAKE2**, a password-authenticated key exchange, together with both devices' certificate fingerprints. If someone sat in the middle, the two devices would see different certificates and the exchange fails. Watching the pairing doesn't help anyone guess the code offline: each guess needs a live attempt, and there are only 5.
+- **After pairing, each device only accepts the other's exact certificate** (pinning). An impostor at the same address is refused.
+- **Bluetooth** has no TLS, so every request and response between paired devices is sealed with **AES-256-GCM** under a key both sides got from pairing. Requests carry a timestamp and a one-time nonce, so recorded traffic can't be replayed.
+- **What isn't hidden:** device names and types in discovery (so you can find each other) and the pairing request itself.
+- Updating from 0.2 to 0.3: devices you paired before have to be **paired again once**, and both devices need 0.3 or newer.
 - **Media control** uses Windows' Global System Media Transport Controls, the same thing behind the volume flyout, so it works with Spotify, browsers, VLC, the Media Player app and so on. If that helper can't start, play/pause, next/previous and volume still work through media keys.
 
 ### Known limits
@@ -146,7 +158,7 @@ app/tool/make_icons.py                 app icons for every platform from your lo
 - **The phone has to be running Sidekick** (it can be in the background) for the PC to reach it. Android may stop it after a long time in the background.
 - **Sharing from other apps** (Share → Sidekick) isn't in yet on Android or iOS. Use **Send** in Sidekick.
 - **The macOS and iOS apps aren't signed or notarized**, since that needs a paid Apple Developer account. See Install above for how to open them.
-- **Traffic is plain HTTP on your local network.** Tokens stop strangers from controlling your PC, but someone on the same Wi-Fi could read the traffic. The next security step is TLS with the certificate fingerprint pinned during pairing.
+- **Keys are stored in the app's settings storage**, not yet in the system keychain (Windows Credential Manager, Android Keystore, Apple Keychain).
 - **Windows won't let Sidekick control elevated (admin) windows**, such as Task Manager, unless Sidekick itself runs as administrator.
 - **There's no screen view yet**, so you control the PC blind (fine for media and presentations). Screen streaming with WebRTC is next.
 

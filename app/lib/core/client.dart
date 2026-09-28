@@ -6,6 +6,7 @@ import 'package:web_socket_channel/io.dart';
 
 import '../platform/hotspot.dart';
 import 'ble_protocol.dart';
+import 'crypto.dart';
 import 'models.dart';
 import 'trust.dart';
 
@@ -23,33 +24,66 @@ class SidekickException implements Exception {
 /// Progress callback for transfers: bytes done out of [total] (0 if unknown).
 typedef Progress = void Function(int done, int total);
 
-/// Talks to one remote Sidekick device, over Wi-Fi (HTTP) or, when there's
+/// A device we're about to pair with: who it is and which certificate it
+/// showed us.
+typedef PairingTarget = ({DeviceInfo device, String fingerprint});
+
+/// Talks to one remote Sidekick device, over Wi-Fi (HTTPS) or, when there's
 /// no shared network, over Bluetooth ([ble]).
+///
+/// With a [fingerprint], only a server presenting exactly that certificate
+/// is accepted. Without one (before pairing) any certificate is accepted,
+/// and pairing proves which one was real.
 class PeerClient {
-  PeerClient({required this.host, this.port = sidekickPort, this.token, this.ble});
+  PeerClient({required this.host, this.port = sidekickPort, this.token, this.fingerprint, this.ble, this.seal});
 
   /// Same API over a Bluetooth connection. Slower, and no remote control.
-  PeerClient.bluetooth(BleRpcClient this.ble, {this.token}) : host = 'bluetooth', port = 0;
+  /// Paired requests are sealed with [seal].
+  PeerClient.bluetooth(BleRpcClient this.ble, {this.token, this.seal})
+    : host = 'bluetooth',
+      port = 0,
+      fingerprint = null;
 
-  factory PeerClient.forDevice(PairedDevice device) =>
-      PeerClient(host: device.lastAddress ?? '', port: device.lastPort, token: device.token);
+  factory PeerClient.forDevice(PairedDevice device) => PeerClient(
+    host: device.lastAddress ?? '',
+    port: device.lastPort,
+    token: device.token,
+    fingerprint: device.fingerprint,
+  );
 
   final String host;
   final int port;
   final String? token;
+  final String? fingerprint;
   final BleRpcClient? ble;
+  final BleSeal? seal;
 
   bool get viaBluetooth => ble != null;
 
   /// The IP address to remember for this device (none over Bluetooth).
   String? get _address => ble == null ? host : null;
 
-  static final HttpClient _http = HttpClient()
-    ..connectionTimeout = const Duration(seconds: 4)
-    ..idleTimeout = const Duration(seconds: 15);
+  static final Map<String, HttpClient> _clients = {};
+
+  /// One HTTP client per pinned certificate (and one that accepts any, for
+  /// discovery and pairing).
+  HttpClient get _http => _clients.putIfAbsent(fingerprint ?? '', () {
+    final pin = fingerprint;
+    return HttpClient(context: SecurityContext(withTrustedRoots: false))
+      ..connectionTimeout = const Duration(seconds: 4)
+      ..idleTimeout = const Duration(seconds: 15)
+      ..badCertificateCallback = (cert, _, _) => pin == null || fingerprintOf(cert.der) == pin;
+  });
 
   Uri _uri(String path, [Map<String, String>? query]) =>
-      Uri(scheme: 'http', host: host, port: port, path: path, queryParameters: query);
+      Uri(scheme: 'https', host: host, port: port, path: path, queryParameters: query);
+
+  SidekickException _tlsFailure() => fingerprint == null
+      ? SidekickException("Couldn't connect securely to $host. Make sure both devices run Sidekick 0.3 or newer.")
+      : SidekickException(
+          "$host isn't showing the security certificate it paired with. If Sidekick was reinstalled there, "
+          'unpair it and pair again.',
+        );
 
   Future<HttpClientResponse> _send(
     String method,
@@ -68,6 +102,10 @@ class PeerClient {
       final res = await req.close().timeout(timeout);
       if (res.statusCode >= 400) throw await _failure(res);
       return res;
+    } on HandshakeException {
+      throw _tlsFailure();
+    } on TlsException {
+      throw _tlsFailure();
     } on SocketException {
       throw SidekickException("Can't reach $host. Check both devices are on the same network.");
     } on TimeoutException {
@@ -106,6 +144,7 @@ class PeerClient {
         headers: {..._authHeaders, ...headers},
         body: body,
         timeout: timeout,
+        seal: seal,
       );
     } on TimeoutException {
       throw SidekickException('The device took too long to answer over Bluetooth.');
@@ -159,33 +198,88 @@ class PeerClient {
 
   // ------------------------------------------------------------ pairing
 
-  /// Asks the device to show a pairing code. Returns its identity.
-  Future<DeviceInfo> requestPairing(DeviceInfo me) async {
-    final json = await _postJson('/v1/pair/request', {'device': me.toJson()}) as Map<String, dynamic>;
-    return DeviceInfo.fromJson(json['device'] as Map<String, dynamic>, address: _address);
+  /// Asks the device to show a pairing code. Returns who it is and the
+  /// certificate it presented.
+  Future<PairingTarget> requestPairing(DeviceInfo me, {required String myFingerprint}) async {
+    Map<String, dynamic> json;
+    String? seen;
+    if (ble != null) {
+      json = await _postJson('/v1/pair/request', {
+        'device': me.toJson(),
+        'fingerprint': myFingerprint,
+      }) as Map<String, dynamic>;
+    } else {
+      final res = await _send('POST', '/v1/pair/request', json: {'device': me.toJson(), 'fingerprint': myFingerprint});
+      seen = res.certificate == null ? null : fingerprintOf(res.certificate!.der);
+      json = jsonDecode(await utf8.decodeStream(res)) as Map<String, dynamic>;
+    }
+    final claimed = json['fingerprint'];
+    if (claimed is! String) throw SidekickException('Update Sidekick on the other device to pair with it.');
+    // Over Wi-Fi the certificate we actually saw is what we pin; pairing
+    // then proves the other side really has it.
+    if (seen != null && seen != claimed) throw SidekickException('The connection was tampered with. Try again.');
+    return (
+      device: DeviceInfo.fromJson(json['device'] as Map<String, dynamic>, address: _address),
+      fingerprint: claimed,
+    );
   }
 
-  /// Sends the code the user typed. On success returns a [PairedDevice] we
-  /// can use to control them, and the token they must use with us
-  /// (`tokenForThem`), which the caller adds to its [TrustStore].
-  Future<({PairedDevice device, String tokenForThem})> confirmPairing(String myId, String pin) async {
+  /// Runs SPAKE2 with the code the user typed. On success returns a
+  /// [PairedDevice] we can use to control them, and the token and key they
+  /// use with us (`tokenForThem`, `key`), which the caller adds to its
+  /// [TrustStore].
+  Future<({PairedDevice device, String tokenForThem, String key})> confirmPairing({
+    required String myId,
+    required String myFingerprint,
+    required PairingTarget target,
+    required String pin,
+  }) async {
+    final context = pairingContext(
+      idA: myId,
+      fingerprintA: myFingerprint,
+      idB: target.device.id,
+      fingerprintB: target.fingerprint,
+    );
+    final spake = Spake2(isA: true, pin: pin.replaceAll(RegExp(r'\s'), ''), context: context);
+    final start = await _postJson('/v1/pair/start', {'id': myId, 'msg': base64.encode(spake.message)}) as Map;
+    final PairingKeys keys;
+    try {
+      keys = spake.finish(base64.decode(start['msg'] as String));
+    } on FormatException {
+      throw SidekickException('The other device sent a bad pairing message.');
+    }
     final tokenForThem = newToken();
     final json = await _postJson('/v1/pair/confirm', {
       'id': myId,
-      'pin': pin.replaceAll(RegExp(r'\s'), ''),
-      'token': tokenForThem,
+      'confirm': confirmTag(keys.confirmA, context),
+      'token': base64.encode(sealBytes(keys.linkKey, utf8.encode(tokenForThem), aad: utf8.encode('token A'))),
     }) as Map<String, dynamic>;
+    // They must prove the same key too, or it's not really them.
+    final theirConfirm = json['confirm'];
+    if (theirConfirm is! String || !tagsEqual(confirmTag(keys.confirmB, context), theirConfirm)) {
+      throw SidekickException("Couldn't verify the other device. Try pairing again.");
+    }
+    final String token;
+    try {
+      token = utf8.decode(unseal(keys.linkKey, base64.decode(json['token'] as String), aad: utf8.encode('token B')));
+    } on FormatException {
+      throw SidekickException("Couldn't verify the other device. Try pairing again.");
+    }
     final info = DeviceInfo.fromJson(json['device'] as Map<String, dynamic>, address: _address);
+    final key = base64.encode(keys.linkKey);
     return (
       device: PairedDevice(
         id: info.id,
         name: info.name,
         platform: info.platform,
-        token: json['token'] as String,
+        token: token,
+        fingerprint: target.fingerprint,
+        key: key,
         lastAddress: _address,
         lastPort: info.port,
       ),
       tokenForThem: tokenForThem,
+      key: key,
     );
   }
 
@@ -296,6 +390,8 @@ class PeerClient {
       if (res.statusCode >= 400) throw await _failure(res);
       final json = jsonDecode(await utf8.decodeStream(res)) as Map<String, dynamic>;
       return json['path'] as String;
+    } on HandshakeException {
+      throw _tlsFailure();
     } on SocketException {
       throw SidekickException('Lost connection to $host while sending.');
     } on HttpException catch (e) {
@@ -327,10 +423,11 @@ class PeerClient {
       if (e.status != 404) rethrow; // 404: an older Sidekick without the check.
     }
     final channel = IOWebSocketChannel.connect(
-      Uri(scheme: 'ws', host: host, port: port, path: '/v1/input'),
+      Uri(scheme: 'wss', host: host, port: port, path: '/v1/input'),
       headers: {if (token != null) 'authorization': 'Bearer $token'},
       pingInterval: const Duration(seconds: 10),
       connectTimeout: const Duration(seconds: 4),
+      customClient: _http,
     );
     try {
       await channel.ready;

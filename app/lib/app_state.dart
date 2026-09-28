@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/ble_protocol.dart';
 import 'core/bluetooth.dart';
 import 'core/client.dart';
+import 'core/crypto.dart';
 import 'core/discovery.dart';
 import 'core/models.dart';
 import 'core/server.dart';
@@ -87,6 +90,13 @@ class AppState extends ChangeNotifier {
   late final MediaController media = MediaController.forCurrentPlatform(input);
   late final FileService files;
   late final SidekickServer server;
+
+  /// This device's certificate: its identity for encrypted connections.
+  late final Identity identity;
+  bool _droppedOldPairings = false;
+
+  /// What each device we're pairing with showed us in the pairing request.
+  final Map<String, PairingTarget> _pairTargets = {};
   late final Discovery discovery;
 
   /// Bluetooth, for when devices don't share a Wi-Fi network. Null on
@@ -140,12 +150,26 @@ class AppState extends ChangeNotifier {
     );
     _receiveDir = _prefs.getString('receiveDir');
     selectedId = _prefs.getString('selectedId');
+    // Pairings from before encryption (no certificate or key) can't be
+    // trusted any more; the user pairs those devices again.
     for (final json in _prefs.getStringList('trusted') ?? const <String>[]) {
-      trust.add(TrustedPeer.fromJson(jsonDecode(json) as Map<String, dynamic>));
+      try {
+        trust.add(TrustedPeer.fromJson(jsonDecode(json) as Map<String, dynamic>));
+      } on TypeError {
+        _droppedOldPairings = true;
+      }
     }
     for (final json in _prefs.getStringList('paired') ?? const <String>[]) {
-      final d = PairedDevice.fromJson(jsonDecode(json) as Map<String, dynamic>);
-      _paired[d.id] = d;
+      try {
+        final d = PairedDevice.fromJson(jsonDecode(json) as Map<String, dynamic>);
+        _paired[d.id] = d;
+      } on TypeError {
+        _droppedOldPairings = true;
+      }
+    }
+    if (_droppedOldPairings) {
+      _prefs.setStringList('trusted', [for (final t in trust.peers) jsonEncode(t)]);
+      _savePaired();
     }
     trust.onChanged = () => _prefs.setStringList('trusted', [for (final t in trust.peers) jsonEncode(t)]);
   }
@@ -188,7 +212,9 @@ class AppState extends ChangeNotifier {
     }
     // iOS apps can only share their own Documents folder.
     files = Platform.isIOS ? FileService(home: (await getApplicationDocumentsDirectory()).path) : FileService();
+    identity = await _loadIdentity();
     server = SidekickServer(
+      identity: identity,
       self: () => me,
       trust: trust,
       files: files,
@@ -243,10 +269,29 @@ class AppState extends ChangeNotifier {
       });
     }
 
+    if (_droppedOldPairings) {
+      _notices.add(Notice('Sidekick now encrypts everything. Pair your devices again to keep using them.'));
+    }
+
     addresses = await localAddresses();
     _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) => _checkPresence());
     unawaited(_checkPresence());
     notifyListeners();
+  }
+
+  Future<Identity> _loadIdentity() async {
+    final saved = _prefs.getString('identity');
+    if (saved != null) {
+      try {
+        return Identity.fromJson(jsonDecode(saved) as Map<String, dynamic>);
+      } catch (_) {
+        // Corrupt: make a new one (paired devices will ask to pair again).
+      }
+    }
+    // Key generation takes a moment; keep the UI responsive.
+    final fresh = await Isolate.run(Identity.generate);
+    await _prefs.setString('identity', jsonEncode(fresh.toJson()));
+    return fresh;
   }
 
   @override
@@ -406,7 +451,11 @@ class AppState extends ChangeNotifier {
     if (reachableViaWifi(d.id) || sighting == null || bt == null || !reachableViaBluetooth(d.id)) {
       return PeerClient.forDevice(d);
     }
-    return _bleClients[d.id] ??= PeerClient.bluetooth(bt.clientFor(sighting.peripheral), token: d.token);
+    return _bleClients[d.id] ??= PeerClient.bluetooth(
+      bt.clientFor(sighting.peripheral),
+      token: d.token,
+      seal: BleSeal(senderId: id, key: base64.decode(d.key)),
+    );
   }
 
   PeerClient _clientForTarget(DeviceInfo target) {
@@ -593,16 +642,27 @@ class AppState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- pairing
 
-  Future<void> requestPairing(DeviceInfo target) => _clientForTarget(target).requestPairing(me);
+  Future<void> requestPairing(DeviceInfo target) async {
+    if (target.version < protocolVersion) {
+      throw SidekickException('Update Sidekick on ${target.name} to pair with it (it needs version 0.3 or newer).');
+    }
+    _pairTargets[target.id] = await _clientForTarget(target).requestPairing(me, myFingerprint: identity.fingerprint);
+  }
 
   Future<PairedDevice> confirmPairing(DeviceInfo target, String pin) async {
-    final result = await _clientForTarget(target).confirmPairing(id, pin);
+    final pairing = _pairTargets[target.id];
+    if (pairing == null) throw SidekickException('Start pairing again.');
+    final result = await _clientForTarget(target)
+        .confirmPairing(myId: id, myFingerprint: identity.fingerprint, target: pairing, pin: pin);
+    _pairTargets.remove(target.id);
     trust.add(
       TrustedPeer(
         id: result.device.id,
         name: result.device.name,
         platform: result.device.platform,
         token: result.tokenForThem,
+        fingerprint: result.device.fingerprint,
+        key: result.key,
       ),
     );
     _addPaired(result.device);

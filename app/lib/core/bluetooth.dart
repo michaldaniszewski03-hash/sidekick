@@ -32,7 +32,7 @@ class BluetoothService {
 
   final _peripheralManager = PeripheralManager();
   final _centralManager = CentralManager();
-  late final _dispatcher = BleRequestDispatcher(server.handleBle);
+  late final _dispatcher = BleRequestDispatcher(server.handleBle, keyFor: server.bleKeyFor);
 
   final _found = StreamController<BleSighting>.broadcast();
   final _status = StreamController<BluetoothStatus>.broadcast();

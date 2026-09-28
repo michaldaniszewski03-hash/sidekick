@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'crypto.dart';
 import 'models.dart';
 
 final _random = Random.secure();
@@ -58,9 +59,19 @@ class TrustStore {
 /// An incoming request to pair, waiting for the user on the other device to
 /// type the [pin] we display.
 class PairingRequest {
-  PairingRequest(this.device) : pin = _newPin(), expires = DateTime.now().add(const Duration(minutes: 2));
+  PairingRequest(this.device, {required this.fingerprint})
+    : pin = _newPin(),
+      expires = DateTime.now().add(const Duration(minutes: 2));
 
   final DeviceInfo device;
+
+  /// The certificate fingerprint the requester says it has. SPAKE2 proves
+  /// it: a man in the middle can't make both sides agree on it.
+  final String fingerprint;
+
+  /// Keys from the latest SPAKE2 round, waiting for the requester's proof.
+  PairingKeys? keys;
+  String? context;
   final String pin;
   final DateTime expires;
   int attempts = 0;

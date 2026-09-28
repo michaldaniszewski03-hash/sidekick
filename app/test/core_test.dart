@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sidekick/core/client.dart';
+import 'package:sidekick/core/crypto.dart';
 import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
@@ -63,6 +64,7 @@ class Node {
     : id = newDeviceId(),
       home = Directory(p.join(root.path, name))..createSync(recursive: true) {
     server = SidekickServer(
+      identity: identity,
       self: () => DeviceInfo(id: id, name: name, platform: DevicePlatform.windows, port: server.port),
       trust: trust,
       files: FileService(home: home.path),
@@ -76,6 +78,7 @@ class Node {
   final String id;
   final String name;
   final Directory home;
+  final identity = Identity.generate();
   final trust = TrustStore();
   final input = FakeInput();
   final media = FakeMedia();
@@ -84,6 +87,22 @@ class Node {
 
   DeviceInfo get info => DeviceInfo(id: id, name: name, platform: DevicePlatform.windows, port: server.port);
   PeerClient anonymous() => PeerClient(host: '127.0.0.1', port: server.port);
+
+  /// Asks [other] to show a PIN, as this device.
+  Future<PairingTarget> requestFrom(Node other, {String? claim}) =>
+      other.anonymous().requestPairing(info, myFingerprint: claim ?? identity.fingerprint);
+
+  Future<({PairedDevice device, String tokenForThem, String key})> confirmWith(
+    Node other,
+    PairingTarget target,
+    String pin, {
+    String? claim,
+  }) => other.anonymous().confirmPairing(
+    myId: id,
+    myFingerprint: claim ?? identity.fingerprint,
+    target: target,
+    pin: pin,
+  );
 }
 
 void main() {
@@ -108,13 +127,22 @@ void main() {
   /// the phone can use to control the PC.
   Future<PeerClient> pair() async {
     final requested = pc.server.events.only<PairRequested>().first;
-    await pc.anonymous().requestPairing(phone.info);
+    final target = await phone.requestFrom(pc);
+    expect(target.fingerprint, pc.identity.fingerprint);
     final pin = (await requested).request.pin;
-    final result = await pc.anonymous().confirmPairing(phone.id, pin);
+    final result = await phone.confirmWith(pc, target, pin);
     phone.trust.add(
-      TrustedPeer(id: pc.id, name: pc.name, platform: DevicePlatform.windows, token: result.tokenForThem),
+      TrustedPeer(
+        id: pc.id,
+        name: pc.name,
+        platform: DevicePlatform.windows,
+        token: result.tokenForThem,
+        fingerprint: pc.identity.fingerprint,
+        key: result.key,
+      ),
     );
-    return PeerClient(host: '127.0.0.1', port: pc.server.port, token: result.device.token);
+    expect(result.device.fingerprint, pc.identity.fingerprint);
+    return PeerClient.forDevice(result.device);
   }
 
   test('info works without pairing', () async {
@@ -138,22 +166,64 @@ void main() {
     // …and the PC got a token that works on the phone.
     final back = (await paired).device;
     expect(back.id, phone.id);
-    final reverse = PeerClient(host: '127.0.0.1', port: phone.server.port, token: back.token);
+    expect(back.fingerprint, phone.identity.fingerprint);
+    expect(back.key, phone.trust.byId(pc.id)!.key, reason: 'both sides derived the same key');
+    final reverse = PeerClient(
+      host: '127.0.0.1',
+      port: phone.server.port,
+      token: back.token,
+      fingerprint: back.fingerprint,
+    );
     expect((await reverse.info()).id, phone.id);
     expect((await reverse.roots()), isNotEmpty);
   });
 
+  test('a pinned client refuses a server with another certificate', () async {
+    final client = await pair();
+    // Something else answering at the PC's address, e.g. an impostor.
+    final impostor = PeerClient(
+      host: '127.0.0.1',
+      port: phone.server.port,
+      token: client.token,
+      fingerprint: client.fingerprint,
+    );
+    await expectLater(impostor.info(), throwsA(isA<SidekickException>()));
+    expect((await client.info()).id, pc.id);
+  });
+
+  test('pairing fails when either certificate was swapped (man in the middle)', () async {
+    var requested = pc.server.events.only<PairRequested>().first;
+    // The PC was told a different certificate for the phone than the phone has.
+    var target = await phone.requestFrom(pc, claim: 'a' * 64);
+    var pin = (await requested).request.pin;
+    await expectLater(
+      phone.confirmWith(pc, target, pin),
+      throwsA(isA<SidekickException>().having((e) => e.status, 'status', 403)),
+    );
+
+    pc.server.cancelPairing(phone.id);
+    requested = pc.server.events.only<PairRequested>().first;
+    // The phone saw a different certificate for the PC than the PC has.
+    target = await phone.requestFrom(pc);
+    pin = (await requested).request.pin;
+    await expectLater(
+      phone.confirmWith(pc, (device: target.device, fingerprint: 'b' * 64), pin),
+      throwsA(isA<SidekickException>()),
+    );
+    expect(pc.trust.peers, isEmpty);
+  });
+
   test('wrong PIN is rejected and the request locks after 5 tries', () async {
     final requested = pc.server.events.only<PairRequested>().first;
-    await pc.anonymous().requestPairing(phone.info);
+    final target = await phone.requestFrom(pc);
     final pin = (await requested).request.pin;
     final wrong = pin == '000000' ? '111111' : '000000';
     for (var i = 0; i < 5; i++) {
-      await expectLater(pc.anonymous().confirmPairing(phone.id, wrong), throwsA(isA<SidekickException>()));
+      await expectLater(phone.confirmWith(pc, target, wrong), throwsA(isA<SidekickException>()));
     }
     // Even the right PIN fails now.
     await expectLater(
-      pc.anonymous().confirmPairing(phone.id, pin),
+      phone.confirmWith(pc, target, pin),
       throwsA(isA<SidekickException>().having((e) => e.status, 'status', 410)),
     );
     expect(pc.trust.peers, isEmpty);
@@ -162,8 +232,8 @@ void main() {
   test('repeated pairing requests reuse the open code', () async {
     var shown = 0;
     final sub = pc.server.events.only<PairRequested>().listen((_) => shown++);
-    await pc.anonymous().requestPairing(phone.info);
-    await pc.anonymous().requestPairing(phone.info);
+    await phone.requestFrom(pc);
+    await phone.requestFrom(pc);
     await Future<void>.delayed(Duration.zero);
     expect(shown, 1);
     await sub.cancel();
@@ -171,10 +241,10 @@ void main() {
 
   test('cancelled pairing cannot be confirmed', () async {
     final requested = pc.server.events.only<PairRequested>().first;
-    await pc.anonymous().requestPairing(phone.info);
+    final target = await phone.requestFrom(pc);
     final pin = (await requested).request.pin;
     pc.server.cancelPairing(phone.id);
-    await expectLater(pc.anonymous().confirmPairing(phone.id, pin), throwsA(isA<SidekickException>()));
+    await expectLater(phone.confirmWith(pc, target, pin), throwsA(isA<SidekickException>()));
   });
 
   test('browse, download and upload files', () async {
