@@ -58,7 +58,11 @@ class BluetoothService {
   final DeviceInfo Function() self;
   final SidekickServer server;
   final BleBackend _ble;
-  late final _dispatcher = BleRequestDispatcher(server.handleBle, keyFor: server.bleKeyFor);
+  late final _dispatcher = BleRequestDispatcher(
+    server.handleBle,
+    keyFor: server.bleKeyFor,
+    onReceiving: server.bleReceiving,
+  );
 
   final _found = StreamController<BleSighting>.broadcast();
   final _status = StreamController<BluetoothStatus>.broadcast();

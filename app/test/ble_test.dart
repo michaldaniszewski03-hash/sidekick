@@ -20,7 +20,7 @@ import 'package:sidekick/platform/media.dart';
 /// in-memory "radio" with tiny packets, like the smallest Bluetooth MTU.
 PeerClient bluetoothClient(SidekickServer server, {String? token, BleSeal? seal, int mtu = 23}) {
   final toClient = StreamController<Uint8List>();
-  final dispatcher = BleRequestDispatcher(server.handleBle, keyFor: server.bleKeyFor);
+  final dispatcher = BleRequestDispatcher(server.handleBle, keyFor: server.bleKeyFor, onReceiving: server.bleReceiving);
   final rpc = BleRpcClient(
     chunkSize: () async => mtu - 3,
     incoming: toClient.stream,
@@ -209,10 +209,15 @@ void main() {
       // Asking first works over Bluetooth too.
       final offered = pc.events.where((e) => e is TransferOffered).cast<TransferOffered>().first;
       final reply = client.offerFiles('ble-offer', [('photo.jpg', 20000)]);
-      (await offered).offer.accept();
+      final offer = (await offered).offer..accept();
+      final seen = offer.progress.toList();
       var sent = 0;
       final saved = await client.upload(local, ticket: (await reply).ticket, onProgress: (d, _) => sent = d);
       expect(sent, 20000);
+      // The receiver's progress moves as packets arrive, not only at the end.
+      final steps = await seen;
+      expect(steps.where((b) => b > 0 && b < 20000).length, greaterThan(10));
+      expect(steps.last, 20000);
       expect(client.lastSecurity?.bluetooth, isTrue, reason: 'the reply decrypted with the pairing key');
       expect((await received).security.bluetooth, isTrue);
       expect(anon.lastSecurity, isNull, reason: 'pairing requests are not sealed');

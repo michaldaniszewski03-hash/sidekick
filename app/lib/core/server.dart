@@ -103,13 +103,21 @@ class TransferOffer {
     if (!_answer.isCompleted) _answer.complete(answer);
   }
 
+  /// Sizes of the files already in.
+  int _doneBytes = 0;
+
   void _addReceived(int bytes) {
-    received += bytes;
+    // Bluetooth counts raw bytes (a little more than the file: headers,
+    // encryption), so never past what was announced.
+    received = (received + bytes).clamp(0, totalBytes);
     if (!_progress.isClosed) _progress.add(received);
   }
 
-  void _fileDone() {
+  void _fileDone(int size) {
     filesReceived++;
+    _doneBytes += size;
+    received = _doneBytes.clamp(0, totalBytes);
+    if (!_progress.isClosed) _progress.add(received);
     if (complete) _progress.close();
   }
 }
@@ -216,6 +224,18 @@ class SidekickServer {
 
   /// The request handler, shared by the Wi-Fi (HTTP) server and Bluetooth.
   late final Handler handler = _handler();
+
+  /// Bytes arriving over Bluetooth from a paired device: counted toward the
+  /// files it's sending, so the receiving screen moves as they come in.
+  void bleReceiving(String peerId, int bytes) {
+    final now = DateTime.now();
+    for (final t in _tickets.values) {
+      if (t.peerId == peerId && now.isBefore(t.expires) && !t.offer.complete) {
+        t.offer._addReceived(bytes);
+        return;
+      }
+    }
+  }
 
   /// The pairing key a peer seals its Bluetooth requests with.
   Uint8List? bleKeyFor(String peerId) {
@@ -616,7 +636,8 @@ class SidekickServer {
       await sink.addStream(
         r.read().map((chunk) {
           size += chunk.length;
-          ticket?.offer._addReceived(chunk.length);
+          // Over Bluetooth, [bleReceiving] already counted it on arrival.
+          if (!_overBluetooth(r)) ticket?.offer._addReceived(chunk.length);
           return chunk;
         }),
       );
@@ -629,12 +650,12 @@ class SidekickServer {
       final security = _overBluetooth(r)
           ? const TransferSecurity.bluetooth()
           : TransferSecurity.wifi(certificate: _peer(r).fingerprint);
-      ticket?.offer._fileDone();
+      ticket?.offer._fileDone(size);
       _events.add(FileReceived(_peer(r), saved, size, security));
       return _json({'path': saved.path, 'size': size});
     } catch (_) {
       // Counts as finished, so the receiving screen doesn't wait for it.
-      ticket?.offer._fileDone();
+      ticket?.offer._fileDone(0);
       await sink.close().catchError((_) {});
       if (await partial.exists()) await partial.delete();
       rethrow;

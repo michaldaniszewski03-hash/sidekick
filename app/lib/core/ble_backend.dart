@@ -302,7 +302,7 @@ class PluginBleBackend implements BleBackend {
   Stream<String> get messages => _messages.stream;
 
   late Uint8List Function() _info;
-  final _subscriptions = <StreamSubscription<Object>>[];
+  final _subscriptions = <StreamSubscription<Object?>>[];
   final Map<String, Peripheral> _peripherals = {};
   final Map<String, Central> _centrals = {};
   final Map<String, _Gatt> _gatt = {};
@@ -340,44 +340,45 @@ class PluginBleBackend implements BleBackend {
         _messages.add('Asking for Bluetooth permission failed: $e');
       }
     }
-    _subscriptions
-      ..add(_peripheralManager.stateChanged.listen((_) => refresh()))
-      ..add(_centralManager.stateChanged.listen((_) => refresh()))
-      ..add(_peripheralManager.characteristicReadRequested.listen(_onRead))
-      ..add(_peripheralManager.characteristicWriteRequested.listen(_onWrite))
-      ..add(
-        _peripheralManager.connectionStateChanged.listen((e) {
-          if (e.state == ConnectionState.disconnected) _centralGone.add('${e.central.uuid}');
-        }),
-      )
-      ..add(
-        _centralManager.discovered.listen((e) {
-          final id = '${e.peripheral.uuid}';
-          _peripherals[id] = e.peripheral;
-          final a = e.advertisement;
-          _discovered.add(
-            BleDiscovery(
-              id: id,
-              rssi: e.rssi,
-              sidekick: a.serviceUUIDs.contains(bleServiceUuid) || a.name == bleAdvertisedName,
-              name: a.name,
-            ),
-          );
-        }),
-      )
-      ..add(
-        _centralManager.characteristicNotified.listen((e) {
-          if (e.characteristic.uuid == bleTxUuid) _notified.add(('${e.peripheral.uuid}', e.value));
-        }),
-      )
-      ..add(
-        _centralManager.connectionStateChanged.listen((e) {
-          if (e.state != ConnectionState.disconnected) return;
-          final id = '${e.peripheral.uuid}';
-          _gatt.remove(id);
-          if (_open.remove(id)) _disconnected.add(id);
-        }),
+    // One at a time: each platform leaves some events out (Windows throws
+    // for connectionStateChanged), and one missing must not stop the rest.
+    void listen<T>(Stream<T> Function() stream, void Function(T) onEvent) {
+      try {
+        _subscriptions.add(stream().listen(onEvent));
+      } on UnsupportedError {
+        // Not on this platform.
+      }
+    }
+
+    listen(() => _peripheralManager.stateChanged, (_) => refresh());
+    listen(() => _centralManager.stateChanged, (_) => refresh());
+    listen(() => _peripheralManager.characteristicReadRequested, _onRead);
+    listen(() => _peripheralManager.characteristicWriteRequested, _onWrite);
+    listen(() => _peripheralManager.connectionStateChanged, (e) {
+      if (e.state == ConnectionState.disconnected) _centralGone.add('${e.central.uuid}');
+    });
+    listen(() => _centralManager.discovered, (e) {
+      final id = '${e.peripheral.uuid}';
+      _peripherals[id] = e.peripheral;
+      final a = e.advertisement;
+      _discovered.add(
+        BleDiscovery(
+          id: id,
+          rssi: e.rssi,
+          sidekick: a.serviceUUIDs.contains(bleServiceUuid) || a.name == bleAdvertisedName,
+          name: a.name,
+        ),
       );
+    });
+    listen(() => _centralManager.characteristicNotified, (e) {
+      if (e.characteristic.uuid == bleTxUuid) _notified.add(('${e.peripheral.uuid}', e.value));
+    });
+    listen(() => _centralManager.connectionStateChanged, (e) {
+      if (e.state != ConnectionState.disconnected) return;
+      final id = '${e.peripheral.uuid}';
+      _gatt.remove(id);
+      if (_open.remove(id)) _disconnected.add(id);
+    });
     await refresh();
   }
 
@@ -408,6 +409,10 @@ class PluginBleBackend implements BleBackend {
         characteristics: [_infoCharacteristic, _rx, _tx],
       ),
     );
+    // On Windows adding the service already advertises it (discoverable
+    // and connectable); its general advertiser refuses service ids ("The
+    // parameter is incorrect").
+    if (Platform.isWindows) return;
     // Just the service id: advertisements are tiny (31 bytes), and a name
     // here would rename an Android phone's Bluetooth. Names come from info.
     await _peripheralManager.startAdvertising(Advertisement(serviceUUIDs: [bleServiceUuid]));
@@ -589,10 +594,16 @@ class PluginBleBackend implements BleBackend {
         await close(id);
       } catch (_) {}
     }
-    try {
-      await _peripheralManager.stopAdvertising();
-      await _centralManager.stopDiscovery();
-    } catch (_) {}
+    // Windows advertises the service itself until it's removed.
+    for (final step in [
+      _peripheralManager.stopAdvertising,
+      _peripheralManager.removeAllServices,
+      _centralManager.stopDiscovery,
+    ]) {
+      try {
+        await step();
+      } catch (_) {}
+    }
   }
 }
 

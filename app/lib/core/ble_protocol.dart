@@ -248,9 +248,18 @@ class BleRpcClient {
 /// requests for [handler] (the same one the Wi-Fi server uses, so pairing,
 /// auth and permissions behave identically) and chunks the responses back.
 class BleRequestDispatcher {
-  BleRequestDispatcher(this.handler, {Uint8List? Function(String peerId)? keyFor}) : keyFor = keyFor ?? ((_) => null);
+  BleRequestDispatcher(this.handler, {Uint8List? Function(String peerId)? keyFor, this.onReceiving})
+    : keyFor = keyFor ?? ((_) => null);
 
   final Future<BleResponse> Function(BleMessage request) handler;
+
+  /// Bytes arriving from a paired device, as they come in (a big request
+  /// only reaches [handler] once it's all here). Known once a device has
+  /// sent one sealed request over this connection.
+  final void Function(String peerId, int bytes)? onReceiving;
+
+  /// Which paired device each connection belongs to.
+  final Map<String, String> _peerOf = {};
 
   /// The pairing key for a peer id, or null if we're not paired.
   final Uint8List? Function(String peerId) keyFor;
@@ -267,6 +276,8 @@ class BleRequestDispatcher {
     required Future<void> Function(Uint8List chunk) sendChunk,
     required int maxChunk,
   }) async {
+    final sender = _peerOf[peer];
+    if (sender != null && chunk.length > bleChunkHeader) onReceiving?.call(sender, chunk.length - bleChunkHeader);
     final BleMessage? request;
     try {
       request = _peers.putIfAbsent(peer, BleReassembler.new).add(chunk);
@@ -301,6 +312,7 @@ class BleRequestDispatcher {
         if (_seen.containsKey(nonce)) throw const _Refused(401, 'Replayed message');
         _seen[nonce] = now;
         inner = BleMessage(id, {...message.header, 'sealedBy': sealedBy}, message.body);
+        _peerOf[peer] = sealedBy;
       } else {
         // Only the dispatcher may say who sealed a message.
         inner = BleMessage(id, {...request.header}..remove('sealedBy'), request.body);
@@ -320,7 +332,10 @@ class BleRequestDispatcher {
     }
   }
 
-  void forget(String peer) => _peers.remove(peer);
+  void forget(String peer) {
+    _peers.remove(peer);
+    _peerOf.remove(peer);
+  }
 }
 
 class _Pending {
