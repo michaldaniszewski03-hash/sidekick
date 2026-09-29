@@ -185,13 +185,33 @@ jobs:
           app="$(ls -d build/macos/Build/Products/Release/*.app | head -1)"
           mkdir -p build/dmg build/dist
           cp -R "$app" build/dmg/Sidekick.app
-          ln -s /Applications build/dmg/Applications
           dmg="build/dist/Sidekick-${{ steps.version.outputs.version }}.dmg"
-          # hdiutil is occasionally "busy" on CI machines; retry a few times.
+          # The drag-to-install window: background (sharp on Retina), Sidekick
+          # under the arrow's tail, Applications under its head.
+          tiffutil -cathidpicheck macos/packaging/dmg-background.png macos/packaging/dmg-background@2x.png \
+            -out build/dmg-background.tiff
+          brew install create-dmg || true
+          styled=0
           for i in 1 2 3; do
-            hdiutil create -volname Sidekick -srcfolder build/dmg -ov -format UDZO "$dmg" && break
+            rm -f "$dmg"
+            if create-dmg --volname Sidekick --background build/dmg-background.tiff \
+                --window-pos 200 120 --window-size 640 453 --icon-size 112 \
+                --icon Sidekick.app 417 293 --hide-extension Sidekick.app \
+                --app-drop-link 233 293 "$dmg" build/dmg; then
+              styled=1
+              break
+            fi
             sleep 5
           done
+          if [ "$styled" = 0 ]; then
+            echo "::warning::Styling the .dmg failed; making a plain one"
+            ln -s /Applications build/dmg/Applications
+            # hdiutil is occasionally "busy" on CI machines; retry a few times.
+            for i in 1 2 3; do
+              hdiutil create -volname Sidekick -srcfolder build/dmg -ov -format UDZO "$dmg" && break
+              sleep 5
+            done
+          fi
           test -f "$dmg"
 
       - uses: actions/upload-artifact@v4
