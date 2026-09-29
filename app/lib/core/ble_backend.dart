@@ -169,6 +169,10 @@ class AppleBleBackend implements BleBackend {
       _onEvent,
       onError: (Object e) => _messages.add('Bluetooth events failed: $e'),
     );
+    // Before anything starts, so the first device to read it gets a name.
+    final first = info();
+    await _methods.invokeMethod<void>('setInfo', {'data': first});
+    _sentInfo = first;
     await _methods.invokeMethod<void>('start');
     await refresh();
   }
