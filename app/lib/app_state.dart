@@ -106,6 +106,9 @@ class AppState extends ChangeNotifier {
   /// True-black backgrounds in dark mode (saves battery on OLED screens).
   bool pureBlack = false;
 
+  /// The first-launch welcome has been shown (it never shows again).
+  bool welcomed = false;
+
   /// iPhone: keep running while other apps are open, so computers can still
   /// reach it (volume, Apple Music, files).
   bool keepRunning = true;
@@ -197,6 +200,7 @@ class AppState extends ChangeNotifier {
     if (themeColor != 'system' && !themeColors.containsKey(themeColor)) themeColor = 'system';
     pureBlack = _prefs.getBool('pureBlack') ?? false;
     keepRunning = _prefs.getBool('keepRunning') ?? true;
+    welcomed = _prefs.getBool('welcomed') ?? false;
     permissions = Permissions(
       files: _prefs.getBool('allowFiles') ?? true,
       media: _prefs.getBool('allowMedia') ?? true,
@@ -958,6 +962,12 @@ class AppState extends ChangeNotifier {
   void setThemeColor(String color) {
     themeColor = color;
     _prefs.setString('themeColor', color);
+    notifyListeners();
+  }
+
+  void finishWelcome() {
+    welcomed = true;
+    _prefs.setBool('welcomed', true);
     notifyListeners();
   }
 

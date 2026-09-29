@@ -4,8 +4,8 @@ import 'package:material_ui/material_ui.dart';
 import '../app_state.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
-import '../platform/android.dart';
-import '../platform/macos.dart';
+import 'permissions.dart';
+import 'theme_chooser.dart';
 import 'widgets.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -88,26 +88,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                   if (hostIsMacOS) ...[
                     const SectionLabel('Mac permissions'),
-                    _Group(
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.mouse_outlined),
-                          title: const Text('Accessibility'),
-                          subtitle: const Text(
-                            'So your other devices can move the mouse, click and type on this Mac. If Sidekick is '
-                            'already switched on in that list but this still asks for it (common after an update), '
-                            'select Sidekick, remove it with −, then add it again.',
-                          ),
-                          isThreeLine: true,
-                          trailing: MacBridge.accessibility
-                              ? const Icon(Icons.check_circle, color: Colors.green)
-                              : FilledButton.tonal(
-                                  onPressed: MacBridge.requestAccessibility,
-                                  child: const Text('Grant'),
-                                ),
-                        ),
-                      ],
-                    ),
+                    _Group(children: [const MacAccessibilityRow()]),
                   ],
                   if (state.bluetooth case final bt?) ...[
                     const SectionLabel('Bluetooth'),
@@ -279,86 +260,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                   const SectionLabel('Theme'),
-                  _Group(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                        child: SegmentedButton<ThemeMode>(
-                          segments: const [
-                            ButtonSegment(
-                              value: ThemeMode.system,
-                              icon: Icon(Icons.brightness_auto_outlined),
-                              label: Text('System'),
-                            ),
-                            ButtonSegment(
-                              value: ThemeMode.light,
-                              icon: Icon(Icons.light_mode_outlined),
-                              label: Text('Light'),
-                            ),
-                            ButtonSegment(
-                              value: ThemeMode.dark,
-                              icon: Icon(Icons.dark_mode_outlined),
-                              label: Text('Dark'),
-                            ),
-                          ],
-                          selected: {state.themeMode},
-                          onSelectionChanged: (s) => state.setThemeMode(s.first),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('Color', style: Theme.of(context).textTheme.titleSmall),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            if (!hostIsIOS)
-                              _ColorChoice(
-                                label: switch (hostOS) {
-                                  'android' => 'Wallpaper',
-                                  _ => 'System accent',
-                                },
-                                selected: state.themeColor == 'system',
-                                onTap: () => state.setThemeColor('system'),
-                              ),
-                            for (final MapEntry(:key, value: (label, color)) in themeColors.entries)
-                              _ColorChoice(
-                                label: label,
-                                color: color,
-                                mono: key == 'mono',
-                                // iOS has no system colors; its default is purple.
-                                selected:
-                                    state.themeColor == key ||
-                                    (hostIsIOS && state.themeColor == 'system' && key == 'purple'),
-                                onTap: () => state.setThemeColor(key),
-                              ),
-                          ],
-                        ),
-                      ),
-                      if (state.themeColor == 'system' && !hostIsIOS)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                          child: Text(switch (hostOS) {
-                            'android' => 'Follows your wallpaper colors (Android 12 and newer).',
-                            'macos' => "Follows your Mac's accent color (System Settings → Appearance).",
-                            _ => 'Follows your Windows accent color (Settings → Personalization → Colors).',
-                          }, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
-                        ),
-                      SwitchListTile(
-                        secondary: const Icon(Icons.contrast),
-                        title: const Text('Pure black in dark mode'),
-                        subtitle: const Text('Darker backgrounds; saves battery on OLED screens'),
-                        value: state.pureBlack,
-                        onChanged: state.setPureBlack,
-                      ),
-                    ],
-                  ),
+                  _Group(children: [ThemeChooser(state: state)]),
                   const SectionLabel('About'),
                   _Group(
                     children: [
@@ -410,56 +312,7 @@ extension on _SettingsPageState {
 
   /// One row per special permission, each with a button to the system screen
   /// that grants it. Status refreshes when the user comes back to the app.
-  List<Widget> _androidPermissions() {
-    final perms = AndroidBridge.permissions;
-    Widget row({
-      required IconData icon,
-      required String title,
-      required String why,
-      required bool granted,
-      required Future<void> Function() grant,
-    }) => ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Text(why),
-      isThreeLine: true,
-      trailing: granted
-          ? const Icon(Icons.check_circle, color: Colors.green)
-          : FilledButton.tonal(onPressed: grant, child: const Text('Grant')),
-    );
-    return [
-      row(
-        icon: Icons.folder_open_outlined,
-        title: 'All files access',
-        why: 'So your PC can browse this phone and received files go to Download/Sidekick.',
-        granted: perms.allFiles,
-        grant: AndroidBridge.requestAllFilesAccess,
-      ),
-      row(
-        icon: Icons.play_circle_outline,
-        title: 'Notification access',
-        why: "So your PC can see what's playing and seek. Sidekick doesn't read your notifications.",
-        granted: perms.notifications,
-        grant: AndroidBridge.openNotificationAccessSettings,
-      ),
-      row(
-        icon: Icons.touch_app_outlined,
-        title: 'Remote control (Accessibility)',
-        why:
-            'So your PC can tap, scroll and type here. In Accessibility, open "Installed apps" → Sidekick remote '
-            'control. If it\'s greyed out: App info → ⋮ → Allow restricted settings.',
-        granted: perms.accessibility,
-        grant: AndroidBridge.openAccessibilitySettings,
-      ),
-      if (!perms.accessibility)
-        ListTile(
-          leading: const SizedBox(),
-          title: const Text('Open App info'),
-          subtitle: const Text('For "Allow restricted settings" on Android 13 and newer'),
-          onTap: AndroidBridge.openAppSettings,
-        ),
-    ];
-  }
+  List<Widget> _androidPermissions() => androidPermissionRows();
 }
 
 class _Group extends StatelessWidget {
@@ -479,66 +332,4 @@ String _ago(DateTime t) {
   if (d.inSeconds < 60) return '${d.inSeconds} s ago';
   if (d.inMinutes < 60) return '${d.inMinutes} min ago';
   return '${d.inHours} h ago';
-}
-
-/// A round color swatch with its name, for Settings → Theme.
-class _ColorChoice extends StatelessWidget {
-  const _ColorChoice({required this.label, required this.selected, required this.onTap, this.color, this.mono = false});
-
-  final String label;
-
-  /// Null for "follow the system".
-  final Color? color;
-  final bool selected;
-  final VoidCallback onTap;
-  final bool mono;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final swatch = color == null
-        ? null
-        : ColorScheme.fromSeed(
-            seedColor: color!,
-            brightness: Theme.of(context).brightness,
-            dynamicSchemeVariant: mono ? DynamicSchemeVariant.monochrome : DynamicSchemeVariant.tonalSpot,
-          );
-    return Tooltip(
-      message: label,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: SizedBox(
-          width: 76,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: swatch == null
-                        ? SweepGradient(colors: [scheme.primary, scheme.tertiary, scheme.secondary, scheme.primary])
-                        : LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [swatch.primary, swatch.primary, swatch.primaryContainer, swatch.primaryContainer],
-                            stops: const [0, 0.62, 0.62, 1],
-                          ),
-                    border: Border.all(color: selected ? scheme.onSurface : Colors.transparent, width: 3),
-                  ),
-                  child: selected ? Icon(Icons.check, color: swatch?.onPrimary ?? scheme.onPrimary) : null,
-                ),
-                const SizedBox(height: 6),
-                Text(label, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(fontSize: 12)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

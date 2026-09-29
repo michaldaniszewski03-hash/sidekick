@@ -146,6 +146,15 @@ void main() {
       });
     }
 
+    // First launch: the welcome flow, once.
+    for (var i = 1; find.text('Continue').evaluate().isNotEmpty; i++) {
+      await shot('0-welcome-$i');
+      await tester.tap(find.text('Continue'));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    await shot('0-welcome-last');
+    await tester.tap(find.text('Start using Sidekick'));
+    expect(state.welcomed, isTrue);
     await shot('1-devices');
     await tester.tap(find.text('Files').last);
     await shot('2-files');
@@ -171,6 +180,15 @@ void main() {
       await tester.tap(find.text(tab).last);
       await shot('phone-$name');
     }
+
+    // The welcome flow on a phone.
+    state.welcomed = false;
+    state.setThemeMode(ThemeMode.light); // also rebuilds
+    await shot('phone-welcome-1');
+    await tester.tap(find.text('Continue'));
+    await shot('phone-welcome-2');
+    state.finishWelcome();
+    await settle();
 
     // iPhone Settings: iOS never allows remote control, so no such switch.
     debugHostPlatform = DevicePlatform.ios;

@@ -9,7 +9,7 @@ Sidekick combines LocalSend and KDE Connect in one app. It links your phone and 
 
 Platforms: **Android, iOS, Windows, macOS** (Linux comes almost free with the same stack).
 
-## Apps (v0.5): Windows, Android, macOS and iOS
+## Apps (v1.0): Windows, Android, macOS and iOS
 
 The Flutter app lives in `app/`. One codebase builds all four apps.
 
@@ -23,6 +23,10 @@ Download both from the [**Releases** page](https://github.com/michaldaniszewski0
 - **iPhone/iPad (iOS 15+):** the **`Sidekick-<version>.ipa`** is unsigned, because signing needs a paid Apple Developer account. Install it with [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io), which sign it with your own Apple ID. With a free Apple ID the app has to be re-signed every 7 days; those tools can do that automatically.
 
 Every push also builds both on GitHub Actions (**Build** workflow → run → **Artifacts**), for testing between releases.
+
+### First launch
+
+Sidekick opens with a short welcome: what it does, a name for this device, the permissions this platform needs (skipped on Windows), a theme, and how to pair your other device. It shows once; everything in it can be changed later in Settings.
 
 ### Set up the phone
 
@@ -40,6 +44,7 @@ Sidekick prefers Wi-Fi. When two devices can't reach each other over Wi-Fi (no r
 - Pairing, browsing files, small files and media controls work straight over Bluetooth.
 - **Direct Wi-Fi link (like AirDrop):** for files over 2 MB and for remote control, an Android phone and a Windows PC or Mac use Bluetooth only to hand over the name and password of a private hotspot. The phone opens it (no mobile data is shared), the computer joins it on its own, and the transfer runs at full Wi-Fi speed. After 3 quiet minutes the phone closes the hotspot and the computer goes back to its usual network. You can also start it yourself with **Use Wi-Fi** in the Bluetooth banner.
 - Without a direct link (e.g. iPhone ↔ PC, or phone ↔ phone), Bluetooth runs at tens of KB/s: fine for texts, photos and documents; files over 50 MB and remote control need Wi-Fi.
+- **No Wi-Fi anywhere** (a field, a train): open Sidekick on both devices with Bluetooth on and keep it on screen. Each searches every 10 seconds and shows the other under **Nearby** (or as "Connected via Bluetooth" if paired). **Settings → Bluetooth → Details** shows what it sees and why if something fails.
 - The phone asks for **Nearby devices** permission (Location on Android 12 and older) the first time it opens a hotspot. Some phones can't open one while connected to another Wi-Fi network.
 - Both devices need Bluetooth on and Sidekick open. Android asks for Bluetooth permission on first start; iPhone and Mac ask the first time Sidekick uses Bluetooth.
 - The device card says **Connected via Bluetooth** while it's in use, and switches back to Wi-Fi automatically when that becomes available.
@@ -126,7 +131,7 @@ In GitHub, go to **Settings → Secrets and variables → Actions** and add:
 
 When a paired device is controlling this device, a banner says so, with a button that unpairs it and stops the session right away.
 
-**Controlling an iPhone's audio from a computer:** iOS only lets apps change the system volume (and mute) and control **Apple Music**; it doesn't allow controlling other apps like YouTube or Spotify. Keep Sidekick open on the iPhone while you do, since iOS pauses apps in the background.
+**Controlling an iPhone's audio from a computer:** iOS only lets apps change the system volume (and mute) and control **Apple Music**; it doesn't allow controlling other apps like YouTube or Spotify. iOS also pauses apps you're not using, so Sidekick has **Settings → iPhone → Keep running in the background** (on by default): a silent audio session, mixed with whatever you play, keeps it reachable while you're in Music or another app.
 
 **Controlling the phone from the PC:** clicks become taps at the dot, the wheel becomes swipes, and Esc/Win map to Back/Home. Typing goes into whatever text field is focused on the phone.
 

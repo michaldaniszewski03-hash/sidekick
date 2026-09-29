@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
 import 'ui/shell.dart';
+import 'ui/welcome.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,7 +65,10 @@ class SidekickApp extends StatelessWidget {
           themeMode: state.themeMode,
           theme: _theme(_scheme(lightDynamic, Brightness.light)),
           darkTheme: _theme(_scheme(darkDynamic, Brightness.dark)),
-          home: Shell(state: state),
+          home: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: state.welcomed ? Shell(state: state) : WelcomeFlow(state: state),
+          ),
         ),
       ),
     );
