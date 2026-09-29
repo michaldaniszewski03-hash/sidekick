@@ -96,6 +96,19 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.1.0
+- **Startup animation** on every platform: the "sk" tile pops in, ripples
+  spread, the name rises, then it zooms away into the app. A tap skips it;
+  reduced motion turns it off.
+- **Startup chime on the Mac** (Settings → Startup sound, on by default).
+- **Simpler:** Devices has one "Add device" menu (Search Wi-Fi, Pair over
+  Bluetooth, Add by IP); Settings descriptions are one short line each.
+- **More icons:** tinted icon tiles on every Settings row, icons on section
+  labels, Wi-Fi/Bluetooth/offline icons in status pills, icons on snackbars.
+- **More motion:** cards, groups, empty states and file rows cascade in; tab
+  switches slide and fade; a new track slides in on Media; a radar while
+  looking for devices; device cards lift on hover.
+
 ### 2.0.2
 - **Send files works on the Mac again:** the Mac file picker refused to open
   without a sandbox file entitlement (Sidekick isn't sandboxed) and the
