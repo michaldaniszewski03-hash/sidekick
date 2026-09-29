@@ -16,6 +16,11 @@ abstract class InputInjector {
   bool get supported;
 
   void moveBy(int dx, int dy);
+
+  /// Puts the pointer at ([x], [y]) on the main screen, both 0–1 (from the
+  /// top-left). Used when clicking on a shared screen.
+  void moveTo(double x, double y);
+
   void button(MouseButton button, {required bool down});
   void click(MouseButton button, {int count = 1});
 
@@ -58,6 +63,7 @@ const List<String> keyNames = [
 ///
 /// Messages:
 ///   {"t":"move","dx":3,"dy":-2}
+///   {"t":"moveTo","x":0.5,"y":0.25}   (fractions of the main screen)
 ///   {"t":"click","b":"left","n":2}
 ///   {"t":"down","b":"left"} / {"t":"up","b":"left"}
 ///   {"t":"scroll","dx":0,"dy":-120}
@@ -78,6 +84,11 @@ void handleInputMessage(InputInjector input, Map<String, dynamic> msg) {
   switch (msg['t']) {
     case 'move':
       input.moveBy(intOf('dx'), intOf('dy'));
+    case 'moveTo':
+      final x = msg['x'], y = msg['y'];
+      if (x is num && y is num && x.isFinite && y.isFinite) {
+        input.moveTo(x.toDouble().clamp(0, 1), y.toDouble().clamp(0, 1));
+      }
     case 'click':
       input.click(buttonOf(), count: intOf('n', 1).clamp(1, 3));
     case 'down':
@@ -103,6 +114,8 @@ class UnsupportedInputInjector implements InputInjector {
   bool get supported => false;
   @override
   void moveBy(int dx, int dy) {}
+  @override
+  void moveTo(double x, double y) {}
   @override
   void button(MouseButton button, {required bool down}) {}
   @override
@@ -171,6 +184,7 @@ const _inputMouse = 0;
 const _inputKeyboard = 1;
 
 const _mouseMove = 0x0001;
+const _mouseAbsolute = 0x8000;
 const _mouseLeftDown = 0x0002;
 const _mouseLeftUp = 0x0004;
 const _mouseRightDown = 0x0008;
@@ -304,6 +318,11 @@ class WindowsInputInjector implements InputInjector {
 
   @override
   void moveBy(int dx, int dy) => _send([_mouse(_mouseMove, dx: dx, dy: dy)]);
+
+  /// Absolute coordinates run 0–65535 across the primary monitor.
+  @override
+  void moveTo(double x, double y) =>
+      _send([_mouse(_mouseMove | _mouseAbsolute, dx: (x * 65535).round(), dy: (y * 65535).round())]);
 
   @override
   void button(MouseButton button, {required bool down}) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:web_socket_channel/io.dart';
 
@@ -436,6 +437,87 @@ class PeerClient {
     }
     return InputSession._(channel);
   }
+
+  /// Starts viewing their main screen, scaled to at most [maxWidth] pixels
+  /// wide, as JPEG at [quality] (0–100).
+  Future<ScreenSession> openScreen({int maxWidth = 1600, int quality = 60}) async {
+    if (ble != null) {
+      throw SidekickException('Seeing the screen needs both devices on the same Wi-Fi. Bluetooth is too slow for it.');
+    }
+    final channel = IOWebSocketChannel.connect(
+      Uri(
+        scheme: 'wss',
+        host: host,
+        port: port,
+        path: '/v1/screen',
+        queryParameters: {'maxWidth': '$maxWidth', 'quality': '$quality'},
+      ),
+      headers: {if (token != null) 'authorization': 'Bearer $token'},
+      pingInterval: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 4),
+      customClient: _http,
+    );
+    try {
+      await channel.ready;
+    } catch (_) {
+      throw SidekickException("Couldn't open the screen. Is screen sharing turned on in the other device's settings?");
+    }
+    return ScreenSession._(channel);
+  }
+}
+
+/// A live view of another device's screen. Frames are JPEG images; the
+/// server sends the next one only after we [ack] the last, so a slow link
+/// shows fewer frames instead of falling behind.
+class ScreenSession {
+  ScreenSession._(this._channel) {
+    _channel.stream.listen(
+      (data) {
+        if (data is List<int>) {
+          _frames.add(data is Uint8List ? data : Uint8List.fromList(data));
+        } else if (data is String) {
+          try {
+            final msg = jsonDecode(data);
+            if (msg is Map && msg['t'] == 'error') error = '${msg['message']}';
+            if (msg is Map && msg['t'] == 'status') status = '${msg['message']}';
+            _notes.add(null);
+          } on FormatException {
+            // Ignore.
+          }
+        }
+      },
+      onDone: () {
+        _frames.close();
+        _notes.close();
+        if (!_closed.isCompleted) _closed.complete();
+      },
+      onError: (_) {},
+    );
+  }
+
+  final IOWebSocketChannel _channel;
+  final _frames = StreamController<Uint8List>();
+  final _notes = StreamController<void>.broadcast();
+  final _closed = Completer<void>();
+
+  /// JPEG frames of their main screen.
+  Stream<Uint8List> get frames => _frames.stream;
+
+  /// Fires when [status] or [error] change.
+  Stream<void> get notes => _notes.stream;
+
+  /// Why sharing stopped or couldn't start (e.g. permission missing).
+  String? error;
+
+  /// What the other side is doing, e.g. "Waiting for approval on the phone".
+  String? status;
+
+  Future<void> get closed => _closed.future;
+
+  /// Ready for the next frame.
+  void ack() => _channel.sink.add('{"t":"ack"}');
+
+  Future<void> close() => _channel.sink.close();
 }
 
 /// A live remote-control connection. Small mouse moves are coalesced so a
@@ -448,6 +530,7 @@ class InputSession {
   final IOWebSocketChannel _channel;
   final _closed = Completer<void>();
   double _dx = 0, _dy = 0;
+  (double, double)? _to;
   Timer? _flush;
 
   Future<void> get closed => _closed.future;
@@ -467,10 +550,22 @@ class InputSession {
   void _flushMove() {
     _flush?.cancel();
     _flush = null;
+    final to = _to;
+    _to = null;
+    if (to != null) _raw({'t': 'moveTo', 'x': to.$1, 'y': to.$2});
     final x = _dx.truncate(), y = _dy.truncate();
     _dx -= x;
     _dy -= y;
     if (x != 0 || y != 0) _raw({'t': 'move', 'dx': x, 'dy': y});
+  }
+
+  /// Puts the pointer at ([x], [y]), fractions (0–1) of their main screen.
+  /// Rapid calls are coalesced; only the latest position is sent.
+  void moveTo(double x, double y) {
+    _dx = 0;
+    _dy = 0;
+    _to = (x.clamp(0, 1), y.clamp(0, 1));
+    _flush ??= Timer(const Duration(milliseconds: 12), _flushMove);
   }
 
   void move(double dx, double dy) {

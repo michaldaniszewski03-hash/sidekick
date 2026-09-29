@@ -65,6 +65,25 @@ class BluetoothService {
   bool _advertising = false;
   bool _scanning = false;
 
+  /// Whether other devices can find this one right now.
+  bool get advertising => _advertising;
+  bool get scanning => _scanning;
+  DateTime? lastScan;
+
+  /// Recent events and errors, newest last, for Settings → Bluetooth.
+  final List<String> log = [];
+
+  /// Called when [log], [advertising] or [scanning] change.
+  void Function()? onChanged;
+
+  void _log(String message) {
+    final t = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    log.add('${two(t.hour)}:${two(t.minute)}:${two(t.second)}  $message');
+    if (log.length > 60) log.removeRange(0, log.length - 60);
+    onChanged?.call();
+  }
+
   /// Peripherals we've identified, by Bluetooth UUID.
   final Map<String, DeviceInfo> _identified = {};
   final Set<String> _identifying = {};
@@ -74,10 +93,13 @@ class BluetoothService {
   Future<void> start() async {
     for (final authorize in [_peripheralManager.authorize, _centralManager.authorize]) {
       try {
-        await authorize();
+        final ok = await authorize();
+        if (!ok) _log('Bluetooth permission was not granted');
       } on UnsupportedError {
         // Only Android asks at runtime; Apple platforms prompt on first use.
-      } catch (_) {}
+      } catch (e) {
+        _log('Asking for Bluetooth permission failed: $e');
+      }
     }
     _subscriptions
       ..add(_peripheralManager.stateChanged.listen((e) => _onState(e.state)))
@@ -107,6 +129,7 @@ class BluetoothService {
       BluetoothLowEnergyState.unknown => BluetoothStatus.starting,
     };
     _status.add(status);
+    _log('Bluetooth is ${status.name}');
     if (status == BluetoothStatus.on) {
       await _startAdvertising();
     } else {
@@ -125,8 +148,10 @@ class BluetoothService {
       // iPhones/Macs can't advertise anything else. Names come from `info`.
       await _peripheralManager.startAdvertising(Advertisement(serviceUUIDs: [bleServiceUuid]));
       _advertising = true;
-    } catch (_) {
+      _log('Advertising: other devices can find this one');
+    } catch (e) {
       // Some adapters can't act as a peripheral; we can still scan.
+      _log("Can't advertise, so other devices won't find this one (it can still find them): $e");
     }
   }
 
@@ -209,23 +234,35 @@ class BluetoothService {
 
   /// Scans for Sidekick devices for [duration].
   Future<void> scan({Duration duration = const Duration(seconds: 8)}) async {
-    if (status != BluetoothStatus.on || _scanning) return;
+    if (status != BluetoothStatus.on) {
+      _log("Can't scan: Bluetooth is ${status.name}");
+      return;
+    }
+    if (_scanning) return;
     _scanning = true;
+    _seenThisScan = 0;
+    onChanged?.call();
     try {
       await _centralManager.startDiscovery(serviceUUIDs: [bleServiceUuid]);
       await Future<void>.delayed(duration);
-    } catch (_) {
-      // Scanning not allowed right now; try again next round.
+      _log('Scan finished: $_seenThisScan Sidekick device(s) in range');
+    } catch (e) {
+      _log('Scan failed: $e');
     } finally {
       try {
         await _centralManager.stopDiscovery();
       } catch (_) {}
       _scanning = false;
+      lastScan = DateTime.now();
+      onChanged?.call();
     }
   }
 
+  int _seenThisScan = 0;
+
   void _onDiscovered(DiscoveredEventArgs e) {
     final key = '${e.peripheral.uuid}';
+    _seenThisScan++;
     final known = _identified[key];
     if (known != null) {
       if (known.id != self().id) _found.add(BleSighting(known, e.peripheral));
@@ -241,9 +278,13 @@ class BluetoothService {
       final link = await _link(peripheral);
       final info = DeviceInfo.fromJson(jsonDecode(utf8.decode(await link.readInfo())) as Map<String, dynamic>);
       _identified[key] = info;
-      if (info.id != self().id) _found.add(BleSighting(info, peripheral));
-    } catch (_) {
+      if (info.id != self().id) {
+        _log('Found ${info.name} (${info.platform.name})');
+        _found.add(BleSighting(info, peripheral));
+      }
+    } catch (e) {
       // Not reachable right now; we'll try again when it shows up again.
+      _log("Saw a Sidekick device but couldn't connect to read its name: $e");
     } finally {
       // Don't hold the connection just for a name; phones allow only a few.
       await _links.remove(key)?.close();

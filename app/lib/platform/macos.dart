@@ -12,10 +12,18 @@ abstract final class MacBridge {
   /// Security → Accessibility). Refreshed on start and when the app resumes.
   static bool accessibility = false;
 
+  /// Whether Sidekick may capture the screen (Privacy & Security → Screen
+  /// Recording), for peers that view it.
+  static bool screenRecording = false;
+
   static Future<void> refresh() async {
     final map = await _channel.invokeMapMethod<String, bool>('permissions') ?? const {};
     accessibility = map['accessibility'] ?? false;
+    screenRecording = map['screenRecording'] ?? false;
   }
+
+  /// Shows the system prompt and opens the Screen Recording settings pane.
+  static Future<void> requestScreenRecording() => _channel.invokeMethod('requestScreenRecording');
 
   /// Shows the system prompt and opens the Accessibility settings pane.
   static Future<void> requestAccessibility() => _channel.invokeMethod('requestAccessibility');
@@ -36,6 +44,8 @@ class MacInputInjector implements InputInjector {
 
   @override
   void moveBy(int dx, int dy) => MacBridge.input({'t': 'move', 'dx': dx, 'dy': dy});
+  @override
+  void moveTo(double x, double y) => MacBridge.input({'t': 'moveTo', 'x': x, 'y': y});
   @override
   void button(MouseButton button, {required bool down}) =>
       MacBridge.input({'t': down ? 'down' : 'up', 'b': button.name});

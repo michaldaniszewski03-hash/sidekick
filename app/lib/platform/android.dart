@@ -61,6 +61,8 @@ class AndroidInputInjector implements InputInjector {
   @override
   void moveBy(int dx, int dy) => AndroidBridge.input({'t': 'move', 'dx': dx, 'dy': dy});
   @override
+  void moveTo(double x, double y) => AndroidBridge.input({'t': 'moveTo', 'x': x, 'y': y});
+  @override
   void button(MouseButton button, {required bool down}) =>
       AndroidBridge.input({'t': down ? 'down' : 'up', 'b': _button(button)});
   @override

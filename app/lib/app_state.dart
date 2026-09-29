@@ -22,6 +22,7 @@ import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
 import 'platform/media.dart';
+import 'platform/screen.dart';
 
 enum TransferState { running, done, failed }
 
@@ -82,12 +83,16 @@ class AppState extends ChangeNotifier {
   final Map<String, DateTime> _lastContact = {};
   final List<Transfer> transfers = [];
   final Map<String, TrustedPeer> activeRemoteSessions = {};
+
+  /// Who is watching our screen right now.
+  final Map<String, TrustedPeer> activeScreenViewers = {};
   List<String> addresses = [];
   String? selectedId;
   String? networkError;
 
   late final InputInjector input = InputInjector.forCurrentPlatform();
   late final MediaController media = MediaController.forCurrentPlatform(input);
+  late final ScreenCapturer screen = ScreenCapturer.forCurrentPlatform();
   late final FileService files;
   late final SidekickServer server;
 
@@ -147,6 +152,7 @@ class AppState extends ChangeNotifier {
       files: _prefs.getBool('allowFiles') ?? true,
       media: _prefs.getBool('allowMedia') ?? true,
       input: _prefs.getBool('allowInput') ?? true,
+      screen: _prefs.getBool('allowScreen') ?? true,
     );
     _receiveDir = _prefs.getString('receiveDir');
     selectedId = _prefs.getString('selectedId');
@@ -193,6 +199,7 @@ class AppState extends ChangeNotifier {
       files: permissions.files && (!Platform.isAndroid || AndroidBridge.permissions.allFiles),
       media: permissions.media && media.supported,
       input: permissions.input && input.supported,
+      screen: permissions.screen && screen.supported,
     ),
   );
 
@@ -223,6 +230,7 @@ class AppState extends ChangeNotifier {
       receiveDir: receiveDir,
       permissions: () => permissions,
       link: directLink,
+      screen: screen,
       inputReady: _inputReady,
     );
     server.events.listen(_onServerEvent);
@@ -255,7 +263,7 @@ class AppState extends ChangeNotifier {
     }
 
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows) {
-      final bt = bluetooth = BluetoothService(self: () => me, server: server);
+      final bt = bluetooth = BluetoothService(self: () => me, server: server)..onChanged = notifyListeners;
       bt.found.listen(_onBluetoothSighting);
       bt.statusChanges.listen((_) => notifyListeners());
       unawaited(bt.start().then((_) => _maybeScanBluetooth()).catchError((_) {}));
@@ -568,6 +576,12 @@ class AppState extends ChangeNotifier {
   /// otherwise crawl over Bluetooth.
   static const directLinkThreshold = 2 * 1024 * 1024;
 
+  /// Devices seen over Bluetooth recently, for Settings → Bluetooth.
+  List<BleSighting> get bluetoothSightings => _bleSeen.values.toList()..sort((a, b) => b.seen.compareTo(a.seen));
+
+  /// Scans now, even if Wi-Fi reaches everything (Settings → Scan now).
+  Future<void> scanBluetoothNow() async => bluetooth?.scan();
+
   void _onBluetoothSighting(BleSighting sighting) {
     final id = sighting.info.id;
     final previous = _bleSeen[id];
@@ -717,6 +731,13 @@ class AppState extends ChangeNotifier {
             ? 'Allow Sidekick in Settings → Accessibility (if it\'s already on there, remove it and add it again).'
             : 'Allow remote control in Settings.';
         _notices.add(Notice('${peer.name} tried to control this device. $where'));
+      case ScreenSessionChanged(:final peer, :final active):
+        if (active) {
+          activeScreenViewers[peer.id] = peer;
+        } else {
+          activeScreenViewers.remove(peer.id);
+        }
+        notifyListeners();
       case RemoteSessionChanged(:final peer, :final active):
         if (active) {
           activeRemoteSessions[peer.id] = peer;
@@ -847,7 +868,8 @@ class AppState extends ChangeNotifier {
     _prefs
       ..setBool('allowFiles', value.files)
       ..setBool('allowMedia', value.media)
-      ..setBool('allowInput', value.input);
+      ..setBool('allowInput', value.input)
+      ..setBool('allowScreen', value.screen);
     discovery.announce();
     notifyListeners();
   }

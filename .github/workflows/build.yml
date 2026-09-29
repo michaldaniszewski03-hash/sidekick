@@ -380,7 +380,7 @@ jobs:
 
             **Android 8.0+:** on your phone, download the **Sidekick** `.apk` below and open it. If asked, allow your browser or Files app to install apps.
 
-            **macOS 12+:** open the **Sidekick** `.dmg` and drag Sidekick into Applications. The first time, right-click Sidekick → **Open** → **Open** (it isn't notarized yet). On macOS 15 and newer: try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+            **macOS 12.3+:** open the **Sidekick** `.dmg` and drag Sidekick into Applications. The first time, right-click Sidekick → **Open** → **Open** (it isn't notarized yet). On macOS 15 and newer: try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
             **iPhone/iPad (iOS 15+):** install [AltStore](https://altstore.io) or [SideStore](https://sidestore.io) once, then add this source in it: `https://github.com/${{ github.repository }}/releases/latest/download/altstore.json` and tap **Sidekick → Install**. New versions then show up as updates. (Or install the `.ipa` below with [Sideloadly](https://sideloadly.io).)
 

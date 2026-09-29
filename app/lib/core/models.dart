@@ -21,7 +21,7 @@ DevicePlatform platformFromName(String? name) =>
 
 /// What a device lets its paired peers do to it.
 class Capabilities {
-  const Capabilities({this.files = false, this.media = false, this.input = false});
+  const Capabilities({this.files = false, this.media = false, this.input = false, this.screen = false});
 
   /// Peers can browse, download and upload files.
   final bool files;
@@ -32,10 +32,17 @@ class Capabilities {
   /// Peers can move the mouse and type.
   final bool input;
 
-  Map<String, dynamic> toJson() => {'files': files, 'media': media, 'input': input};
+  /// Peers can see the screen.
+  final bool screen;
 
-  factory Capabilities.fromJson(Map<String, dynamic>? json) =>
-      Capabilities(files: json?['files'] == true, media: json?['media'] == true, input: json?['input'] == true);
+  Map<String, dynamic> toJson() => {'files': files, 'media': media, 'input': input, 'screen': screen};
+
+  factory Capabilities.fromJson(Map<String, dynamic>? json) => Capabilities(
+    files: json?['files'] == true,
+    media: json?['media'] == true,
+    input: json?['input'] == true,
+    screen: json?['screen'] == true,
+  );
 }
 
 /// A device on the network, as announced over discovery or `/v1/info`.

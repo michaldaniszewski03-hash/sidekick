@@ -5,7 +5,6 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
 import '../core/bluetooth.dart';
-import '../core/server.dart';
 import '../platform/android.dart';
 import '../platform/macos.dart';
 import 'widgets.dart';
@@ -108,6 +107,21 @@ class _SettingsPageState extends State<SettingsPage> {
                                   child: const Text('Grant'),
                                 ),
                         ),
+                        ListTile(
+                          leading: const Icon(Icons.screen_share_outlined),
+                          title: const Text('Screen Recording'),
+                          subtitle: const Text(
+                            'So your other devices can see this screen. After allowing it, quit and reopen Sidekick. '
+                            'If it stops working after an update, remove Sidekick from that list and add it again.',
+                          ),
+                          isThreeLine: true,
+                          trailing: MacBridge.screenRecording
+                              ? const Icon(Icons.check_circle, color: Colors.green)
+                              : FilledButton.tonal(
+                                  onPressed: MacBridge.requestScreenRecording,
+                                  child: const Text('Grant'),
+                                ),
+                        ),
                       ],
                     ),
                   ],
@@ -137,6 +151,42 @@ class _SettingsPageState extends State<SettingsPage> {
                             _ => null,
                           },
                         ),
+                        ExpansionTile(
+                          leading: const Icon(Icons.troubleshoot_outlined),
+                          title: const Text('Details'),
+                          subtitle: Text(
+                            [
+                              bt.advertising ? 'Visible to other devices' : 'Not visible to other devices',
+                              if (bt.scanning) 'scanning…',
+                            ].join(' · '),
+                          ),
+                          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: FilledButton.tonalIcon(
+                                onPressed: bt.scanning || bt.status != BluetoothStatus.on
+                                    ? null
+                                    : state.scanBluetoothNow,
+                                icon: const Icon(Icons.bluetooth_searching),
+                                label: Text(bt.scanning ? 'Scanning…' : 'Scan now'),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text('Seen over Bluetooth', style: Theme.of(context).textTheme.titleSmall),
+                            if (state.bluetoothSightings.isEmpty) const Text('Nothing yet'),
+                            for (final s in state.bluetoothSightings)
+                              Text('${s.info.name} (${s.info.platform.name}), ${_ago(s.seen)}'),
+                            const SizedBox(height: 12),
+                            Text('Log', style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 4),
+                            SelectableText(
+                              bt.log.isEmpty ? 'Empty' : bt.log.reversed.take(25).join('\n'),
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ],
@@ -146,35 +196,49 @@ class _SettingsPageState extends State<SettingsPage> {
                       SwitchListTile(
                         secondary: const Icon(Icons.folder_open_outlined),
                         title: const Text('Browse and download files'),
-                        subtitle: const Text('Paired devices can open any folder on this device'),
+                        subtitle: Text(
+                          Platform.isIOS
+                              ? "Paired devices can open Sidekick's folder in the Files app"
+                              : 'Paired devices can open any folder on this device',
+                        ),
                         value: perms.files,
-                        onChanged: (v) =>
-                            state.setPermissions(Permissions(files: v, media: perms.media, input: perms.input)),
+                        onChanged: (v) => state.setPermissions(perms.copyWith(files: v)),
                       ),
-                      SwitchListTile(
-                        secondary: const Icon(Icons.play_circle_outline),
-                        title: const Text('Control media'),
-                        subtitle: Text(
-                          state.media.supported
-                              ? 'Play, pause, seek and change volume'
-                              : 'Not supported on this platform yet',
+                      if (state.media.supported)
+                        SwitchListTile(
+                          secondary: const Icon(Icons.play_circle_outline),
+                          title: const Text('Control media'),
+                          subtitle: Text(
+                            Platform.isIOS
+                                ? 'Change the volume and control Apple Music (iOS doesn\'t let apps control others)'
+                                : 'Play, pause, seek and change volume',
+                          ),
+                          value: perms.media,
+                          onChanged: (v) => state.setPermissions(perms.copyWith(media: v)),
                         ),
-                        value: perms.media && state.media.supported,
-                        onChanged: state.media.supported
-                            ? (v) => state.setPermissions(Permissions(files: perms.files, media: v, input: perms.input))
-                            : null,
-                      ),
-                      SwitchListTile(
-                        secondary: const Icon(Icons.mouse_outlined),
-                        title: const Text('Control mouse and keyboard'),
-                        subtitle: Text(
-                          state.input.supported ? 'Use this device remotely' : 'Not supported on this platform yet',
+                      // iOS never lets another device control an iPhone or see its
+                      // screen, so those switches only exist elsewhere.
+                      if (!Platform.isIOS) ...[
+                        SwitchListTile(
+                          secondary: const Icon(Icons.mouse_outlined),
+                          title: const Text('Control mouse and keyboard'),
+                          subtitle: const Text('Use this device remotely'),
+                          value: perms.input,
+                          onChanged: (v) => state.setPermissions(perms.copyWith(input: v)),
                         ),
-                        value: perms.input && state.input.supported,
-                        onChanged: state.input.supported
-                            ? (v) => state.setPermissions(Permissions(files: perms.files, media: perms.media, input: v))
-                            : null,
-                      ),
+                        if (state.screen.supported)
+                          SwitchListTile(
+                            secondary: const Icon(Icons.screen_share_outlined),
+                            title: const Text('See this screen'),
+                            subtitle: Text(
+                              Platform.isAndroid
+                                  ? 'Paired devices can ask to see this screen; you allow it each time'
+                                  : 'Paired devices can see this screen live, with a banner here while they do',
+                            ),
+                            value: perms.screen,
+                            onChanged: (v) => state.setPermissions(perms.copyWith(screen: v)),
+                          ),
+                      ],
                     ],
                   ),
                   const SectionLabel('Paired devices'),
@@ -318,4 +382,11 @@ class _Group extends StatelessWidget {
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     child: Column(children: children),
   );
+}
+
+String _ago(DateTime t) {
+  final d = DateTime.now().difference(t);
+  if (d.inSeconds < 60) return '${d.inSeconds} s ago';
+  if (d.inMinutes < 60) return '${d.inMinutes} min ago';
+  return '${d.inHours} h ago';
 }

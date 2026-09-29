@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../core/models.dart';
 import 'android.dart';
+import 'ios.dart';
 import 'macos.dart';
 import 'input.dart';
 
@@ -26,6 +27,7 @@ abstract class MediaController {
     if (Platform.isWindows) return WindowsMediaController(input);
     if (Platform.isAndroid) return AndroidMediaController();
     if (Platform.isMacOS) return MacMediaController();
+    if (Platform.isIOS) return IosMediaController();
     return UnsupportedMediaController();
   }
 }

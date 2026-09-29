@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../core/client.dart';
 import '../core/models.dart';
+import 'screen_view.dart';
 import 'widgets.dart';
 
 /// What to send so text that reads [before] ends up reading [after]:
@@ -58,6 +59,23 @@ class _RemoteState extends State<_Remote> {
   final _textController = TextEditingController();
   final _liveController = TextEditingController();
   String _live = '';
+  bool _showScreen = false;
+  bool _fullWindow = false;
+
+  Future<void> _openFullWindow() async {
+    setState(() => _fullWindow = true);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(title: Text(widget.device.name)),
+          body: ScreenView(state: widget.state, device: widget.device, input: () => _s, onKey: _onKey, expanded: true),
+        ),
+      ),
+    );
+    if (mounted) setState(() => _fullWindow = false);
+  }
 
   @override
   void initState() {
@@ -168,6 +186,7 @@ class _RemoteState extends State<_Remote> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final supported = widget.state.capabilitiesOf(widget.device.id)?.input ?? true;
+    final canSeeScreen = widget.state.capabilitiesOf(widget.device.id)?.screen ?? false;
 
     return PageFrame(
       title: 'Remote',
@@ -192,57 +211,96 @@ class _RemoteState extends State<_Remote> {
               padding: const EdgeInsets.only(bottom: 16),
               child: Text(_error!, style: TextStyle(color: scheme.error)),
             ),
-          _Touchpad(
-            enabled: _s != null,
-            onMove: (d) => _s?.move(d.dx * _speed, d.dy * _speed),
-            onClick: () => _s?.click(),
-            onRightClick: () => _s?.click(button: 'right'),
-            onScroll: (dx, dy) => _s?.scroll(dx: dx, dy: dy),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _BigButton(label: 'Left click', onPressed: _s == null ? null : () => _s!.click()),
+          if (canSeeScreen) ...[
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, icon: Icon(Icons.touch_app_outlined), label: Text('Touchpad')),
+                ButtonSegment(value: true, icon: Icon(Icons.screenshot_monitor_outlined), label: Text('Screen')),
+              ],
+              selected: {_showScreen},
+              onSelectionChanged: (v) => setState(() => _showScreen = v.first),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (canSeeScreen && _showScreen) ...[
+            if (_fullWindow)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: Text('Showing in full window')),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _BigButton(
-                  label: 'Right click',
-                  onPressed: _s == null ? null : () => _s!.click(button: 'right'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Tooltip(
-                message: 'Hold the left button down, for dragging and selecting',
-                child: SizedBox(
-                  height: 56,
-                  child: FilterChip(
-                    label: const Text('Hold'),
-                    avatar: const Icon(Icons.pan_tool_alt_outlined, size: 18),
-                    selected: _holding,
-                    onSelected: _s == null
-                        ? null
-                        : (v) {
-                            v ? _s!.buttonDown() : _s!.buttonUp();
-                            setState(() => _holding = v);
-                          },
+            if (!_fullWindow) ScreenView(state: widget.state, device: widget.device, input: () => _s, onKey: _onKey),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isMobile
+                        ? 'Tap to click, double-tap to double-click, long-press to right-click, long-press and move '
+                              'to drag, pinch to zoom.'
+                        : 'Click on the screen to control it; keys go there while it has focus.',
+                    style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.speed, size: 20),
-              const SizedBox(width: 8),
-              const Text('Pointer speed'),
-              Expanded(
-                child: Slider(value: _speed, min: 0.5, max: 4, onChanged: (v) => setState(() => _speed = v)),
-              ),
-            ],
-          ),
+                TextButton.icon(
+                  onPressed: _openFullWindow,
+                  icon: const Icon(Icons.fullscreen),
+                  label: const Text('Full window'),
+                ),
+              ],
+            ),
+          ] else ...[
+            _Touchpad(
+              enabled: _s != null,
+              onMove: (d) => _s?.move(d.dx * _speed, d.dy * _speed),
+              onClick: () => _s?.click(),
+              onRightClick: () => _s?.click(button: 'right'),
+              onScroll: (dx, dy) => _s?.scroll(dx: dx, dy: dy),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _BigButton(label: 'Left click', onPressed: _s == null ? null : () => _s!.click()),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _BigButton(
+                    label: 'Right click',
+                    onPressed: _s == null ? null : () => _s!.click(button: 'right'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Tooltip(
+                  message: 'Hold the left button down, for dragging and selecting',
+                  child: SizedBox(
+                    height: 56,
+                    child: FilterChip(
+                      label: const Text('Hold'),
+                      avatar: const Icon(Icons.pan_tool_alt_outlined, size: 18),
+                      selected: _holding,
+                      onSelected: _s == null
+                          ? null
+                          : (v) {
+                              v ? _s!.buttonDown() : _s!.buttonUp();
+                              setState(() => _holding = v);
+                            },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.speed, size: 20),
+                const SizedBox(width: 8),
+                const Text('Pointer speed'),
+                Expanded(
+                  child: Slider(value: _speed, min: 0.5, max: 4, onChanged: (v) => setState(() => _speed = v)),
+                ),
+              ],
+            ),
+          ],
           const SectionLabel('Keyboard'),
           if (isMobile) _liveTyping() else ..._desktopKeyboard(scheme),
           const SectionLabel('Shortcuts'),

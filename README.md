@@ -19,7 +19,7 @@ Download both from the [**Releases** page](https://github.com/michaldaniszewski0
 
 - **Windows 10/11:** run **`SidekickSetup-<version>.exe`**. It installs Sidekick with Start menu and desktop shortcuts, allows it through Windows Firewall on private networks, and adds an uninstaller. The installer isn't code-signed yet, so Windows may say "Windows protected your PC": click **More info → Run anyway**.
 - **Android 8.0+:** open **`Sidekick-<version>.apk`** on your phone. If asked, allow your browser or Files app to install apps.
-- **macOS 12+:** open **`Sidekick-<version>.dmg`** and drag Sidekick into Applications. The app isn't notarized yet, so the first time, right-click it → **Open** → **Open**. On macOS 15 and newer, try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+- **macOS 12.3+:** open **`Sidekick-<version>.dmg`** and drag Sidekick into Applications. The app isn't notarized yet, so the first time, right-click it → **Open** → **Open**. On macOS 15 and newer, try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
 - **iPhone/iPad (iOS 15+):** the **`Sidekick-<version>.ipa`** is unsigned, because signing needs a paid Apple Developer account. Install it with [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io), which sign it with your own Apple ID. With a free Apple ID the app has to be re-signed every 7 days; those tools can do that automatically.
 
 Every push also builds both on GitHub Actions (**Build** workflow → run → **Artifacts**), for testing between releases.

@@ -95,6 +95,7 @@ class SidekickAccessibilityService : AccessibilityService() {
         fun num(key: String): Float = (msg[key] as? Number)?.toFloat() ?: 0f
         when (msg["t"]) {
             "move" -> moveBy(num("dx"), num("dy"))
+            "moveTo" -> moveTo(num("x"), num("y"))
             "click" -> if (msg["b"] == "right") longPress() else tap(((msg["n"] as? Number)?.toInt() ?: 1))
             "down" -> dragStart = Pair(x, y)
             "up" -> {
@@ -123,6 +124,14 @@ class SidekickAccessibilityService : AccessibilityService() {
         val (w, h) = screenSize()
         x = (x + dx * speed).coerceIn(0f, w - 1f)
         y = (y + dy * speed).coerceIn(0f, h - 1f)
+        showCursor()
+    }
+
+    /** [fx] and [fy] are fractions (0–1) of the screen, as seen on a shared screen. */
+    private fun moveTo(fx: Float, fy: Float) {
+        val (w, h) = screenSize()
+        x = (fx.coerceIn(0f, 1f) * (w - 1))
+        y = (fy.coerceIn(0f, 1f) * (h - 1))
         showCursor()
     }
 
