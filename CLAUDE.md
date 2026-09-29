@@ -43,9 +43,13 @@ its biggest features and fixes, and bumps the website links (see
     the channels.
   - The Windows runner compiles C++ with `/W4 /WX`.
 - `app/macos/packaging/`: the .dmg background (1x and 2x).
-- Logos (`website/`): `2.png` is the wide wordmark (website, in-app logo);
-  `3.png` is the "sk" monogram (every app icon). `app/tool/make_icons.py`
-  regenerates all icons; re-run it after changing either.
+- Logos (`website/`): `2.png` is the wide wordmark, used **only on the
+  website**; `3.png` is the "sk" monogram, used for every app icon and the
+  logo inside the app (`app/assets/logo/logo.png`). `app/tool/make_icons.py`
+  regenerates all of them; re-run it after changing 3.png.
+- Mac: the file picker (`file_picker`) needs the
+  `files.user-selected.read-write` entitlement and `prepareFilePicker()`
+  (skips its sandbox check), or Send files silently does nothing.
 - `.github/workflows/build.yml`: CI and releases.
 
 ## Conventions
@@ -82,6 +86,15 @@ its biggest features and fixes, and bumps the website links (see
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.0.2
+- **Send files works on the Mac again:** the Mac file picker refused to open
+  without a sandbox file entitlement (Sidekick isn't sandboxed) and the
+  error was swallowed. The entitlement is declared, the check is skipped on
+  Mac, and a picker that can't open now says why. Also fixes Settings →
+  "Save received files to → Change" on the Mac.
+- **"sk" logo inside the app:** the side rail and welcome screen show the
+  monogram (3.png); the wide wordmark stays on the website only.
 
 ### 2.0.1
 - **App icons are the "sk" monogram** (`website/3.png`) everywhere the

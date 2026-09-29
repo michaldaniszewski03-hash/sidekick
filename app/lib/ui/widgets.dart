@@ -473,11 +473,33 @@ Future<List<File>> pickFilesToSend(BuildContext context, {required String title}
     if (choice == null) return const [];
     type = choice;
   }
-  final picked = await FilePicker.pickFiles(dialogTitle: title, type: type);
-  return [
-    for (final f in picked)
-      if (f.path != null) File(f.path!),
-  ];
+  try {
+    await prepareFilePicker();
+    final picked = await FilePicker.pickFiles(dialogTitle: title, type: type);
+    return [
+      for (final f in picked)
+        if (f.path != null) File(f.path!),
+    ];
+  } catch (e) {
+    // Never fail silently: say why no picker appeared.
+    if (context.mounted) showError(context, "Couldn't open the file picker: $e");
+    return const [];
+  }
+}
+
+bool _filePickerReady = false;
+
+/// On a Mac the file picker checks for sandbox file entitlements before it
+/// opens. Sidekick isn't sandboxed (it can read any file already), so that
+/// check only gets in the way; turn it off once.
+Future<void> prepareFilePicker() async {
+  if (_filePickerReady || !Platform.isMacOS) return;
+  try {
+    await FilePicker.skipEntitlementsChecks();
+  } catch (_) {
+    // Older plugin, or not needed: the entitlement is declared as well.
+  }
+  _filePickerReady = true;
 }
 
 void showError(BuildContext context, Object error) {

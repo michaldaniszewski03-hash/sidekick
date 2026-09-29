@@ -3,11 +3,11 @@
     pip install pillow numpy
     python app/tool/make_icons.py        # from the repo root
 
-Sources:
+Source:
   website/3.png  the "sk" monogram: every app icon (dock, desktop, taskbar,
-                 home screens), at every size
-  website/2.png  the SIDEKICK wordmark: the logo inside the app (the website
-                 header uses it too)
+                 home screens) at every size, and the logo inside the app.
+                 (The website uses the SIDEKICK wordmark, website/2.png,
+                 embedded in index.html.)
 
 Writes the Windows .ico, Android launcher icons, macOS and iOS app icon sets,
 and the in-app logo. Re-run it whenever the artwork changes.
@@ -40,7 +40,6 @@ def load_mask(path: Path) -> Image.Image:
     return Image.fromarray(alpha, "L").crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
 
 
-WORDMARK = load_mask(ROOT / "website" / "2.png")
 MONOGRAM = load_mask(ROOT / "website" / "3.png")
 
 
@@ -157,14 +156,15 @@ def ios() -> None:
 
 
 def in_app() -> None:
-    """White-on-transparent wordmark; the app tints it with the theme colour."""
+    """White-on-transparent "sk"; the app tints it with the theme colour."""
     out = APP / "assets/logo"
     out.mkdir(parents=True, exist_ok=True)
-    h = 96
-    m = WORDMARK.resize((round(WORDMARK.width * h / WORDMARK.height), h), Image.LANCZOS)
+    h = 192  # sharp at 3x on a 64 px logo
+    m = MONOGRAM.resize((round(MONOGRAM.width * h / MONOGRAM.height), h), Image.LANCZOS)
     im = Image.new("RGBA", m.size, (255, 255, 255, 255))
     im.putalpha(m)
-    im.save(out / "wordmark.png", optimize=True)
+    im.save(out / "logo.png", optimize=True)
+    (out / "wordmark.png").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

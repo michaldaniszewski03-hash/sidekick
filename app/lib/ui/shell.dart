@@ -169,10 +169,10 @@ class _ShellState extends State<Shell> {
             groupAlignment: -0.85,
             leading: Padding(
               padding: const EdgeInsets.only(top: 22, bottom: 14),
-              // The wordmark is white-on-transparent; tint it to the theme.
+              // The "sk" logo is white-on-transparent; tint it to the theme.
               child: Image.asset(
-                'assets/logo/wordmark.png',
-                width: 66,
+                'assets/logo/logo.png',
+                height: 34,
                 color: scheme.onSurface,
                 semanticLabel: 'Sidekick',
               ),
