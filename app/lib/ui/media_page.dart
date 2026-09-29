@@ -164,12 +164,16 @@ class _MediaState extends State<_Media> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _NowPlaying(status: s),
+                    _NowPlaying(status: s, iPhone: _iPhone),
                     const SizedBox(height: 24),
-                    _seekBar(s),
-                    const SizedBox(height: 16),
-                    _controls(s),
-                    const SizedBox(height: 28),
+                    // On an iPhone, other apps' playback (Spotify, YouTube…)
+                    // can't be seen or controlled: only offer what works.
+                    if (!_iPhone || s.available) ...[
+                      _seekBar(s),
+                      const SizedBox(height: 16),
+                      _controls(s),
+                      const SizedBox(height: 28),
+                    ],
                     _volume(s),
                   ],
                 ),
@@ -179,6 +183,8 @@ class _MediaState extends State<_Media> {
       ),
     );
   }
+
+  bool get _iPhone => widget.device.platform == DevicePlatform.ios;
 
   Widget _seekBar(MediaStatus s) {
     final durationMs = s.duration.inMilliseconds.toDouble();
@@ -358,8 +364,11 @@ class _MediaState extends State<_Media> {
 }
 
 class _NowPlaying extends StatelessWidget {
-  const _NowPlaying({required this.status});
+  const _NowPlaying({required this.status, this.iPhone = false});
   final MediaStatus status;
+
+  /// iOS only shares Apple Music; say so instead of "nothing playing".
+  final bool iPhone;
 
   @override
   Widget build(BuildContext context) {
@@ -389,6 +398,8 @@ class _NowPlaying extends StatelessWidget {
               Text(
                 !status.nowPlaying
                     ? 'Media controls'
+                    : nothing && iPhone
+                    ? 'iPhone volume'
                     : nothing
                     ? 'Nothing playing'
                     : (status.title.isEmpty ? 'Unknown title' : status.title),
@@ -400,13 +411,16 @@ class _NowPlaying extends StatelessWidget {
               Text(
                 !status.nowPlaying
                     ? "This device doesn't share what's playing, but play/pause, skip and volume work."
+                    : nothing && iPhone
+                    ? "iOS doesn't let other apps see or control Spotify, YouTube and other players, so only "
+                          'the volume works from here. Apple Music can be fully controlled.'
                     : nothing && status.note != null
                     ? "Couldn't read what's playing (${status.note}). Play/pause and volume still work."
                     : nothing
                     ? 'Start something in Spotify, YouTube, VLC or any other player.'
                     : [status.artist, status.app].where((x) => x.isNotEmpty).join(' · '),
                 style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
-                maxLines: 2,
+                maxLines: iPhone ? 4 : 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ],

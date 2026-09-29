@@ -171,6 +171,8 @@ Everything between paired devices is encrypted, on Wi-Fi and on Bluetooth (`app/
 - **Pairing proves the certificates.** The 6-digit code runs through **SPAKE2**, a password-authenticated key exchange, together with both devices' certificate fingerprints. If someone sat in the middle, the two devices would see different certificates and the exchange fails. Watching the pairing doesn't help anyone guess the code offline: each guess needs a live attempt, and there are only 5.
 - **After pairing, each device only accepts the other's exact certificate** (pinning). An impostor at the same address is refused.
 - **Bluetooth** has no TLS, so every request and response between paired devices is sealed with **AES-256-GCM** under a key both sides got from pairing. Requests carry a timestamp and a one-time nonce, so recorded traffic can't be replayed.
+- **Keys stay in the system's secure storage:** this device's private key and the pairing tokens and keys live in the Keychain (iPhone, Mac), the Android Keystore, or DPAPI-protected storage (Windows); versions before 0.5 kept them in app settings and move them over on first start. Because the Mac app isn't signed with a paid Apple account, macOS may ask once after an update whether Sidekick may read its keychain item: choose **Always Allow**.
+- **Check it yourself:** Settings → Paired devices → tap a device shows a 12-digit **security code**. The other device shows the same code for you only if nobody is in between.
 - **What isn't hidden:** device names and types in discovery (so you can find each other) and the pairing request itself.
 - Updating from 0.2 to 0.3: devices you paired before have to be **paired again once**, and both devices need 0.3 or newer.
 - **Media control** uses Windows' Global System Media Transport Controls, the same thing behind the volume flyout, so it works with Spotify, browsers, VLC, the Media Player app and so on. If that helper can't start, play/pause, next/previous and volume still work through media keys.
@@ -181,7 +183,6 @@ Everything between paired devices is encrypted, on Wi-Fi and on Bluetooth (`app/
 - **The phone has to be running Sidekick** (it can be in the background) for the PC to reach it. Android may stop it after a long time in the background.
 - **Sharing from other apps** (Share → Sidekick) isn't in yet on Android or iOS. Use **Send** in Sidekick.
 - **The macOS and iOS apps aren't signed or notarized**, since that needs a paid Apple Developer account. See Install above for how to open them.
-- **Keys are stored in the app's settings storage**, not yet in the system keychain (Windows Credential Manager, Android Keystore, Apple Keychain).
 - **Windows won't let Sidekick control elevated (admin) windows**, such as Task Manager, unless Sidekick itself runs as administrator.
 - **There's no screen view**, so you control the other device by looking at it (fine for media and presentations).
 

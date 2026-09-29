@@ -63,6 +63,13 @@ void main() {
     expect(() => a.finish([1, 2, 3]), throwsFormatException);
   });
 
+  test('security code is the same on both sides and differs per pair', () {
+    final a = 'a' * 64, b = 'b' * 64, c = 'c' * 64;
+    expect(securityCode(a, b), securityCode(b, a));
+    expect(securityCode(a, b), matches(RegExp(r'^\d{4} \d{4} \d{4}$')));
+    expect(securityCode(a, b), isNot(securityCode(a, c)));
+  });
+
   test('seal and unseal', () {
     final key = randomBytes(32);
     final sealed = sealBytes(key, utf8.encode('hello'), aad: [1]);

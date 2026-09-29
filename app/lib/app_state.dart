@@ -24,6 +24,7 @@ import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
 import 'platform/media.dart';
+import 'platform/secret_store.dart';
 
 /// The color themes in Settings → Theme: name and seed color.
 const themeColors = <String, (String, Color)>{
@@ -117,6 +118,9 @@ class AppState extends ChangeNotifier {
 
   /// This device's certificate: its identity for encrypted connections.
   late final Identity identity;
+
+  /// Where pairing tokens, pairing keys and our private key live.
+  late final SecretStore secrets = SecretStore(_prefs);
   bool _droppedOldPairings = false;
 
   /// What each device we're pairing with showed us in the pairing request.
@@ -157,6 +161,7 @@ class AppState extends ChangeNotifier {
   static Future<AppState> load() async {
     final state = AppState._(await SharedPreferences.getInstance());
     state._restore();
+    await state._loadSecrets();
     // Use the device's real name unless the user picked one (older versions
     // saved made-up names like "My ios"; replace those too).
     final saved = state._prefs.getString('name');
@@ -184,16 +189,37 @@ class AppState extends ChangeNotifier {
     );
     _receiveDir = _prefs.getString('receiveDir');
     selectedId = _prefs.getString('selectedId');
+  }
+
+  /// Loads pairings and this device's identity from secure storage (moving
+  /// them there from app settings, where versions before 0.5 kept them).
+  Future<void> _loadSecrets() async {
+    List<String> list(String? json) => json == null ? const [] : [for (final e in jsonDecode(json) as List) '$e'];
+    String? legacyList(String key) {
+      final old = _prefs.getStringList(key);
+      return old == null ? null : jsonEncode(old);
+    }
+
+    final trusted = await secrets.read(
+      'trusted',
+      legacy: () => legacyList('trusted'),
+      removeLegacy: () => _prefs.remove('trusted'),
+    );
+    final paired = await secrets.read(
+      'paired',
+      legacy: () => legacyList('paired'),
+      removeLegacy: () => _prefs.remove('paired'),
+    );
     // Pairings from before encryption (no certificate or key) can't be
     // trusted any more; the user pairs those devices again.
-    for (final json in _prefs.getStringList('trusted') ?? const <String>[]) {
+    for (final json in list(trusted)) {
       try {
         trust.add(TrustedPeer.fromJson(jsonDecode(json) as Map<String, dynamic>));
       } on TypeError {
         _droppedOldPairings = true;
       }
     }
-    for (final json in _prefs.getStringList('paired') ?? const <String>[]) {
+    for (final json in list(paired)) {
       try {
         final d = PairedDevice.fromJson(jsonDecode(json) as Map<String, dynamic>);
         _paired[d.id] = d;
@@ -201,14 +227,17 @@ class AppState extends ChangeNotifier {
         _droppedOldPairings = true;
       }
     }
+    trust.onChanged = _saveTrusted;
     if (_droppedOldPairings) {
-      _prefs.setStringList('trusted', [for (final t in trust.peers) jsonEncode(t)]);
+      _saveTrusted();
       _savePaired();
     }
-    trust.onChanged = () => _prefs.setStringList('trusted', [for (final t in trust.peers) jsonEncode(t)]);
+    identity = await _loadIdentity();
   }
 
-  void _savePaired() => _prefs.setStringList('paired', [for (final d in _paired.values) jsonEncode(d)]);
+  void _saveTrusted() => unawaited(secrets.write('trusted', jsonEncode([for (final t in trust.peers) jsonEncode(t)])));
+
+  void _savePaired() => unawaited(secrets.write('paired', jsonEncode([for (final d in _paired.values) jsonEncode(d)])));
 
   static String _defaultName() {
     final host = Platform.localHostname;
@@ -249,7 +278,6 @@ class AppState extends ChangeNotifier {
     }
     // iOS apps can only share their own Documents folder.
     files = Platform.isIOS ? FileService(home: (await getApplicationDocumentsDirectory()).path) : FileService();
-    identity = await _loadIdentity();
     server = SidekickServer(
       identity: identity,
       self: () => me,
@@ -317,7 +345,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<Identity> _loadIdentity() async {
-    final saved = _prefs.getString('identity');
+    final saved = await secrets.read(
+      'identity',
+      legacy: () => _prefs.getString('identity'),
+      removeLegacy: () => _prefs.remove('identity'),
+    );
     if (saved != null) {
       try {
         return Identity.fromJson(jsonDecode(saved) as Map<String, dynamic>);
@@ -327,7 +359,7 @@ class AppState extends ChangeNotifier {
     }
     // Key generation takes a moment; keep the UI responsive.
     final fresh = await Isolate.run(Identity.generate);
-    await _prefs.setString('identity', jsonEncode(fresh.toJson()));
+    await secrets.write('identity', jsonEncode(fresh.toJson()));
     return fresh;
   }
 
@@ -445,6 +477,10 @@ class AppState extends ChangeNotifier {
   }
 
   PairedDevice? pairedById(String? id) => id == null ? null : _paired[id];
+
+  /// The code to compare with the one [d] shows for us (Settings → Paired
+  /// devices), proving the connection is between these two devices only.
+  String securityCodeFor(PairedDevice d) => securityCode(identity.fingerprint, d.fingerprint);
 
   /// Capabilities the device last announced, if we've seen it.
   Capabilities? capabilitiesOf(String id) => _nearby[id]?.info.capabilities ?? _bleSeen[id]?.info.capabilities;

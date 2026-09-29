@@ -180,6 +180,17 @@ void main() {
     await tester.dragUntilVisible(find.text('What paired devices can do here'), list, const Offset(0, -200));
     await shot('iphone-settings-permissions');
     expect(find.text('Control mouse and keyboard'), findsNothing);
+    await tester.dragUntilVisible(
+      find.text('Everything between paired devices is encrypted'),
+      list,
+      const Offset(0, -200),
+    );
+    await shot('iphone-settings-encryption');
+    await tester.ensureVisible(find.textContaining('Tap for security code'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Tap for security code'));
+    await shot('iphone-security-code');
+    await tester.tap(find.text('Done'));
     await tester.dragUntilVisible(find.text('Pure black in dark mode'), list, const Offset(0, -200));
     await shot('iphone-settings-theme');
     state.setThemeColor('teal');

@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
 import '../core/bluetooth.dart';
+import '../core/models.dart';
 import '../platform/android.dart';
 import '../platform/macos.dart';
 import 'widgets.dart';
@@ -220,9 +221,44 @@ class _SettingsPageState extends State<SettingsPage> {
                         ListTile(
                           leading: Icon(platformIcon(d.platform)),
                           title: Text(d.name),
-                          subtitle: Text(d.lastAddress ?? ''),
+                          subtitle: Text(
+                            [if (d.lastAddress != null) d.lastAddress!, 'Tap for security code'].join(' · '),
+                          ),
+                          onTap: () => _showSecurityCode(d),
                           trailing: TextButton(onPressed: () => state.unpair(d.id), child: const Text('Unpair')),
                         ),
+                    ],
+                  ),
+                  const SectionLabel('Encryption'),
+                  _Group(
+                    children: [
+                      const ListTile(
+                        leading: Icon(Icons.lock_outline),
+                        title: Text('Everything between paired devices is encrypted'),
+                        subtitle: Text(
+                          'Wi-Fi: TLS with each device\'s own certificate, checked on every connection. '
+                          'Bluetooth: AES-256-GCM. Pairing uses the 6-digit code in a way that can\'t be '
+                          'intercepted or guessed offline.',
+                        ),
+                        isThreeLine: true,
+                      ),
+                      ListTile(
+                        leading: Icon(
+                          state.secrets.secure ? Icons.key_outlined : Icons.key_off_outlined,
+                          color: state.secrets.secure ? null : Theme.of(context).colorScheme.error,
+                        ),
+                        title: Text(
+                          state.secrets.secure
+                              ? 'Keys are kept in ${switch (hostOS) {
+                                  'ios' || 'macos' => 'the Keychain',
+                                  'android' => 'the Android Keystore',
+                                  'windows' => 'Windows-protected storage',
+                                  _ => 'the system keyring',
+                                }}'
+                              : "Keys are in app settings: this device's secure storage didn't work",
+                        ),
+                        subtitle: const Text('Your private key and pairing keys never leave this device.'),
+                      ),
                     ],
                   ),
                   const SectionLabel('Theme'),
@@ -327,6 +363,34 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 extension on _SettingsPageState {
+  void _showSecurityCode(PairedDevice d) {
+    final code = state.securityCodeFor(d);
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.verified_user_outlined),
+        title: Text('Security code for ${d.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SelectableText(
+              code,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()], letterSpacing: 2),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'On ${d.name}, open Sidekick → Settings → Paired devices and tap ${state.name}. If both show the same '
+              'code, your connection is private: nobody is in between.',
+            ),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+      ),
+    );
+  }
+
   /// One row per special permission, each with a button to the system screen
   /// that grants it. Status refreshes when the user comes back to the app.
   List<Widget> _androidPermissions() {

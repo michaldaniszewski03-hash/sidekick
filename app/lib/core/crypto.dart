@@ -195,6 +195,20 @@ String pairingContext({
   required String fingerprintB,
 }) => 'sidekick-pair-v1|$idA|$fingerprintA|$idB|$fingerprintB';
 
+/// A 12-digit code both paired devices show for each other ("1234 5678
+/// 9012"). It comes from both certificates, so if it matches on the two
+/// screens, nobody was in the middle when they paired.
+String securityCode(String fingerprintA, String fingerprintB) {
+  final sorted = [fingerprintA, fingerprintB]..sort();
+  final digest = c.sha256.convert(utf8.encode('sidekick-security-code|${sorted[0]}|${sorted[1]}')).bytes;
+  var n = BigInt.zero;
+  for (final b in digest.take(8)) {
+    n = (n << 8) | BigInt.from(b);
+  }
+  final digits = (n % BigInt.from(10).pow(12)).toString().padLeft(12, '0');
+  return '${digits.substring(0, 4)} ${digits.substring(4, 8)} ${digits.substring(8)}';
+}
+
 // ------------------------------------------------------------------ sealing
 
 /// AES-256-GCM: `nonce (12 bytes) || ciphertext+tag`.
