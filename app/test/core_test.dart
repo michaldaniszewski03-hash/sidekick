@@ -396,6 +396,28 @@ void main() {
     expect(pc.screen.stopped, 1);
   });
 
+  test('reopening the screen (e.g. full window) keeps capture running', () async {
+    final client = await pair();
+    final first = await client.openScreen();
+    final firstFrames = StreamIterator(first.frames);
+    expect(await firstFrames.moveNext(), isTrue);
+
+    // The new view opens before the old one has finished closing.
+    final second = await client.openScreen();
+    await first.close();
+    final frames = StreamIterator(second.frames);
+    expect(await frames.moveNext(), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(pc.screen.stopped, 0, reason: 'the old session must not stop the new capture');
+    second.ack();
+    expect(await frames.moveNext(), isTrue);
+    expect(pc.server.events, isNotNull);
+
+    await second.close();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(pc.screen.stopped, 1);
+  });
+
   test('screen sharing respects the permission and reports why it failed', () async {
     final client = await pair();
     pc.screen.refuse = 'Allow Screen Recording on the Mac';

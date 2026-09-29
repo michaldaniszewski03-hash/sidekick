@@ -127,6 +127,11 @@ class SidekickServer {
   TrustedPeer? _screenViewer;
   bool _stopScreen = false;
 
+  /// Bumped for every new viewing session, so a session that was replaced
+  /// (e.g. the viewer switched to full window) never stops the new one's
+  /// capture on its way out.
+  int _screenSession = 0;
+
   /// Ends the current screen-sharing session (the viewer can start a new one).
   void stopScreenSharing() => _stopScreen = _screenViewer != null;
 
@@ -565,6 +570,8 @@ class SidekickServer {
       }
       _screenViewer = peer;
       _stopScreen = false;
+      final mine = ++_screenSession;
+      bool current() => _screenSession == mine;
       var open = true;
       var acked = Completer<void>()..complete();
       channel.stream.listen(
@@ -582,10 +589,10 @@ class SidekickServer {
       try {
         await screen.start(maxWidth: maxWidth, onStatus: (m) => say('status', m));
         say('status', null);
-        while (open && stillAllowed() && !_stopScreen) {
+        while (open && current() && stillAllowed() && !_stopScreen) {
           // Wait for the viewer, but don't stall forever on a lost ack.
           await acked.future.timeout(const Duration(seconds: 5), onTimeout: () {});
-          if (!open) break;
+          if (!open || !current()) break;
           final started = DateTime.now();
           final frame = await screen.frame(maxWidth: maxWidth, quality: quality);
           if (frame != null && open) {
@@ -595,13 +602,18 @@ class SidekickServer {
           final wait = const Duration(milliseconds: 50) - DateTime.now().difference(started);
           if (wait > Duration.zero) await Future<void>.delayed(wait);
         }
-        if (open && (!stillAllowed() || _stopScreen)) say('error', 'Screen sharing was stopped on the other device.');
+        if (open && current() && (!stillAllowed() || _stopScreen)) {
+          say('error', 'Screen sharing was stopped on the other device.');
+        }
       } on ScreenCaptureException catch (e) {
-        if (open) say('error', e.message);
+        if (open && current()) say('error', e.message);
       } finally {
-        await screen.stop();
-        if (_screenViewer?.id == peer.id) _screenViewer = null;
-        _events.add(ScreenSessionChanged(peer, active: false));
+        // A newer session from the same viewer keeps the capture running.
+        if (current()) {
+          await screen.stop();
+          _screenViewer = null;
+          _events.add(ScreenSessionChanged(peer, active: false));
+        }
         await channel.sink.close();
       }
     }, pingInterval: const Duration(seconds: 10))(r);
