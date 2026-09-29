@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +32,27 @@ class BrokenStorage extends FlutterSecureStorage {
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
   }) async => throw PlatformException(code: 'denied');
+}
+
+/// Counts keychain reads, to prove the Mac never asks again after moving.
+class CountingStorage extends FlutterSecureStorage {
+  CountingStorage(this.values);
+  final Map<String, String> values;
+  var reads = 0;
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    reads++;
+    return values[key];
+  }
 }
 
 void main() {
@@ -76,5 +99,34 @@ void main() {
     await store.flush();
     expect(prefs.getString('secret.paired'), '[]');
     expect(await store.read('paired'), '[]');
+  });
+
+  test('Mac: moves keys from the keychain into a private file once, then never asks again', () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final dir = await Directory.systemTemp.createTemp('sidekick_secrets');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/secrets.json');
+    final keychain = CountingStorage({'sidekick.identity': 'key-from-1.0', 'sidekick.paired': '[]'});
+
+    // First start after updating from 1.0.
+    final first = SecretStore(prefs, storage: keychain, file: file);
+    expect(await first.read('identity'), 'key-from-1.0');
+    expect(await first.read('paired'), '[]');
+    expect(await first.read('trusted'), isNull);
+    await first.finishedMoving();
+    expect(keychain.reads, 3);
+    expect(await file.exists(), isTrue);
+    final mode = (await file.stat()).modeString();
+    expect(mode, 'rw-------', reason: 'only this user may read it');
+
+    // Every later start: straight from the file, keychain untouched.
+    final later = SecretStore(prefs, storage: keychain, file: file);
+    expect(await later.read('identity'), 'key-from-1.0');
+    expect(await later.read('trusted'), isNull);
+    await later.write('trusted', '["x"]');
+    await later.flush();
+    expect(await SecretStore(prefs, storage: keychain, file: file).read('trusted'), '["x"]');
+    expect(keychain.reads, 3);
   });
 }

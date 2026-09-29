@@ -248,7 +248,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         title: Text(
                           state.secrets.secure
                               ? 'Keys are kept in ${switch (hostOS) {
-                                  'ios' || 'macos' => 'the Keychain',
+                                  'ios' => 'the Keychain',
+                                  'macos' => 'a file only your Mac account can read',
                                   'android' => 'the Android Keystore',
                                   'windows' => 'Windows-protected storage',
                                   _ => 'the system keyring',

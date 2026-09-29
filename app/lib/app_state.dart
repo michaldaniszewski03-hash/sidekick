@@ -137,7 +137,7 @@ class AppState extends ChangeNotifier {
   late final Identity identity;
 
   /// Where pairing tokens, pairing keys and our private key live.
-  late final SecretStore secrets = SecretStore(_prefs);
+  late final SecretStore secrets;
   bool _droppedOldPairings = false;
 
   /// What each device we're pairing with showed us in the pairing request.
@@ -213,6 +213,12 @@ class AppState extends ChangeNotifier {
   /// Loads pairings and this device's identity from secure storage (moving
   /// them there from app settings, where versions before 0.5 kept them).
   Future<void> _loadSecrets() async {
+    // On a Mac, a file only this user can read: the keychain would keep
+    // asking for the password, since the app isn't signed by a paid account.
+    secrets = SecretStore(
+      _prefs,
+      file: Platform.isMacOS ? File(p.join((await getApplicationSupportDirectory()).path, 'secrets.json')) : null,
+    );
     List<String> list(String? json) => json == null ? const [] : [for (final e in jsonDecode(json) as List) '$e'];
     String? legacyList(String key) {
       final old = _prefs.getStringList(key);
@@ -252,6 +258,7 @@ class AppState extends ChangeNotifier {
       _savePaired();
     }
     identity = await _loadIdentity();
+    await secrets.finishedMoving();
   }
 
   void _saveTrusted() => unawaited(secrets.write('trusted', jsonEncode([for (final t in trust.peers) jsonEncode(t)])));

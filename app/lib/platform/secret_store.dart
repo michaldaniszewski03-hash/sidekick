@@ -1,25 +1,28 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Keeps Sidekick's secrets (this device's private key, pairing tokens and
-/// pairing keys) in the system's secure storage: the Keychain on iPhone and
-/// Mac, the Android Keystore, and DPAPI-encrypted storage on Windows.
+/// pairing keys) out of plain app settings:
+/// * iPhone: the Keychain; Android: the Keystore; Windows: DPAPI storage.
+/// * Mac: a file only your macOS account can read (like SSH keys). The Mac
+///   app isn't signed with a paid Apple account, so the Keychain would ask
+///   for your password again and again; [file] avoids that.
 ///
-/// Secrets saved by older versions in plain app settings are moved over the
-/// first time they're read. If secure storage doesn't work on this device,
+/// Secrets saved by older versions (app settings, or the Mac keychain in
+/// 1.0) are moved over once. If secure storage doesn't work on this device,
 /// secrets stay in app settings so Sidekick keeps working, and [secure]
 /// says so (Settings shows it).
 class SecretStore {
-  SecretStore(this._prefs, {FlutterSecureStorage? storage})
+  SecretStore(this._prefs, {FlutterSecureStorage? storage, this.file})
     : _storage =
           storage ??
           const FlutterSecureStorage(
             iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
-            // The data-protection keychain needs a paid Apple team; the
-            // login keychain works for this self-signed app. macOS may ask
-            // once after an update whether Sidekick may read it.
+            // Only read once on a Mac, to move keys from 1.0 into [file].
             mOptions: MacOsOptions(
               usesDataProtectionKeychain: false,
               accessibility: KeychainAccessibility.first_unlock_this_device,
@@ -28,7 +31,11 @@ class SecretStore {
 
   final SharedPreferences _prefs;
   final FlutterSecureStorage _storage;
+
+  /// Where secrets live instead of the system store (Mac).
+  final File? file;
   Future<void> _writes = Future.value();
+  Map<String, String>? _fileSecrets;
 
   /// False once secure storage failed and secrets fell back to app settings.
   bool secure = true;
@@ -36,9 +43,14 @@ class SecretStore {
   static String _key(String name) => 'sidekick.$name';
   static String _fallbackKey(String name) => 'secret.$name';
 
+  /// Marks a secrets file whose keychain copies were already moved over,
+  /// so the keychain is never touched again.
+  static const _movedFromKeychain = '_movedFromKeychain';
+
   /// Reads a secret. [legacy] reads where older versions kept it; a value
   /// found there is moved into secure storage.
   Future<String?> read(String name, {String? Function()? legacy, Future<void> Function()? removeLegacy}) async {
+    if (file != null) return _readFromFile(name, legacy: legacy, removeLegacy: removeLegacy);
     try {
       final value = await _storage.read(key: _key(name));
       if (value != null) return value;
@@ -60,6 +72,11 @@ class SecretStore {
 
   /// Saves a secret. Writes happen in order, so the latest always wins.
   Future<void> write(String name, String value) => _writes = _writes.then((_) async {
+    if (file != null) {
+      (await _loadFile())[name] = value;
+      await _saveFile();
+      return;
+    }
     try {
       await _storage.write(key: _key(name), value: value);
       // Read it back: some keychains accept writes they never store.
@@ -74,4 +91,82 @@ class SecretStore {
 
   /// Waits for pending writes (tests, shutdown).
   Future<void> flush() => _writes;
+
+  // ------------------------------------------------------------ file (Mac)
+
+  Future<String?> _readFromFile(
+    String name, {
+    String? Function()? legacy,
+    Future<void> Function()? removeLegacy,
+  }) async {
+    final secrets = await _loadFile();
+    final value = secrets[name];
+    if (value != null) return value;
+    String? old;
+    // Only on the first start after updating from 1.0: macOS may ask once
+    // for each item. Never again afterwards.
+    if (secrets[_movedFromKeychain] == null) {
+      try {
+        old = await _storage.read(key: _key(name));
+      } catch (_) {}
+    }
+    old ??= _prefs.getString(_fallbackKey(name)) ?? legacy?.call();
+    if (old != null) {
+      await write(name, old);
+      await _writes;
+      await _prefs.remove(_fallbackKey(name));
+      await removeLegacy?.call();
+    }
+    return old;
+  }
+
+  /// Call once all secrets were read at startup: from then on the keychain
+  /// is never asked again.
+  Future<void> finishedMoving() async {
+    if (file == null) return;
+    final secrets = await _loadFile();
+    if (secrets[_movedFromKeychain] != null) return;
+    secrets[_movedFromKeychain] = '1';
+    _writes = _writes.then((_) => _saveFile());
+    await _writes;
+  }
+
+  Future<Map<String, String>> _loadFile() async {
+    final cached = _fileSecrets;
+    if (cached != null) return cached;
+    final map = <String, String>{};
+    try {
+      final f = file!;
+      if (await f.exists()) {
+        final decoded = jsonDecode(await f.readAsString());
+        if (decoded is Map) {
+          for (final e in decoded.entries) {
+            if (e.value is String) map['${e.key}'] = e.value as String;
+          }
+        }
+      }
+    } catch (_) {
+      // Unreadable: start over (devices will ask to pair again).
+    }
+    return _fileSecrets = map;
+  }
+
+  /// Writes the file readable by this user only (0600), via a temporary
+  /// file so a crash never leaves half a file behind.
+  Future<void> _saveFile() async {
+    final f = file!;
+    await f.parent.create(recursive: true);
+    final tmp = File('${f.path}.tmp');
+    await tmp.writeAsString('');
+    await _restrict(tmp);
+    await tmp.writeAsString(jsonEncode(_fileSecrets ?? const {}), flush: true);
+    await tmp.rename(f.path);
+  }
+
+  static Future<void> _restrict(File f) async {
+    if (Platform.isWindows) return;
+    try {
+      await Process.run('/bin/chmod', ['600', f.path]);
+    } catch (_) {}
+  }
 }
