@@ -54,6 +54,11 @@ its biggest features and fixes, and bumps the website links (see
   website**; `3.png` is the "sk" monogram, used for every app icon and the
   logo inside the app (`app/assets/logo/logo.png`). `app/tool/make_icons.py`
   regenerates all of them; re-run it after changing 3.png.
+  - Mac and iPhone icons are Liquid Glass: `Runner/AppIcon.icon` (Icon
+    Composer format, in both Xcode projects' Resources) is what macOS/iOS
+    26+ show, rendered live by the system (Dark, Clear, Tinted too). The
+    `AppIcon.appiconset` PNGs are a pre-rendered glass look for older
+    systems. Both come from `make_icons.py`; Xcode 26 (CI) builds the .icon.
 - Mac: the file picker (`file_picker`) needs the
   `files.user-selected.read-write` entitlement and `prepareFilePicker()`
   (skips its sandbox check), or Send files silently does nothing.

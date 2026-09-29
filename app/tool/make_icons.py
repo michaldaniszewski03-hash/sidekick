@@ -11,15 +11,24 @@ Source:
 
 Writes the Windows .ico, Android launcher icons, macOS and iOS app icon sets,
 and the in-app logo. Re-run it whenever the artwork changes.
+
+Mac and iPhone get the Liquid Glass look:
+  * AppIcon.icon (Icon Composer format) in ios/Runner and macos/Runner: a
+    lavender gradient with the "sk" as a glass layer. On macOS/iOS 26 and
+    later the system renders it as real Liquid Glass (live highlights,
+    depth, and the Dark, Clear and Tinted looks). Xcode 26 builds it.
+  * The AppIcon.appiconset images are a pre-rendered glass version of the
+    same, for older macOS and iOS.
 """
 
 import io
 import json
+import shutil
 import struct
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "app"
@@ -68,6 +77,103 @@ def tile(size: int, *, radius_frac: float = 0.0, inset_frac: float = 0.0) -> Ima
     canvas.paste(fill, (0, 0), shape)
     paste_logo(canvas, box)
     return canvas.resize((size, size), Image.LANCZOS)
+
+
+# ------------------------------------------------------------ Liquid Glass
+
+GLASS_TOP = (222, 216, 255)  # light lavender at the top of the tile
+GLASS_BOTTOM = (160, 145, 250)  # deeper at the bottom
+INK_TOP = (78, 60, 150)  # the glyph is lighter where light hits it
+INK_BOTTOM = (34, 22, 74)
+
+
+def _vertical(size: int, top: tuple, bottom: tuple) -> Image.Image:
+    t = np.linspace(0, 1, size)[:, None, None]
+    rows = np.array(top, float) * (1 - t) + np.array(bottom, float) * t
+    return Image.fromarray(np.repeat(rows, size, axis=1).astype(np.uint8), "RGB").convert("RGBA")
+
+
+def _glyph_mask(s: int, frac: float) -> Image.Image:
+    """The monogram's alpha, centred on an s×s canvas."""
+    scale = min(s * frac / MONOGRAM.width, s * frac / MONOGRAM.height)
+    m = MONOGRAM.resize((round(MONOGRAM.width * scale), round(MONOGRAM.height * scale)), Image.LANCZOS)
+    out = Image.new("L", (s, s), 0)
+    out.paste(m, ((s - m.width) // 2, (s - m.height) // 2))
+    return out
+
+
+def glass_tile(size: int, *, radius_frac: float = 0.0, inset_frac: float = 0.0, full_bleed: bool = False) -> Image.Image:
+    """A pre-rendered Liquid Glass icon: frosted lavender, a soft sheen and
+    rim light, and a glossy "sk" with depth. Drawn at 4x, then downscaled."""
+    s = size * 4
+    inset = round(s * inset_frac)
+    w = s - 2 * inset
+    shape = Image.new("L", (s, s), 0)
+    ImageDraw.Draw(shape).rounded_rectangle((inset, inset, inset + w - 1, inset + w - 1), radius=round(w * radius_frac), fill=255)
+
+    tile = _vertical(s, GLASS_TOP, GLASS_BOTTOM)
+    # A broad sheen from the top left, like light through glass.
+    sheen = Image.new("L", (s, s), 0)
+    ImageDraw.Draw(sheen).ellipse((inset - w * 0.35, inset - w * 0.6, inset + w * 0.95, inset + w * 0.45), fill=120)
+    sheen = sheen.filter(ImageFilter.GaussianBlur(w * 0.08))
+    tile = Image.composite(Image.new("RGBA", (s, s), (255, 255, 255, 255)), tile, sheen)
+
+    # The glyph: a soft shadow under it, a vertical gradient in it, and a
+    # bright edge along its top where the light catches.
+    glyph = _glyph_mask(s, MONOGRAM_FRAC * (w / s))
+    shadow = ImageChops.offset(glyph, 0, round(w * 0.025)).filter(ImageFilter.GaussianBlur(w * 0.022))
+    tile = Image.composite(Image.new("RGBA", (s, s), INK_BOTTOM + (255,)), tile, shadow.point(lambda v: v * 0.35))
+    ink = _vertical(s, INK_TOP, INK_BOTTOM)
+    tile = Image.composite(ink, tile, glyph)
+    below = ImageChops.offset(glyph, 0, round(w * 0.008))
+    edge = ImageChops.subtract(glyph, below).filter(ImageFilter.GaussianBlur(w * 0.002))
+    tile = Image.composite(Image.new("RGBA", (s, s), (255, 255, 255, 255)), tile, edge.point(lambda v: v * 0.55))
+    # Inner gloss on the upper half of the glyph.
+    upper = Image.new("L", (s, s), 0)
+    ImageDraw.Draw(upper).rectangle((0, 0, s, s * 0.47), fill=70)
+    upper = upper.filter(ImageFilter.GaussianBlur(w * 0.03))
+    tile = Image.composite(Image.new("RGBA", (s, s), (255, 255, 255, 255)), tile, ImageChops.multiply(glyph, upper))
+
+    # Rim light: a thin bright line around the tile, strongest at the top.
+    ring = ImageChops.subtract(shape, shape.filter(ImageFilter.MinFilter(max(3, (round(w * 0.012) // 2) * 2 + 1))))
+    fade = _vertical(s, (255, 255, 255), (90, 90, 90)).convert("L")
+    tile = Image.composite(Image.new("RGBA", (s, s), (255, 255, 255, 255)), tile, ImageChops.multiply(ring, fade).point(lambda v: v * 0.7))
+
+    out = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    if full_bleed:
+        out = tile
+    else:
+        out.paste(tile, (0, 0), shape)
+    return out.resize((size, size), Image.LANCZOS)
+
+
+def icon_composer() -> None:
+    """AppIcon.icon for Xcode 26: the system turns it into Liquid Glass."""
+    canvas = 1024
+    glyph = _glyph_mask(canvas * 4, MONOGRAM_FRAC).resize((canvas, canvas), Image.LANCZOS)
+    layer = Image.new("RGBA", (canvas, canvas), INK + (255,))
+    layer.putalpha(glyph)
+
+    def srgb(c: tuple) -> str:
+        return "srgb:" + ",".join(f"{v / 255:.5f}" for v in c) + ",1.00000"
+
+    spec = {
+        "fill": {"linear-gradient": [srgb(GLASS_TOP), srgb(GLASS_BOTTOM)]},
+        "groups": [
+            {
+                "layers": [{"glass": True, "image-name": "sk.png", "name": "sk"}],
+                "shadow": {"kind": "layer-color", "opacity": 0.5},
+                "translucency": {"enabled": True, "value": 0.4},
+            }
+        ],
+        "supported-platforms": {"circles": ["watchOS"], "squares": "shared"},
+    }
+    for platform in ("ios", "macos"):
+        folder = APP / platform / "Runner/AppIcon.icon"
+        shutil.rmtree(folder, ignore_errors=True)
+        (folder / "Assets").mkdir(parents=True)
+        layer.save(folder / "Assets/sk.png", optimize=True)
+        (folder / "icon.json").write_text(json.dumps(spec, indent=2) + "\n")
 
 
 def png_bytes(im: Image.Image) -> bytes:
@@ -140,18 +246,19 @@ def appiconset(folder: Path, make) -> None:
 
 
 def macos() -> None:
-    # Big Sur style: rounded square with a margin, on a transparent canvas.
+    # Before macOS 26: a rounded square with a margin, on a transparent canvas.
     appiconset(
         APP / "macos/Runner/Assets.xcassets/AppIcon.appiconset",
-        lambda px: tile(px, radius_frac=0.225, inset_frac=0.1),
+        lambda px: glass_tile(px, radius_frac=0.225, inset_frac=0.1),
     )
 
 
 def ios() -> None:
-    # iOS rounds the corners itself and rejects transparency: full-bleed, RGB.
+    # Before iOS 26. iOS rounds the corners itself and rejects transparency:
+    # full-bleed, RGB.
     appiconset(
         APP / "ios/Runner/Assets.xcassets/AppIcon.appiconset",
-        lambda px: tile(px).convert("RGB"),
+        lambda px: glass_tile(px, full_bleed=True).convert("RGB"),
     )
 
 
@@ -172,5 +279,6 @@ if __name__ == "__main__":
     android()
     macos()
     ios()
+    icon_composer()
     in_app()
     print("Icons written.")
