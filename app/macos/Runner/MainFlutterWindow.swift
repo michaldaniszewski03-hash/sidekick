@@ -4,6 +4,7 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   private let native = SidekickNative()
+  private var ble: SidekickBLE?
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
@@ -18,6 +19,7 @@ class MainFlutterWindow: NSWindow {
       name: "sidekick/macos", binaryMessenger: flutterViewController.engine.binaryMessenger)
     let native = self.native
     channel.setMethodCallHandler { call, result in native.handle(call, result: result) }
+    ble = SidekickBLE.register(messenger: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

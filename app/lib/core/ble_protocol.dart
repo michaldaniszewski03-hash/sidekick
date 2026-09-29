@@ -33,6 +33,10 @@ final bleRxUuid = UUID.fromString('7c3e9a52-8b1f-4c2d-9e6a-3f5d1b2c4a01');
 final bleTxUuid = UUID.fromString('7c3e9a52-8b1f-4c2d-9e6a-3f5d1b2c4a02');
 final bleInfoUuid = UUID.fromString('7c3e9a52-8b1f-4c2d-9e6a-3f5d1b2c4a03');
 
+/// The name iPhones and Macs advertise, so they can be recognized even when
+/// a scanner doesn't get the service id.
+const bleAdvertisedName = 'Sidekick';
+
 /// Bytes of chunk overhead: flags + message id.
 const bleChunkHeader = 3;
 

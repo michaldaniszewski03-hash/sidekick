@@ -6,6 +6,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let media = IOSMedia()
+  private var ble: SidekickBLE?
 
   override func application(
     _ application: UIApplication,
@@ -20,6 +21,9 @@ import UIKit
       let channel = FlutterMethodChannel(name: "sidekick/ios", binaryMessenger: registrar.messenger())
       let media = self.media
       channel.setMethodCallHandler { call, result in media.handle(call, result: result) }
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SidekickBLE") {
+      ble = SidekickBLE.register(messenger: registrar.messenger())
     }
   }
 }

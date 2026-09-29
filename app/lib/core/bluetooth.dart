@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
-
+import 'ble_backend.dart';
 import 'ble_protocol.dart';
 import 'models.dart';
 import 'server.dart';
 
 /// A Sidekick device seen over Bluetooth.
 class BleSighting {
-  BleSighting(this.info, this.peripheral) : seen = DateTime.now();
+  BleSighting(this.info, this.bleId) : seen = DateTime.now();
   final DeviceInfo info;
-  final Peripheral peripheral;
+
+  /// Its Bluetooth id (it changes when the other device restarts Bluetooth).
+  final String bleId;
   DateTime seen;
 }
 
@@ -22,8 +22,8 @@ enum BluetoothStatus { starting, on, off, unauthorized, unsupported }
 /// A Sidekick device heard over Bluetooth, identified or not, for the
 /// Bluetooth pairing screen.
 class BleCandidate {
-  BleCandidate(this.peripheral);
-  Peripheral peripheral;
+  BleCandidate(this.bleId);
+  final String bleId;
   int rssi = 0;
   DateTime seen = DateTime.now();
 
@@ -41,14 +41,16 @@ class BleCandidate {
 /// by running them through the same handler as the Wi-Fi server.
 /// *Central role:* scans for other Sidekick devices, reads who they are, and
 /// opens request links to them on demand.
+///
+/// The radio itself is a [BleBackend]: Sidekick's own CoreBluetooth code on
+/// iPhone and Mac, the Bluetooth plugin on Android and Windows.
 class BluetoothService {
-  BluetoothService({required this.self, required this.server});
+  BluetoothService({required this.self, required this.server, BleBackend? backend})
+    : _ble = backend ?? BleBackend.forThisDevice();
 
   final DeviceInfo Function() self;
   final SidekickServer server;
-
-  final _peripheralManager = PeripheralManager();
-  final _centralManager = CentralManager();
+  final BleBackend _ble;
   late final _dispatcher = BleRequestDispatcher(server.handleBle, keyFor: server.bleKeyFor);
 
   final _found = StreamController<BleSighting>.broadcast();
@@ -61,43 +63,25 @@ class BluetoothService {
   // Finding others (central) and being found (peripheral) are separate:
   // some computers can scan but not advertise, and one mustn't block the
   // other.
-  BluetoothLowEnergyState _centralState = BluetoothLowEnergyState.unknown;
-  BluetoothLowEnergyState _peripheralState = BluetoothLowEnergyState.unknown;
+  BleRadio _centralState = BleRadio.unknown;
+  BleRadio _peripheralState = BleRadio.unknown;
 
   /// Can look for other devices.
-  bool get canScan => _centralState == BluetoothLowEnergyState.poweredOn;
+  bool get canScan => _centralState == BleRadio.on;
 
   /// Overall state for Settings: on if this device can find or be found.
   BluetoothStatus get status {
     final states = [_centralState, _peripheralState];
-    if (states.contains(BluetoothLowEnergyState.poweredOn)) return BluetoothStatus.on;
-    if (states.contains(BluetoothLowEnergyState.poweredOff)) return BluetoothStatus.off;
-    if (states.contains(BluetoothLowEnergyState.unauthorized)) return BluetoothStatus.unauthorized;
-    if (states.every((s) => s == BluetoothLowEnergyState.unsupported)) return BluetoothStatus.unsupported;
+    if (states.contains(BleRadio.on)) return BluetoothStatus.on;
+    if (states.contains(BleRadio.off)) return BluetoothStatus.off;
+    if (states.contains(BleRadio.unauthorized)) return BluetoothStatus.unauthorized;
+    if (states.every((s) => s == BleRadio.unsupported)) return BluetoothStatus.unsupported;
     return BluetoothStatus.starting;
   }
 
-  late final GATTCharacteristic _info = GATTCharacteristic.mutable(
-    uuid: bleInfoUuid,
-    properties: [GATTCharacteristicProperty.read],
-    permissions: [GATTCharacteristicPermission.read],
-    descriptors: [],
-  );
-  late final GATTCharacteristic _rx = GATTCharacteristic.mutable(
-    uuid: bleRxUuid,
-    properties: [GATTCharacteristicProperty.write, GATTCharacteristicProperty.writeWithoutResponse],
-    permissions: [GATTCharacteristicPermission.write],
-    descriptors: [],
-  );
-  late final GATTCharacteristic _tx = GATTCharacteristic.mutable(
-    uuid: bleTxUuid,
-    properties: [GATTCharacteristicProperty.notify],
-    permissions: [GATTCharacteristicPermission.read],
-    descriptors: [],
-  );
-
-  final _subscriptions = <StreamSubscription<Object>>[];
+  final _subscriptions = <StreamSubscription<Object?>>[];
   bool _advertising = false;
+  bool _advertiseRunning = false;
   bool _scanning = false;
 
   /// Whether other devices can find this one right now.
@@ -119,99 +103,86 @@ class BluetoothService {
     onChanged?.call();
   }
 
-  /// Peripherals we've identified, by Bluetooth UUID.
+  /// Devices we've identified, by Bluetooth id.
   final Map<String, DeviceInfo> _identified = {};
   final Set<String> _identifying = {};
+
+  Uint8List _infoBytes() => Uint8List.fromList(utf8.encode(jsonEncode(self().toJson())));
 
   // ------------------------------------------------------------ start / stop
 
   Future<void> start() async {
-    for (final authorize in [_peripheralManager.authorize, _centralManager.authorize]) {
-      try {
-        final ok = await authorize();
-        if (!ok) _log('Bluetooth permission was not granted');
-      } on UnsupportedError {
-        // Only Android asks at runtime; Apple platforms prompt on first use.
-      } catch (e) {
-        _log('Asking for Bluetooth permission failed: $e');
-      }
-    }
     _subscriptions
-      ..add(_peripheralManager.stateChanged.listen((e) => _onPeripheralState(e.state)))
-      ..add(_centralManager.stateChanged.listen((e) => _onCentralState(e.state)))
-      ..add(_peripheralManager.characteristicReadRequested.listen(_onRead))
-      ..add(_peripheralManager.characteristicWriteRequested.listen(_onWrite))
+      ..add(_ble.stateChanged.listen((_) => _onStates()))
+      ..add(_ble.messages.listen(_log))
+      ..add(_ble.discovered.listen(_onDiscovered))
+      ..add(_ble.notified.listen((e) => _links[e.$1]?.incoming.add(e.$2)))
+      ..add(_ble.disconnected.listen((id) => _links.remove(id)?.close()))
+      ..add(_ble.written.listen(_onWritten))
       ..add(
-        _peripheralManager.connectionStateChanged.listen((e) {
-          if (e.state == ConnectionState.disconnected) _dispatcher.forget('${e.central.uuid}');
-        }),
-      )
-      ..add(_centralManager.discovered.listen(_onDiscovered))
-      ..add(_centralManager.characteristicNotified.listen(_onNotified))
-      ..add(
-        _centralManager.connectionStateChanged.listen((e) {
-          if (e.state == ConnectionState.disconnected) _links.remove('${e.peripheral.uuid}')?.close();
+        _ble.centralGone.listen((central) {
+          _dispatcher.forget(central);
+          _notifyLength.remove(central);
+          _feeds.remove(central);
         }),
       );
+    try {
+      await _ble.start(info: _infoBytes);
+    } catch (e) {
+      _log('Bluetooth failed to start: $e');
+    }
     await refresh();
   }
 
-  /// Re-reads both states. Called regularly too, since some platforms only
-  /// report a change once and a missed event would leave Bluetooth "starting"
-  /// forever.
+  /// Re-reads both states (and this device's name for others to read).
+  /// Called regularly too, since some platforms only report a change once
+  /// and a missed event would leave Bluetooth "starting" forever.
   Future<void> refresh() async {
     try {
-      await _onCentralState(_centralManager.state);
-    } catch (_) {}
-    try {
-      await _onPeripheralState(_peripheralManager.state);
-    } catch (_) {}
-    // Advertising can stop on its own (another app, the OS); try again.
-    if (_peripheralState == BluetoothLowEnergyState.poweredOn && !_advertising) await _startAdvertising();
-  }
-
-  Future<void> _onCentralState(BluetoothLowEnergyState state) async {
-    if (state == _centralState) return;
-    _centralState = state;
-    _log('Finding devices: ${state.name}');
-    _status.add(status);
-  }
-
-  Future<void> _onPeripheralState(BluetoothLowEnergyState state) async {
-    if (state == _peripheralState) return;
-    _peripheralState = state;
-    _log('Being found: ${state.name}');
-    _status.add(status);
-    if (state == BluetoothLowEnergyState.poweredOn) {
-      await _startAdvertising();
-    } else {
-      _advertising = false;
+      await _ble.refresh();
+    } catch (e) {
+      _log('Reading the Bluetooth state failed: $e');
     }
+    await _onStates();
   }
+
+  Future<void> _onStates() async {
+    final central = _ble.centralState, peripheral = _ble.peripheralState;
+    if (central != _centralState) {
+      _centralState = central;
+      _log('Finding devices: ${central.name}');
+      _status.add(status);
+    }
+    if (peripheral != _peripheralState) {
+      _peripheralState = peripheral;
+      _log('Being found: ${peripheral.name}');
+      if (peripheral != BleRadio.on) _advertising = false;
+      _status.add(status);
+    }
+    // Advertising can stop on its own (another app, the OS); try again.
+    if (_peripheralState == BleRadio.on && !_advertising) await _startAdvertising();
+  }
+
+  DateTime? _lastAdvertiseFailure;
 
   Future<void> _startAdvertising() async {
-    if (_advertising) return;
+    if (_advertising || _advertiseRunning) return;
+    // Don't hammer an adapter that can't advertise; try once a minute.
+    final failed = _lastAdvertiseFailure;
+    if (failed != null && DateTime.now().difference(failed) < const Duration(minutes: 1)) return;
+    _advertiseRunning = true;
     try {
-      await _peripheralManager.removeAllServices();
-      await _peripheralManager.addService(
-        GATTService(uuid: bleServiceUuid, isPrimary: true, includedServices: [], characteristics: [_info, _rx, _tx]),
-      );
-      // Just the service UUID: advertisements are tiny (31 bytes), and
-      // iPhones/Macs can't advertise anything else. Names come from `info`.
-      await _peripheralManager.startAdvertising(
-        Advertisement(
-          // iPhones and Macs also advertise the name "Sidekick", so they can
-          // be recognized even when a scanner doesn't get the service id.
-          // (On Android a name here would rename the phone's Bluetooth.)
-          name: Platform.isIOS || Platform.isMacOS ? advertisedName : null,
-          serviceUUIDs: [bleServiceUuid],
-        ),
-      );
+      await _ble.advertise().timeout(const Duration(seconds: 15));
       _advertising = true;
+      _lastAdvertiseFailure = null;
       _log('Advertising: other devices can find this one');
     } catch (e) {
       // Some adapters can't act as a peripheral; we can still scan.
-      _log("Can't advertise, so other devices won't find this one (it can still find them): $e");
+      _lastAdvertiseFailure = DateTime.now();
+      _log("Can't advertise, so other devices won't find this one (it can still find them): ${_describe(e)}");
+    } finally {
+      _advertiseRunning = false;
+      onChanged?.call();
     }
   }
 
@@ -219,16 +190,12 @@ class BluetoothService {
   /// settings if it was denied for good.
   Future<void> requestPermission() async {
     try {
-      final ok = await _centralManager.authorize();
-      if (!ok) await _centralManager.showAppSettings();
-    } on UnsupportedError {
-      try {
-        await _centralManager.showAppSettings();
-      } catch (_) {}
+      await _ble.requestPermission();
     } catch (_) {}
   }
 
   Future<void> stop() async {
+    _searching = false;
     for (final s in _subscriptions) {
       await s.cancel();
     }
@@ -238,56 +205,36 @@ class BluetoothService {
     }
     _links.clear();
     try {
-      await _peripheralManager.stopAdvertising();
-      if (_scanning) await _centralManager.stopDiscovery();
+      await _ble.stop();
     } catch (_) {}
   }
+
+  static String _describe(Object e) => switch (e) {
+    TimeoutException() => 'it took too long to answer',
+    StateError(:final message) => message,
+    _ => '$e'.replaceFirst(RegExp(r'^PlatformException\(\w+, '), '').replaceFirst(RegExp(r', null, null\)$'), ''),
+  };
 
   // ------------------------------------------------------------ peripheral role
 
-  Future<void> _onRead(GATTCharacteristicReadRequestedEventArgs e) async {
-    try {
-      if (e.characteristic.uuid != bleInfoUuid) {
-        await _peripheralManager.respondReadRequestWithError(e.request, error: GATTError.readNotPermitted);
-        return;
-      }
-      final value = Uint8List.fromList(utf8.encode(jsonEncode(self().toJson())));
-      final offset = e.request.offset.clamp(0, value.length);
-      await _peripheralManager.respondReadRequestWithValue(e.request, value: Uint8List.sublistView(value, offset));
-    } catch (_) {}
-  }
+  final Map<String, Future<int>> _notifyLength = {};
+  final Map<String, Future<void>> _feeds = {};
 
-  final Map<String, int> _notifyLength = {};
-
-  Future<void> _onWrite(GATTCharacteristicWriteRequestedEventArgs e) async {
-    if (e.characteristic.uuid != bleRxUuid) {
-      try {
-        await _peripheralManager.respondWriteRequestWithError(e.request, error: GATTError.writeNotPermitted);
-      } catch (_) {}
-      return;
-    }
-    try {
-      await _peripheralManager.respondWriteRequest(e.request);
-    } catch (_) {
-      // Writes without response need no answer.
-    }
-    final central = e.central;
-    final key = '${central.uuid}';
-    final maxChunk = _notifyLength[key] ??= await _maxNotify(central);
-    await _dispatcher.onChunk(
-      key,
-      e.request.value,
-      maxChunk: maxChunk,
-      sendChunk: (chunk) => _peripheralManager.notifyCharacteristic(central, _tx, value: chunk),
-    );
-  }
-
-  Future<int> _maxNotify(Central central) async {
-    try {
-      return (await _peripheralManager.getMaximumNotifyLength(central)).clamp(20, 512);
-    } catch (_) {
-      return 20;
-    }
+  /// Feeds request chunks to the dispatcher strictly in the order they
+  /// arrived (the first one waits for the packet size).
+  void _onWritten((String, Uint8List) e) {
+    final (central, chunk) = e;
+    final length = _notifyLength[central] ??= _ble.maxNotify(central).catchError((Object _) => 20);
+    _feeds[central] = (_feeds[central] ?? Future.value()).then((_) async {
+      final maxChunk = await length;
+      // Not awaited: the chunk is taken in right away, answering can take
+      // a while and mustn't hold up the next request.
+      unawaited(
+        _dispatcher
+            .onChunk(central, chunk, maxChunk: maxChunk, sendChunk: (response) => _ble.notify(central, response))
+            .catchError((Object err) => _log('Answering a Bluetooth request failed: ${_describe(err)}')),
+      );
+    });
   }
 
   // ------------------------------------------------------------ central role
@@ -309,7 +256,7 @@ class BluetoothService {
     _unfiltered = !_unfiltered;
     onChanged?.call();
     try {
-      await _centralManager.startDiscovery(serviceUUIDs: _unfiltered ? null : [bleServiceUuid]);
+      await _ble.startScan(filtered: !_unfiltered);
       await Future<void>.delayed(duration);
       if (_unfiltered) {
         lastDevicesAround = _seenAny.length;
@@ -318,10 +265,10 @@ class BluetoothService {
         _log('Looked for Sidekick: $_seenThisScan found');
       }
     } catch (e) {
-      _log('Scan failed: $e');
+      _log('Scan failed: ${_describe(e)}');
     } finally {
       try {
-        await _centralManager.stopDiscovery();
+        await _ble.stopScan();
       } catch (_) {}
       _scanning = false;
       lastScan = DateTime.now();
@@ -336,10 +283,6 @@ class BluetoothService {
   /// How many Bluetooth devices of any kind the last full scan heard (null
   /// before one ran). Zero means this device hears nothing at all.
   int? lastDevicesAround;
-
-  static const advertisedName = 'Sidekick';
-
-  static bool isSidekick(Advertisement a) => a.serviceUUIDs.contains(bleServiceUuid) || a.name == advertisedName;
 
   final Set<String> _everSeen = {};
 
@@ -385,102 +328,84 @@ class BluetoothService {
     if (c == null || c.identifying) return;
     c.error = null;
     _identified.remove(key);
-    if (_identifying.add(key)) unawaited(_identify(c.peripheral).whenComplete(() => _identifying.remove(key)));
+    if (_identifying.add(key)) unawaited(_identify(key).whenComplete(() => _identifying.remove(key)));
   }
 
-  void _onDiscovered(DiscoveredEventArgs e) {
-    final key = '${e.peripheral.uuid}';
+  void _onDiscovered(BleDiscovery d) {
+    final key = d.id;
     _seenAny.add(key);
-    // Filtered scans only report Sidekick devices; unfiltered ones report
-    // everything, so check.
-    if (_unfiltered && !isSidekick(e.advertisement)) return;
+    if (!d.sidekick) return;
     _seenThisScan++;
-    final candidate = candidates.putIfAbsent(key, () => BleCandidate(e.peripheral))
-      ..peripheral = e.peripheral
-      ..rssi = e.rssi
+    final candidate = candidates.putIfAbsent(key, () => BleCandidate(key))
+      ..rssi = d.rssi
       ..seen = DateTime.now();
     onChanged?.call();
     // A failed device isn't retried on every advertisement; Retry does it.
     if (candidate.error != null && _identified[key] == null) return;
-    if (_everSeen.add(key)) _log('In range: a Sidekick device (signal ${e.rssi} dBm), asking its name…');
+    if (_everSeen.add(key)) _log('In range: a Sidekick device (signal ${d.rssi} dBm), asking its name…');
     final known = _identified[key];
     if (known != null) {
-      if (known.id != self().id) _found.add(BleSighting(known, e.peripheral));
+      if (known.id != self().id) _found.add(BleSighting(known, key));
       return;
     }
-    if (_identifying.add(key)) unawaited(_identify(e.peripheral).whenComplete(() => _identifying.remove(key)));
+    if (_identifying.add(key)) unawaited(_identify(key).whenComplete(() => _identifying.remove(key)));
   }
 
-  /// Connects briefly to read who a newly seen peripheral is. Only the
-  /// minimum (connect, find the service, read one value) so that as few
-  /// things as possible can go wrong; request links set up the rest later.
-  Future<void> _identify(Peripheral peripheral) async {
-    final key = '${peripheral.uuid}';
-    // An open request link already knows the way.
-    final open = _links[key];
+  /// Connects briefly to read who a newly seen device is. Only the minimum
+  /// (connect, find the service, read one value) so that as few things as
+  /// possible can go wrong; request links set up the rest later.
+  Future<void> _identify(String key) async {
     final candidate = candidates[key]
       ?..identifying = true
       ..error = null;
     onChanged?.call();
     try {
-      final Uint8List raw;
-      if (open != null) {
-        raw = await open.readInfo();
-      } else {
-        await _centralManager.connect(peripheral).timeout(const Duration(seconds: 15));
-        final services = await _centralManager.discoverGATT(peripheral).timeout(const Duration(seconds: 15));
-        final service = services.where((s) => s.uuid == bleServiceUuid).firstOrNull;
-        if (service == null) throw StateError('it has no Sidekick service');
-        final info = service.characteristics.where((c) => c.uuid == bleInfoUuid).firstOrNull;
-        if (info == null) throw StateError('it has no info characteristic');
-        raw = await _centralManager.readCharacteristic(peripheral, info).timeout(const Duration(seconds: 10));
-      }
+      final raw = await _ble.identify(key).timeout(const Duration(seconds: 20));
       final info = DeviceInfo.fromJson(jsonDecode(utf8.decode(raw)) as Map<String, dynamic>);
       _identified[key] = info;
       candidate?.info = info;
       if (info.id != self().id) {
         _log('Found ${info.name} (${info.platform.name})');
-        _found.add(BleSighting(info, peripheral));
+        _found.add(BleSighting(info, key));
       }
     } catch (e) {
-      // Not reachable right now; we'll try again when it shows up again.
-      _log("A Sidekick device is in range but reading its name failed: $e");
-      candidate?.error = e is TimeoutException ? 'It took too long to answer' : '$e';
+      // A connection that never happens would otherwise stay pending.
+      if (e is TimeoutException && !_links.containsKey(key)) unawaited(_ble.close(key).catchError((_) {}));
+      _log('A Sidekick device is in range but reading its name failed: ${_describe(e)}');
+      candidate?.error = e is FormatException ? 'It runs an older Sidekick' : _describe(e);
     } finally {
       candidate?.identifying = false;
       onChanged?.call();
-      // Don't hold the connection just for a name; phones allow only a few.
-      if (open == null) {
-        try {
-          await _centralManager.disconnect(peripheral);
-        } catch (_) {}
-      }
     }
   }
 
   final Map<String, _Link> _links = {};
+  final Map<String, Future<_Link>> _opening = {};
 
-  Future<_Link> _link(Peripheral peripheral) async {
-    final key = '${peripheral.uuid}';
-    final existing = _links[key];
-    if (existing != null) return existing;
-    final link = await _Link.open(_centralManager, peripheral);
-    _links[key] = link;
-    return link;
+  Future<_Link> _link(String id) {
+    final existing = _links[id];
+    if (existing != null) return Future.value(existing);
+    return _opening[id] ??= () async {
+      try {
+        final maxWrite = await _ble.open(id).timeout(const Duration(seconds: 20));
+        return _links[id] = _Link(_ble, id, maxWrite);
+      } catch (e) {
+        unawaited(_ble.close(id).catchError((_) {}));
+        _log('Connecting over Bluetooth failed: ${_describe(e)}');
+        rethrow;
+      } finally {
+        unawaited(_opening.remove(id));
+      }
+    }();
   }
 
-  void _onNotified(GATTCharacteristicNotifiedEventArgs e) {
-    if (e.characteristic.uuid != bleTxUuid) return;
-    _links['${e.peripheral.uuid}']?.incoming.add(e.value);
-  }
-
-  /// A request client for [peripheral]. It connects on first use and
-  /// reconnects if the link drops.
-  BleRpcClient clientFor(Peripheral peripheral) {
+  /// A request client for the device with Bluetooth id [id]. It connects on
+  /// first use and reconnects if the link drops.
+  BleRpcClient clientFor(String id) {
     final incoming = StreamController<Uint8List>();
     StreamSubscription<Uint8List>? relay;
     Future<_Link> ready() async {
-      final link = await _link(peripheral);
+      final link = await _link(id);
       relay ??= link.incoming.stream.listen(incoming.add, onDone: () => relay = null);
       return link;
     }
@@ -495,51 +420,19 @@ class BluetoothService {
 
 /// One connection from us (central) to another device's Sidekick service.
 class _Link {
-  _Link._(this._central, this.peripheral, this._rx, this._info, this.maxWrite);
+  _Link(this._ble, this.id, this.maxWrite);
 
-  final CentralManager _central;
-  final Peripheral peripheral;
-  final GATTCharacteristic _rx;
-  final GATTCharacteristic _info;
+  final BleBackend _ble;
+  final String id;
   final int maxWrite;
   final incoming = StreamController<Uint8List>.broadcast();
 
-  static Future<_Link> open(CentralManager central, Peripheral peripheral) async {
-    await central.connect(peripheral).timeout(const Duration(seconds: 15));
-    try {
-      await central.requestMTU(peripheral, mtu: 517);
-    } catch (_) {
-      // Only Android lets apps ask; elsewhere the OS negotiates.
-    }
-    final services = await central.discoverGATT(peripheral);
-    final service = services.firstWhere((s) => s.uuid == bleServiceUuid);
-    GATTCharacteristic find(UUID id) => service.characteristics.firstWhere((c) => c.uuid == id);
-    final rx = find(bleRxUuid);
-    final tx = find(bleTxUuid);
-    await central.setCharacteristicNotifyState(peripheral, tx, state: true);
-    int maxWrite;
-    try {
-      maxWrite = await central.getMaximumWriteLength(peripheral, type: GATTCharacteristicWriteType.withResponse);
-    } catch (_) {
-      maxWrite = 20;
-    }
-    return _Link._(central, peripheral, rx, find(bleInfoUuid), maxWrite.clamp(20, 512));
-  }
-
-  Future<Uint8List> readInfo() => _central.readCharacteristic(peripheral, _info);
-
-  Future<void> write(Uint8List chunk) => _central.writeCharacteristic(
-    peripheral,
-    _rx,
-    value: chunk,
-    // With response: slower, but nothing gets dropped when buffers fill.
-    type: GATTCharacteristicWriteType.withResponse,
-  );
+  Future<void> write(Uint8List chunk) => _ble.write(id, chunk).timeout(const Duration(seconds: 15));
 
   Future<void> close() async {
     await incoming.close();
     try {
-      await _central.disconnect(peripheral);
+      await _ble.close(id);
     } catch (_) {}
   }
 }

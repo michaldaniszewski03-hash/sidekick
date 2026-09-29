@@ -586,7 +586,7 @@ class AppState extends ChangeNotifier {
       return PeerClient.forDevice(d);
     }
     return _bleClients[d.id] ??= PeerClient.bluetooth(
-      bt.clientFor(sighting.peripheral),
+      bt.clientFor(sighting.bleId),
       token: d.token,
       seal: BleSeal(senderId: id, key: base64.decode(d.key)),
     );
@@ -598,7 +598,7 @@ class AppState extends ChangeNotifier {
     final sighting = _bleSeen[target.id];
     final bt = bluetooth;
     if (sighting == null || bt == null) throw SidekickException('${target.name} is out of reach.');
-    return PeerClient.bluetooth(bt.clientFor(sighting.peripheral));
+    return PeerClient.bluetooth(bt.clientFor(sighting.bleId));
   }
 
   /// Whether this device and [d] can set up a direct Wi-Fi link: an
@@ -723,7 +723,7 @@ class AppState extends ChangeNotifier {
     final previous = _bleSeen[id];
     _bleSeen[id] = sighting;
     // A new Bluetooth address (phone restarted Bluetooth) needs a new link.
-    if (previous != null && previous.peripheral.uuid != sighting.peripheral.uuid) _bleClients.remove(id);
+    if (previous != null && previous.bleId != sighting.bleId) _bleClients.remove(id);
     notifyListeners();
   }
 
