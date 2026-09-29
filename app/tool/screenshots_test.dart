@@ -82,7 +82,9 @@ void main() {
 
     await tester.runAsync(() async {
       await _loadFonts();
-      home = await Directory.systemTemp.createTemp('sidekick_shots');
+      // A friendly folder name: it shows up in the Files breadcrumb.
+      home = Directory(p.join((await Directory.systemTemp.createTemp('sidekick_shots')).path, 'Internal storage'))
+        ..createSync();
       for (final dir in ['Camera', 'Download', 'Music', 'Documents']) {
         Directory(p.join(home.path, dir)).createSync();
       }
@@ -102,6 +104,8 @@ void main() {
         files: FileService(home: home.path),
         media: _FakeMedia(),
         input: UnsupportedInputInjector(),
+        // Pretend remote control is allowed, so Remote shows a live touchpad.
+        inputReady: () async => true,
         receiveDir: () async => home.path,
       );
       await phone.start(port: 0, address: InternetAddress.loopbackIPv4);
@@ -136,8 +140,17 @@ void main() {
       }
     }
 
-    Future<void> shot(String name) async {
+    /// Waits until the page has loaded (no spinner left), up to ~10 s.
+    Future<void> loaded() async {
+      for (var i = 0; i < 20 && find.byType(CircularProgressIndicator).evaluate().isNotEmpty; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 500)));
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    Future<void> shot(String name, {bool waitForData = false}) async {
       await settle();
+      if (waitForData) await loaded();
       final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       await tester.runAsync(() async {
         final image = await render.toImage();
@@ -157,20 +170,20 @@ void main() {
     expect(state.welcomed, isTrue);
     await shot('1-devices');
     await tester.tap(find.text('Files').last);
-    await shot('2-files');
+    await shot('2-files', waitForData: true);
     if (find.text('Home').evaluate().isNotEmpty) {
       await tester.tap(find.text('Home'));
-      await shot('2b-files-folder');
+      await shot('2b-files-folder', waitForData: true);
     }
     await tester.tap(find.text('Remote').last);
-    await shot('3-remote');
+    await shot('3-remote', waitForData: true);
     await tester.tap(find.text('Media').last);
-    await shot('4-media');
+    await shot('4-media', waitForData: true);
     await tester.tap(find.text('Settings').last);
     await shot('5-settings');
     state.setThemeMode(ThemeMode.dark);
     await tester.tap(find.text('Media').last);
-    await shot('6-media-dark');
+    await shot('6-media-dark', waitForData: true);
 
     // Phone layout.
     state.setThemeMode(ThemeMode.light);
@@ -178,7 +191,7 @@ void main() {
     tester.view.physicalSize = const Size(412, 915);
     for (final (tab, name) in [('Devices', 'devices'), ('Files', 'files'), ('Remote', 'remote'), ('Media', 'media')]) {
       await tester.tap(find.text(tab).last);
-      await shot('phone-$name');
+      await shot('phone-$name', waitForData: name != 'devices');
     }
 
     // The welcome flow on a phone.
@@ -221,7 +234,7 @@ void main() {
       await phone.stop();
       await state.server.stop();
       await state.discovery.stop();
-      await home.delete(recursive: true);
+      await home.parent.delete(recursive: true);
     });
     await tester.pumpWidget(const SizedBox());
   });

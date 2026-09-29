@@ -54,18 +54,18 @@ void main() {
 
     final mac = PairedDevice(
       id: 'mac',
-      name: 'MacBook Pro',
-      platform: DevicePlatform.macos,
+      name: 'Pixel 9',
+      platform: DevicePlatform.android,
       token: 't',
       fingerprint: 'f',
       key: 'k',
     );
     for (final phase in SendPhase.values) {
-      final send = OutgoingSend(device: mac, names: ['IMG_2041.HEIC', 'IMG_2042.HEIC', 'Trip.mov'], total: 48000000)
+      final send = OutgoingSend(device: mac, names: ['IMG_2041.HEIC', 'IMG_2042.HEIC', 'Trip.mov'], total: 47100000)
         ..phase = phase
         ..done = 31000000
         ..current = 2
-        ..error = phase == SendPhase.failed ? "Can't reach MacBook Pro." : null;
+        ..error = phase == SendPhase.failed ? "Can't reach Pixel 9." : null;
       await tester.pumpWidget(
         RepaintBoundary(
           key: key,
@@ -93,7 +93,6 @@ void main() {
         OfferedFile('IMG_2041.HEIC', 3200000),
         OfferedFile('IMG_2042.HEIC', 2900000),
         OfferedFile('Trip.mov', 41000000),
-        OfferedFile('Notes.pdf', 120000),
       ],
     );
     await tester.pumpWidget(
