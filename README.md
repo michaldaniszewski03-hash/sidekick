@@ -63,6 +63,16 @@ The Mac's media controls use the play/pause and skip media keys plus the system 
    then open **Sidekick → Install**.
 4. New releases appear under **My Apps → Updates**.
 
+**Or TestFlight (needs a paid Apple Developer account, $99/year):** CI uploads every release to TestFlight once these are set up. On the iPhone you then just open **TestFlight → Sidekick → Install**, and new releases arrive as updates. No 7-day limit (each build lasts 90 days), and it works on iOS betas.
+
+1. Enroll at [developer.apple.com/programs/enroll](https://developer.apple.com/programs/enroll) with the Apple ID that's signed in on your iPhone (approval usually takes up to 2 days).
+2. In [Certificates, Identifiers & Profiles → Identifiers](https://developer.apple.com/account/resources/identifiers/list), add an **App ID** with the explicit bundle ID `dev.sidekick.sidekick`. If that's taken, use your own (e.g. `com.yourname.sidekick`) and add it as the repository **variable** `IOS_BUNDLE_ID`.
+3. In [App Store Connect](https://appstoreconnect.apple.com) → **Apps → + → New App**: iOS, any name that's free on the store (e.g. "Sidekick Remote"), that bundle ID, any SKU.
+4. **Users and Access → Integrations → App Store Connect API → Team Keys → +** with **Admin** access (needed so CI can create the signing certificate). Note the **Key ID** and **Issuer ID**, and download the `.p8` file (you can only download it once).
+5. Your **Team ID** is under [Membership details](https://developer.apple.com/account).
+6. In this repository on GitHub: **Settings → Secrets and variables → Actions → New repository secret**, add `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8` (paste the whole `.p8` file, including the BEGIN/END lines).
+7. Publish a release. About 15 minutes after the upload, the build shows up in App Store Connect → **TestFlight**. Answer the export-compliance question once per build, add yourself to an **Internal Testing** group, then install it from the TestFlight app.
+
 With a free Apple ID, sideloaded apps must be refreshed every 7 days. AltStore does it by itself in the background while your Mac with AltServer is on the same Wi-Fi; SideStore does it on the phone. You can also still install the `.ipa` from the release with [Sideloadly](https://sideloadly.io).
 
 On iOS, Sidekick **controls your computer and shares files both ways**:
