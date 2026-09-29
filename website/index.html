@@ -1390,9 +1390,15 @@ addEventListener('scroll', () => topbar.classList.toggle('scrolled', scrollY > 8
 
 /* ---------- scale hero stage to fit */
 const stageWrap = $('#stageWrap');
+// The scale also sets the stage's height, which would re-trigger the observer
+// in the same frame ("ResizeObserver loop completed…"). Apply it on the next
+// frame, and only when it changes.
+let stageScale = '';
 new ResizeObserver(([e]) => {
-  const s = Math.min(1, e.contentRect.width / 640);
-  stageWrap.style.setProperty('--s', s.toFixed(4));
+  const s = Math.min(1, e.contentRect.width / 640).toFixed(4);
+  if (s === stageScale) return;
+  stageScale = s;
+  requestAnimationFrame(() => stageWrap.style.setProperty('--s', s));
 }).observe(stageWrap);
 
 /* ---------- media controller demo */
