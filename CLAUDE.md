@@ -102,6 +102,16 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.1.2
+- **Sending photos and files over Bluetooth works reliably** (iPhone → Mac
+  failed with "Message failed authentication"): files go in 32 KB sealed
+  parts, each checked on arrival and resent if a packet got damaged,
+  instead of one multi-MB message that one bad packet could fail.
+  - Big messages are no longer refused for taking longer than 2 minutes.
+  - Message ids start at random per client, so parallel clients can't mix
+    chunks; re-pairing takes effect right away over Bluetooth.
+  - If it still fails, the error says what it means (and to re-pair).
+
 ### 2.1.1
 - **"Connect device"** (was "Add device") on the Devices tab, with plain
   options: **Wi-Fi**, **Bluetooth** and **IP address**, each with one short
