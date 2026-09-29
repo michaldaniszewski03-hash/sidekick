@@ -205,7 +205,11 @@ void main() {
       expect(listing.map((e) => e.name), contains('hello.txt'));
 
       final local = File(p.join(home.path, 'photo.jpg'))..writeAsBytesSync(List.generate(20000, (i) => i % 256));
+      final received = pc.events.where((e) => e is FileReceived).cast<FileReceived>().first;
       final saved = await client.upload(local);
+      expect(client.lastSecurity?.bluetooth, isTrue, reason: 'the reply decrypted with the pairing key');
+      expect((await received).security.bluetooth, isTrue);
+      expect(anon.lastSecurity, isNull, reason: 'pairing requests are not sealed');
       expect(File(saved).readAsBytesSync(), local.readAsBytesSync());
 
       final dest = File(p.join(home.path, 'copy.txt'));

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../app_state.dart';
+import '../core/crypto.dart';
 import '../core/models.dart';
 import 'widgets.dart';
 
@@ -339,51 +340,70 @@ class _Transfers extends StatelessWidget {
                 ],
               ),
               for (final t in transfers)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    children: [
-                      Icon(
-                        switch (t.state) {
-                          TransferState.running => t.upload ? Icons.upload : Icons.download,
-                          TransferState.done => Icons.check_circle,
-                          TransferState.failed => Icons.error,
-                        },
-                        size: 20,
-                        color: switch (t.state) {
-                          TransferState.failed => scheme.error,
-                          TransferState.done => scheme.primary,
-                          TransferState.running => scheme.onSurfaceVariant,
-                        },
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            if (t.state == TransferState.running)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: LinearProgressIndicator(value: t.fraction),
-                              )
-                            else
-                              Text(
-                                t.state == TransferState.failed
-                                    ? t.error ?? 'Failed'
-                                    : '${t.upload ? 'Sent to' : 'Saved from'} ${t.deviceName} · ${formatBytes(t.total)}',
-                                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                              ),
-                          ],
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: t.security == null ? null : () => showTransferSecurity(context, state, t),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          switch (t.state) {
+                            TransferState.running => t.upload ? Icons.upload : Icons.download,
+                            TransferState.done => Icons.check_circle,
+                            TransferState.failed => Icons.error,
+                          },
+                          size: 20,
+                          color: switch (t.state) {
+                            TransferState.failed => scheme.error,
+                            TransferState.done => scheme.primary,
+                            TransferState.running => scheme.onSurfaceVariant,
+                          },
                         ),
-                      ),
-                      if (t.localPath != null && canRevealFiles)
-                        IconButton(
-                          tooltip: 'Show in folder',
-                          icon: const Icon(Icons.folder_open_outlined, size: 20),
-                          onPressed: () => revealInFolder(t.localPath!),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(t.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              if (t.state == TransferState.running)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: LinearProgressIndicator(value: t.fraction),
+                                )
+                              else
+                                Text(
+                                  t.state == TransferState.failed
+                                      ? t.error ?? 'Failed'
+                                      : '${t.upload
+                                            ? 'Sent to'
+                                            : t.received
+                                            ? 'Received from'
+                                            : 'Saved from'} ${t.deviceName} · ${formatBytes(t.total)}',
+                                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                                ),
+                              if (t.security case final security?)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.lock, size: 13, color: scheme.primary),
+                                      const SizedBox(width: 4),
+                                      Text(security.label, style: TextStyle(fontSize: 12, color: scheme.primary)),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                    ],
+                        if (t.localPath != null && canRevealFiles)
+                          IconButton(
+                            tooltip: 'Show in folder',
+                            icon: const Icon(Icons.folder_open_outlined, size: 20),
+                            onPressed: () => revealInFolder(t.localPath!),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
             ],
@@ -392,4 +412,51 @@ class _Transfers extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Explains how one file was protected, from what the connection reported.
+void showTransferSecurity(BuildContext context, AppState state, Transfer t) {
+  final security = t.security!;
+  final peer = t.peerFingerprint;
+  final code = peer == null ? null : securityCode(state.identity.fingerprint, peer);
+  final cert = security.certificate;
+  String grouped(String hex) => [for (var i = 0; i < 32 && i < hex.length; i += 4) hex.substring(i, i + 4)].join(' ');
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      icon: const Icon(Icons.lock_outline),
+      title: Text(security.bluetooth ? 'Encrypted over Bluetooth' : 'Encrypted over Wi-Fi'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            security.bluetooth
+                ? '"${t.name}" was cut into pieces and every piece was encrypted with AES-256-GCM, using the key '
+                      'only ${t.deviceName} and this device have (made when you paired them). Each piece is also '
+                      'checked for tampering, and a copy recorded and replayed later is refused.'
+                : '"${t.name}" traveled over TLS, the same encryption banks and HTTPS websites use. Before sending '
+                      'anything, Sidekick checked that ${t.deviceName} presented the exact certificate it paired with.',
+          ),
+          if (cert != null) ...[
+            const SizedBox(height: 12),
+            Text('Certificate of ${t.deviceName}', style: Theme.of(context).textTheme.titleSmall),
+            SelectableText('${grouped(cert)}…', style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+          ],
+          if (code != null) ...[
+            const SizedBox(height: 12),
+            Text('Security code', style: Theme.of(context).textTheme.titleSmall),
+            Text(code, style: Theme.of(context).textTheme.titleLarge?.copyWith(letterSpacing: 2)),
+            const SizedBox(height: 4),
+            Text(
+              'Matches the code ${t.deviceName} shows for this device (Settings → Paired devices)? Then nobody '
+              'could read this file on the way.',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+    ),
+  );
 }

@@ -60,6 +60,16 @@ class PeerClient {
 
   bool get viaBluetooth => ble != null;
 
+  /// How the last successful request was protected: the certificate the
+  /// device presented over Wi-Fi, or Bluetooth sealing. Null until a request
+  /// succeeds (and over Bluetooth before pairing, which isn't sealed).
+  TransferSecurity? lastSecurity;
+
+  void _noteTls(HttpClientResponse res) {
+    final cert = res.certificate;
+    if (cert != null) lastSecurity = TransferSecurity.wifi(certificate: fingerprintOf(cert.der));
+  }
+
   /// The IP address to remember for this device (none over Bluetooth).
   String? get _address => ble == null ? host : null;
 
@@ -101,6 +111,7 @@ class PeerClient {
       }
       final res = await req.close().timeout(timeout);
       if (res.statusCode >= 400) throw await _failure(res);
+      _noteTls(res);
       return res;
     } on HandshakeException {
       throw _tlsFailure();
@@ -151,6 +162,9 @@ class PeerClient {
     } on StateError catch (e) {
       throw SidekickException(e.message);
     }
+    // A success over a sealed link only completes if the reply decrypted
+    // with our pairing key (see BleRpcClient).
+    if (res.status < 400 && seal != null) lastSecurity = const TransferSecurity.bluetooth();
     if (res.status >= 400) {
       var message = 'Request failed (${res.status})';
       try {
@@ -388,6 +402,7 @@ class PeerClient {
       );
       final res = await req.close();
       if (res.statusCode >= 400) throw await _failure(res);
+      _noteTls(res);
       final json = jsonDecode(await utf8.decodeStream(res)) as Map<String, dynamic>;
       return json['path'] as String;
     } on HandshakeException {

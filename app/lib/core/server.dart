@@ -50,10 +50,11 @@ class Unpaired extends ServerEvent {
 }
 
 class FileReceived extends ServerEvent {
-  FileReceived(this.from, this.file, this.size);
+  FileReceived(this.from, this.file, this.size, this.security);
   final TrustedPeer from;
   final File file;
   final int size;
+  final TransferSecurity security;
 }
 
 /// A peer tried remote control, but this device can't accept it yet (e.g.
@@ -478,7 +479,12 @@ class SidekickServer {
       final expected = int.tryParse(r.headers['content-length'] ?? '');
       if (expected != null && expected != size) throw const FileSystemException('Upload was cut off');
       final saved = await partial.rename((await uniqueFile(dir, name)).path);
-      _events.add(FileReceived(_peer(r), saved, size));
+      // Over Bluetooth, _authed only lets sealed requests through; everything
+      // else arrived over this TLS-only server.
+      final security = _overBluetooth(r)
+          ? const TransferSecurity.bluetooth()
+          : TransferSecurity.wifi(certificate: _peer(r).fingerprint);
+      _events.add(FileReceived(_peer(r), saved, size, security));
       return _json({'path': saved.path, 'size': size});
     } catch (_) {
       await sink.close().catchError((_) {});

@@ -270,6 +270,10 @@ void main() {
     final received = pc.server.events.only<FileReceived>().first;
     final upload = File(p.join(tmp.path, 'photo.jpg'))..writeAsBytesSync(List.filled(300000, 7));
     final saved = await client.upload(upload);
+    // The label comes from the connection: the certificate the PC presented.
+    expect(client.lastSecurity?.bluetooth, isFalse);
+    expect(client.lastSecurity?.certificate, pc.identity.fingerprint);
+    expect((await received).security.bluetooth, isFalse);
     expect(p.dirname(saved), p.join(pc.home.path, 'Received'));
     expect(File(saved).lengthSync(), 300000);
     expect((await received).from.id, phone.id);

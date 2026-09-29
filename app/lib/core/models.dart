@@ -302,3 +302,19 @@ class MediaStatus {
 
 /// Commands the media endpoint accepts.
 enum MediaAction { playPause, play, pause, next, previous, stop, seek, setVolume, volumeUp, volumeDown, toggleMute }
+
+/// How a file was protected on its way between two devices. Recorded from
+/// the connection that actually carried it, never assumed.
+class TransferSecurity {
+  const TransferSecurity.wifi({required this.certificate}) : bluetooth = false;
+  const TransferSecurity.bluetooth() : bluetooth = true, certificate = null;
+
+  /// Sealed with AES-256-GCM under the pairing key (else TLS over Wi-Fi).
+  final bool bluetooth;
+
+  /// SHA-256 of the certificate the other device presented over Wi-Fi,
+  /// which matched the one it paired with (else the connection is refused).
+  final String? certificate;
+
+  String get label => bluetooth ? 'Encrypted · Bluetooth' : 'Encrypted · Wi-Fi';
+}

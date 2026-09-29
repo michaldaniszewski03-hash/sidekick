@@ -48,9 +48,18 @@ class Transfer {
   final String deviceName;
   int done = 0;
   int total = 0;
+
+  /// How it was protected in transit; set once it's done.
+  TransferSecurity? security;
+
+  /// The other device's certificate, for the security code.
+  String? peerFingerprint;
   TransferState state = TransferState.running;
   String? error;
   String? localPath;
+
+  /// Sent to us by the other device (not something we downloaded).
+  bool received = false;
 
   double? get fraction => total > 0 ? done / total : null;
 }
@@ -789,7 +798,20 @@ class AppState extends ChangeNotifier {
         _savePaired();
         notifyListeners();
         if (name != null) _notices.add(Notice('$name unpaired from this device'));
-      case FileReceived(:final from, :final file):
+      case FileReceived(:final from, :final file, :final size, :final security):
+        transfers.insert(
+          0,
+          Transfer(name: p.basename(file.path), upload: false, deviceName: from.name)
+            ..done = size
+            ..total = size
+            ..state = TransferState.done
+            ..received = true
+            ..security = security
+            ..peerFingerprint = from.fingerprint
+            ..localPath = file.path,
+        );
+        if (transfers.length > 50) transfers.removeLast();
+        notifyListeners();
         _notices.add(Notice('Received ${p.basename(file.path)} from ${from.name}', revealPath: file.path));
       case InputBlocked(:final peer):
         final where = Platform.isMacOS
@@ -828,7 +850,7 @@ class AppState extends ChangeNotifier {
   }
 
   Transfer _startTransfer(String name, PairedDevice d, {required bool upload}) {
-    final t = Transfer(name: name, upload: upload, deviceName: d.name);
+    final t = Transfer(name: name, upload: upload, deviceName: d.name)..peerFingerprint = d.fingerprint;
     transfers.insert(0, t);
     if (transfers.length > 50) transfers.removeLast();
     notifyListeners();
@@ -866,7 +888,9 @@ class AppState extends ChangeNotifier {
           remoteDir: remoteDir,
           onProgress: (a, b) => _progress(t, a, b),
         );
-        t.state = TransferState.done;
+        t
+          ..state = TransferState.done
+          ..security = client.lastSecurity;
       } catch (e) {
         t
           ..state = TransferState.failed
@@ -886,6 +910,7 @@ class AppState extends ChangeNotifier {
       final file = await client.download(entry.path, dest, onProgress: (a, b) => _progress(t, a, b));
       t
         ..state = TransferState.done
+        ..security = client.lastSecurity
         ..localPath = file.path;
       notifyListeners();
       _notices.add(Notice('Saved ${entry.name}', revealPath: file.path));
