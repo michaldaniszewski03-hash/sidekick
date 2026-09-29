@@ -32,30 +32,34 @@ class DevicesPage extends StatelessWidget {
               : '${paired.length} paired · $online connected'
                     '${nearby.isEmpty ? '' : ' · ${nearby.length} nearby'}',
           actions: [
-            // One button; the ways to add a device are in its menu.
+            // One button; the ways to connect a device are in its menu,
+            // each with a line saying when to use it.
             MenuAnchor(
               alignmentOffset: const Offset(0, 6),
               builder: (context, controller, _) => FilledButton.tonalIcon(
                 onPressed: () => controller.isOpen ? controller.close() : controller.open(),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add device'),
+                icon: const Icon(Icons.add_link_rounded),
+                label: const Text('Connect device'),
               ),
               menuChildren: [
                 MenuItemButton(
-                  leadingIcon: const Icon(Icons.wifi_find_rounded),
+                  leadingIcon: const Icon(Icons.wifi_rounded),
                   onPressed: state.scanning ? null : state.scanNetwork,
-                  child: Text(state.scanning ? 'Searching Wi-Fi…' : 'Search Wi-Fi'),
+                  child: _MenuOption(
+                    title: 'Wi-Fi',
+                    detail: state.scanning ? 'Looking on this network…' : 'Find devices on the same Wi-Fi',
+                  ),
                 ),
                 if (state.bluetooth != null)
                   MenuItemButton(
-                    leadingIcon: const Icon(Icons.bluetooth_searching_rounded),
+                    leadingIcon: const Icon(Icons.bluetooth_rounded),
                     onPressed: () => showBluetoothPairing(context, state),
-                    child: const Text('Pair over Bluetooth'),
+                    child: const _MenuOption(title: 'Bluetooth', detail: 'When there\'s no shared Wi-Fi'),
                   ),
                 MenuItemButton(
-                  leadingIcon: const Icon(Icons.add_link_rounded),
+                  leadingIcon: const Icon(Icons.dialpad_rounded),
                   onPressed: () => _addByIp(context),
-                  child: const Text('Add by IP address'),
+                  child: const _MenuOption(title: 'IP address', detail: 'Type the other device\'s address'),
                 ),
               ],
             ),
@@ -593,6 +597,29 @@ class _Searching extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A menu entry: what it is, and a short line on when to use it.
+class _MenuOption extends StatelessWidget {
+  const _MenuOption({required this.title, required this.detail});
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title, style: text.titleSmall),
+          Text(detail, style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       ),
     );

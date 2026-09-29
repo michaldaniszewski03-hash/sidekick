@@ -173,6 +173,10 @@ void main() {
     await tester.tap(find.text('Start using Sidekick'));
     expect(state.welcomed, isTrue);
     await shot('1-devices');
+    await tester.tap(find.text('Connect device'));
+    await shot('1b-devices-connect-menu');
+    await tester.tapAt(const Offset(640, 700)); // close the menu
+    await settle();
     await tester.tap(find.text('Files').last);
     await shot('2-files', waitForData: true);
     if (find.text('Home').evaluate().isNotEmpty) {
