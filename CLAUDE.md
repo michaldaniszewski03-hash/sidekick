@@ -115,6 +115,20 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.2.0
+- **Liquid Glass app icon on Mac and iPhone:** an Icon Composer icon
+  (`AppIcon.icon`) that macOS/iOS 26+ render as live glass (Dark, Clear and
+  Tinted too); older systems get a pre-rendered glass version.
+- **Media removed** (tab, device-card shortcut, Settings switch, Android
+  notification access, native media code): iPhones can't control other
+  apps' playback, so it never worked the same everywhere.
+- **Bluetooth "Message failed authentication" says what to do:**
+  - Devices announce their Sidekick release; a paired card shows "Update
+    Sidekick on it" when the other one is older, and failed sends say so.
+  - Different pairing keys are detected (key fingerprint in every sealed
+    message) and shown as "Pair again" instead of endless retries.
+  - Every refused Bluetooth message is logged on the receiver with why.
+
 ### 2.1.2
 - **Sending photos and files over Bluetooth works reliably** (iPhone → Mac
   failed with "Message failed authentication"): files go in 32 KB sealed
