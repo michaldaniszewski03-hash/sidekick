@@ -117,8 +117,10 @@ void main() {
     await first.finishedMoving();
     expect(keychain.reads, 3);
     expect(await file.exists(), isTrue);
-    final mode = (await file.stat()).modeString();
-    expect(mode, 'rw-------', reason: 'only this user may read it');
+    // Unix permissions (the file store is for Macs; Windows has no chmod).
+    if (!Platform.isWindows) {
+      expect((await file.stat()).modeString(), 'rw-------', reason: 'only this user may read it');
+    }
 
     // Every later start: straight from the file, keychain untouched.
     final later = SecretStore(prefs, storage: keychain, file: file);
