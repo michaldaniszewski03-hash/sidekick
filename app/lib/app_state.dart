@@ -22,7 +22,6 @@ import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
 import 'platform/media.dart';
-import 'platform/screen.dart';
 
 enum TransferState { running, done, failed }
 
@@ -83,16 +82,12 @@ class AppState extends ChangeNotifier {
   final Map<String, DateTime> _lastContact = {};
   final List<Transfer> transfers = [];
   final Map<String, TrustedPeer> activeRemoteSessions = {};
-
-  /// Who is watching our screen right now.
-  final Map<String, TrustedPeer> activeScreenViewers = {};
   List<String> addresses = [];
   String? selectedId;
   String? networkError;
 
   late final InputInjector input = InputInjector.forCurrentPlatform();
   late final MediaController media = MediaController.forCurrentPlatform(input);
-  late final ScreenCapturer screen = ScreenCapturer.forCurrentPlatform();
   late final FileService files;
   late final SidekickServer server;
 
@@ -152,7 +147,6 @@ class AppState extends ChangeNotifier {
       files: _prefs.getBool('allowFiles') ?? true,
       media: _prefs.getBool('allowMedia') ?? true,
       input: _prefs.getBool('allowInput') ?? true,
-      screen: _prefs.getBool('allowScreen') ?? true,
     );
     _receiveDir = _prefs.getString('receiveDir');
     selectedId = _prefs.getString('selectedId');
@@ -199,7 +193,6 @@ class AppState extends ChangeNotifier {
       files: permissions.files && (!Platform.isAndroid || AndroidBridge.permissions.allFiles),
       media: permissions.media && media.supported,
       input: permissions.input && input.supported,
-      screen: permissions.screen && screen.supported,
     ),
   );
 
@@ -230,7 +223,6 @@ class AppState extends ChangeNotifier {
       receiveDir: receiveDir,
       permissions: () => permissions,
       link: directLink,
-      screen: screen,
       inputReady: _inputReady,
     );
     server.events.listen(_onServerEvent);
@@ -731,13 +723,6 @@ class AppState extends ChangeNotifier {
             ? 'Allow Sidekick in Settings → Accessibility (if it\'s already on there, remove it and add it again).'
             : 'Allow remote control in Settings.';
         _notices.add(Notice('${peer.name} tried to control this device. $where'));
-      case ScreenSessionChanged(:final peer, :final active):
-        if (active) {
-          activeScreenViewers[peer.id] = peer;
-        } else {
-          activeScreenViewers.remove(peer.id);
-        }
-        notifyListeners();
       case RemoteSessionChanged(:final peer, :final active):
         if (active) {
           activeRemoteSessions[peer.id] = peer;
@@ -868,8 +853,7 @@ class AppState extends ChangeNotifier {
     _prefs
       ..setBool('allowFiles', value.files)
       ..setBool('allowMedia', value.media)
-      ..setBool('allowInput', value.input)
-      ..setBool('allowScreen', value.screen);
+      ..setBool('allowInput', value.input);
     discovery.announce();
     notifyListeners();
   }

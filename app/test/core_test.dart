@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -13,7 +12,6 @@ import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/input.dart';
 import 'package:sidekick/platform/media.dart';
-import 'package:sidekick/platform/screen.dart';
 import 'package:sidekick/ui/remote_page.dart';
 
 extension<T> on Stream<T> {
@@ -26,8 +24,6 @@ class FakeInput implements InputInjector {
   bool get supported => true;
   @override
   void moveBy(int dx, int dy) => log.add('move $dx $dy');
-  @override
-  void moveTo(double x, double y) => log.add('moveTo $x $y');
   @override
   void button(MouseButton button, {required bool down}) => log.add('${down ? 'down' : 'up'} ${button.name}');
   @override
@@ -62,27 +58,6 @@ class FakeMedia implements MediaController {
   Future<void> dispose() async {}
 }
 
-class FakeScreen implements ScreenCapturer {
-  var frames = 0;
-  var started = 0;
-  var stopped = 0;
-  String? refuse;
-  @override
-  bool get supported => true;
-  @override
-  Future<void> start({required int maxWidth, void Function(String message)? onStatus}) async {
-    if (refuse != null) throw ScreenCaptureException(refuse!);
-    started++;
-    onStatus?.call('Waiting…');
-  }
-
-  @override
-  Future<Uint8List?> frame({required int maxWidth, required int quality}) async =>
-      Uint8List.fromList([0xff, 0xd8, ++frames, maxWidth ~/ 10, quality]);
-  @override
-  Future<void> stop() async => stopped++;
-}
-
 /// One simulated device: a server plus what it knows.
 class Node {
   Node(this.name, Directory root)
@@ -97,7 +72,6 @@ class Node {
       input: input,
       receiveDir: () async => p.join(home.path, 'Received'),
       permissions: () => permissions,
-      screen: screen,
     );
   }
 
@@ -108,7 +82,6 @@ class Node {
   final trust = TrustStore();
   final input = FakeInput();
   final media = FakeMedia();
-  final screen = FakeScreen();
   Permissions permissions = const Permissions();
   late final SidekickServer server;
 
@@ -348,8 +321,6 @@ void main() {
     session
       ..move(3.6, -2)
       ..click(button: 'right')
-      ..moveTo(0.1, 0.2)
-      ..moveTo(0.25, 1.5)
       ..buttonDown()
       ..buttonUp()
       ..scroll(dy: -120)
@@ -361,72 +332,12 @@ void main() {
     expect(pc.input.log, [
       'move 3 -2',
       'click right 1',
-      'moveTo 0.25 1.0', // coalesced to the latest, and clamped
       'down left',
       'up left',
       'scroll 0 -120',
       'key ctrl+c',
       'text hi',
     ]);
-  });
-
-  test('screen frames arrive one per ack, and sharing can be stopped', () async {
-    final client = await pair();
-    final watching = pc.server.events.only<ScreenSessionChanged>();
-    final started = watching.first;
-    final session = await client.openScreen(maxWidth: 1280, quality: 50);
-    expect((await started).active, isTrue);
-
-    final frames = StreamIterator(session.frames);
-    expect(await frames.moveNext(), isTrue);
-    expect(frames.current, [0xff, 0xd8, 1, 128, 50]);
-    // No ack yet: no second frame.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(pc.screen.frames, 1);
-    session.ack();
-    expect(await frames.moveNext(), isTrue);
-    expect(frames.current[2], 2);
-
-    final ended = watching.firstWhere((e) => !e.active);
-    pc.server.stopScreenSharing();
-    session.ack();
-    await ended;
-    await session.closed.timeout(const Duration(seconds: 2));
-    expect(session.error, contains('stopped'));
-    expect(pc.screen.stopped, 1);
-  });
-
-  test('reopening the screen (e.g. full window) keeps capture running', () async {
-    final client = await pair();
-    final first = await client.openScreen();
-    final firstFrames = StreamIterator(first.frames);
-    expect(await firstFrames.moveNext(), isTrue);
-
-    // The new view opens before the old one has finished closing.
-    final second = await client.openScreen();
-    await first.close();
-    final frames = StreamIterator(second.frames);
-    expect(await frames.moveNext(), isTrue);
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(pc.screen.stopped, 0, reason: 'the old session must not stop the new capture');
-    second.ack();
-    expect(await frames.moveNext(), isTrue);
-    expect(pc.server.events, isNotNull);
-
-    await second.close();
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(pc.screen.stopped, 1);
-  });
-
-  test('screen sharing respects the permission and reports why it failed', () async {
-    final client = await pair();
-    pc.screen.refuse = 'Allow Screen Recording on the Mac';
-    final session = await client.openScreen();
-    await session.closed.timeout(const Duration(seconds: 2));
-    expect(session.error, 'Allow Screen Recording on the Mac');
-
-    pc.permissions = const Permissions(screen: false);
-    await expectLater(client.openScreen(), throwsA(isA<SidekickException>()));
   });
 
   test('unpairing ends a live remote-control session', () async {

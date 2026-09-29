@@ -91,16 +91,6 @@ class _ShellState extends State<Shell> {
       listenable: state,
       builder: (context, _) => Column(
         children: [
-          if (state.activeScreenViewers.isNotEmpty)
-            MaterialBanner(
-              backgroundColor: scheme.errorContainer,
-              leading: Icon(Icons.screen_share_outlined, color: scheme.onErrorContainer),
-              content: Text(
-                '${state.activeScreenViewers.values.map((p) => p.name).join(', ')} can see your screen',
-                style: TextStyle(color: scheme.onErrorContainer),
-              ),
-              actions: [TextButton(onPressed: state.server.stopScreenSharing, child: const Text('Stop sharing'))],
-            ),
           if (state.activeRemoteSessions.isNotEmpty)
             MaterialBanner(
               backgroundColor: scheme.tertiaryContainer,

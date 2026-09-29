@@ -14,7 +14,6 @@ import '../platform/files.dart';
 import '../platform/hotspot.dart';
 import '../platform/input.dart';
 import '../platform/media.dart';
-import '../platform/screen.dart';
 import 'ble_protocol.dart';
 import 'crypto.dart';
 import 'models.dart';
@@ -22,18 +21,13 @@ import 'trust.dart';
 
 /// What this device lets paired peers do. Mirrors the toggles in Settings.
 class Permissions {
-  const Permissions({this.files = true, this.media = true, this.input = true, this.screen = true});
+  const Permissions({this.files = true, this.media = true, this.input = true});
   final bool files;
   final bool media;
   final bool input;
-  final bool screen;
 
-  Permissions copyWith({bool? files, bool? media, bool? input, bool? screen}) => Permissions(
-    files: files ?? this.files,
-    media: media ?? this.media,
-    input: input ?? this.input,
-    screen: screen ?? this.screen,
-  );
+  Permissions copyWith({bool? files, bool? media, bool? input}) =>
+      Permissions(files: files ?? this.files, media: media ?? this.media, input: input ?? this.input);
 }
 
 sealed class ServerEvent {}
@@ -60,13 +54,6 @@ class FileReceived extends ServerEvent {
   final TrustedPeer from;
   final File file;
   final int size;
-}
-
-/// A peer started or stopped watching our screen.
-class ScreenSessionChanged extends ServerEvent {
-  ScreenSessionChanged(this.peer, {required this.active});
-  final TrustedPeer peer;
-  final bool active;
 }
 
 /// A peer tried remote control, but this device can't accept it yet (e.g.
@@ -99,10 +86,8 @@ class SidekickServer {
     required this.receiveDir,
     Permissions Function()? permissions,
     DirectLink? link,
-    ScreenCapturer? screen,
     Future<bool> Function()? inputReady,
-  }) : screen = screen ?? UnsupportedScreenCapturer(),
-       inputReady = inputReady ?? (() async => input.supported),
+  }) : inputReady = inputReady ?? (() async => input.supported),
        permissions = permissions ?? (() => const Permissions()),
        link = link ?? NoDirectLink();
 
@@ -121,19 +106,6 @@ class SidekickServer {
   /// Whether we can inject input right now. Re-checks the OS permission, so
   /// granting it takes effect without restarting.
   final Future<bool> Function() inputReady;
-
-  /// Captures our screen for peers that view it.
-  final ScreenCapturer screen;
-  TrustedPeer? _screenViewer;
-  bool _stopScreen = false;
-
-  /// Bumped for every new viewing session, so a session that was replaced
-  /// (e.g. the viewer switched to full window) never stops the new one's
-  /// capture on its way out.
-  int _screenSession = 0;
-
-  /// Ends the current screen-sharing session (the viewer can start a new one).
-  void stopScreenSharing() => _stopScreen = _screenViewer != null;
 
   /// Opens or joins a direct Wi-Fi link when a peer asks over Bluetooth.
   final DirectLink link;
@@ -224,7 +196,6 @@ class SidekickServer {
       ..post('/v1/media', _authed(_mediaAction, (p) => p.media))
       ..get('/v1/input/status', _authed(_inputStatus, (p) => p.input))
       ..get('/v1/input', _authed(_inputSocket, (p) => p.input))
-      ..get('/v1/screen', _authed(_screenSocket, (p) => p.screen))
       ..post('/v1/link/hotspot', _authed(_linkHotspot))
       ..post('/v1/link/join', _authed(_linkJoin))
       ..post('/v1/link/release', _authed(_linkRelease));
@@ -548,75 +519,6 @@ class SidekickServer {
       _ => 'Settings',
     };
     return _error(503, "${me.name} hasn't allowed remote control yet. On ${me.name}, open Sidekick → $where.");
-  }
-
-  /// Streams our screen as JPEG frames. The viewer acks each frame before
-  /// it gets the next, so frames never pile up on a slow link; at most ~20
-  /// per second. One viewer at a time.
-  FutureOr<Response> _screenSocket(Request r) async {
-    if (!screen.supported) return _error(501, "This device can't share its screen.");
-    if (_overBluetooth(r)) return _error(400, 'Seeing the screen needs Wi-Fi.');
-    final q = r.url.queryParameters;
-    final maxWidth = (int.tryParse(q['maxWidth'] ?? '') ?? 1600).clamp(320, 3840);
-    final quality = (int.tryParse(q['quality'] ?? '') ?? 60).clamp(20, 95);
-    final peer = _peer(r);
-    return webSocketHandler((channel, _) async {
-      void say(String type, String? message) => channel.sink.add(jsonEncode({'t': type, 'message': message}));
-      final busy = _screenViewer;
-      if (busy != null && busy.id != peer.id) {
-        say('error', '${busy.name} is already viewing this screen.');
-        await channel.sink.close();
-        return;
-      }
-      _screenViewer = peer;
-      _stopScreen = false;
-      final mine = ++_screenSession;
-      bool current() => _screenSession == mine;
-      var open = true;
-      var acked = Completer<void>()..complete();
-      channel.stream.listen(
-        (data) {
-          if (data is String && data.contains('"ack"') && !acked.isCompleted) acked.complete();
-        },
-        onDone: () {
-          open = false;
-          if (!acked.isCompleted) acked.complete();
-        },
-        cancelOnError: true,
-      );
-      bool stillAllowed() => trust.byId(peer.id)?.token == peer.token && permissions().screen;
-      _events.add(ScreenSessionChanged(peer, active: true));
-      try {
-        await screen.start(maxWidth: maxWidth, onStatus: (m) => say('status', m));
-        say('status', null);
-        while (open && current() && stillAllowed() && !_stopScreen) {
-          // Wait for the viewer, but don't stall forever on a lost ack.
-          await acked.future.timeout(const Duration(seconds: 5), onTimeout: () {});
-          if (!open || !current()) break;
-          final started = DateTime.now();
-          final frame = await screen.frame(maxWidth: maxWidth, quality: quality);
-          if (frame != null && open) {
-            acked = Completer<void>();
-            channel.sink.add(frame);
-          }
-          final wait = const Duration(milliseconds: 50) - DateTime.now().difference(started);
-          if (wait > Duration.zero) await Future<void>.delayed(wait);
-        }
-        if (open && current() && (!stillAllowed() || _stopScreen)) {
-          say('error', 'Screen sharing was stopped on the other device.');
-        }
-      } on ScreenCaptureException catch (e) {
-        if (open && current()) say('error', e.message);
-      } finally {
-        // A newer session from the same viewer keeps the capture running.
-        if (current()) {
-          await screen.stop();
-          _screenViewer = null;
-          _events.add(ScreenSessionChanged(peer, active: false));
-        }
-        await channel.sink.close();
-      }
-    }, pingInterval: const Duration(seconds: 10))(r);
   }
 
   FutureOr<Response> _inputSocket(Request r) async {

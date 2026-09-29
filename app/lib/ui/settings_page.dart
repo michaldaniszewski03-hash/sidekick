@@ -107,21 +107,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                   child: const Text('Grant'),
                                 ),
                         ),
-                        ListTile(
-                          leading: const Icon(Icons.screen_share_outlined),
-                          title: const Text('Screen Recording'),
-                          subtitle: const Text(
-                            'So your other devices can see this screen. After allowing it, quit and reopen Sidekick. '
-                            'If it stops working after an update, remove Sidekick from that list and add it again.',
-                          ),
-                          isThreeLine: true,
-                          trailing: MacBridge.screenRecording
-                              ? const Icon(Icons.check_circle, color: Colors.green)
-                              : FilledButton.tonal(
-                                  onPressed: MacBridge.requestScreenRecording,
-                                  child: const Text('Grant'),
-                                ),
-                        ),
                       ],
                     ),
                   ],
@@ -216,8 +201,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           value: perms.media,
                           onChanged: (v) => state.setPermissions(perms.copyWith(media: v)),
                         ),
-                      // iOS never lets another device control an iPhone or see its
-                      // screen, so those switches only exist elsewhere.
+                      // iOS never lets another device control an iPhone, so the
+                      // switch only exists elsewhere.
                       if (!Platform.isIOS) ...[
                         SwitchListTile(
                           secondary: const Icon(Icons.mouse_outlined),
@@ -226,18 +211,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           value: perms.input,
                           onChanged: (v) => state.setPermissions(perms.copyWith(input: v)),
                         ),
-                        if (state.screen.supported)
-                          SwitchListTile(
-                            secondary: const Icon(Icons.screen_share_outlined),
-                            title: const Text('See this screen'),
-                            subtitle: Text(
-                              Platform.isAndroid
-                                  ? 'Paired devices can ask to see this screen; you allow it each time'
-                                  : 'Paired devices can see this screen live, with a banner here while they do',
-                            ),
-                            value: perms.screen,
-                            onChanged: (v) => state.setPermissions(perms.copyWith(screen: v)),
-                          ),
                       ],
                     ],
                   ),

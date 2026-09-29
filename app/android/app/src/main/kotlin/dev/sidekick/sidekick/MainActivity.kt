@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.media.projection.MediaProjectionManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Environment
@@ -23,13 +22,9 @@ import io.flutter.plugin.common.MethodChannel
  * Dart side uses for everything Android-specific: permissions, remote input,
  * media sessions and the multicast lock.
  */
-private const val REQUEST_SCREEN = 7
-
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var hotspot: WifiManager.LocalOnlyHotspotReservation? = null
-    private var pendingScreen: MethodChannel.Result? = null
-    private var pendingMaxWidth = 1280
     private lateinit var media: MediaBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -41,12 +36,6 @@ class MainActivity : FlutterActivity() {
                     when (call.method) {
                         "acquireMulticastLock" -> {
                             acquireMulticastLock()
-                            result.success(null)
-                        }
-                        "screenStart" -> startScreen(call.argument<Number>("maxWidth")?.toInt() ?: 1280, result)
-                        "screenFrame" -> screenFrame(call.argument<Number>("quality")?.toInt() ?: 60, result)
-                        "screenStop" -> {
-                            stopService(Intent(this, ScreenCaptureService::class.java))
                             result.success(null)
                         }
                         "startHotspot" -> startHotspot(result)
@@ -114,58 +103,6 @@ class MainActivity : FlutterActivity() {
         multicastLock = wifi.createMulticastLock("sidekick-discovery").apply {
             setReferenceCounted(false)
             acquire()
-        }
-    }
-
-    // ---------------------------------------------------------------- screen sharing
-
-    /** Asks the person holding the phone to allow screen sharing, then starts capturing. */
-    private fun startScreen(maxWidth: Int, result: MethodChannel.Result) {
-        if (ScreenCaptureService.instance != null) {
-            result.success(null)
-            return
-        }
-        // A newer request replaces one nobody answered.
-        pendingScreen?.error("screen", "Screen sharing wasn't allowed on the phone.", null)
-        pendingScreen = result
-        pendingMaxWidth = maxWidth
-        try {
-            val manager = getSystemService(MediaProjectionManager::class.java)
-            startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_SCREEN)
-        } catch (e: Exception) {
-            pendingScreen = null
-            result.error("screen", "Open Sidekick on the phone, then try again.", null)
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_SCREEN) return
-        val result = pendingScreen ?: return
-        pendingScreen = null
-        if (resultCode != RESULT_OK || data == null) {
-            result.error("screen", "Screen sharing wasn't allowed on the phone.", null)
-            return
-        }
-        ScreenCaptureService.onReady = { error ->
-            runOnUiThread { if (error == null) result.success(null) else result.error("screen", error, null) }
-        }
-        val intent = Intent(this, ScreenCaptureService::class.java)
-            .putExtra("code", resultCode)
-            .putExtra("data", data)
-            .putExtra("maxWidth", pendingMaxWidth)
-        startForegroundService(intent)
-    }
-
-    private fun screenFrame(quality: Int, result: MethodChannel.Result) {
-        val service = ScreenCaptureService.instance
-        if (service == null) {
-            result.error("screen", "Screen sharing stopped on the phone.", null)
-            return
-        }
-        service.handler.post {
-            val bytes = runCatching { service.frame(quality) }.getOrNull()
-            runOnUiThread { result.success(bytes) }
         }
     }
 

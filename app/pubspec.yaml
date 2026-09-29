@@ -50,6 +50,8 @@ dependencies:
   basic_utils: ^5.8.2
   pointycastle: ^4.0.0
   crypto: ^3.0.7
+  device_info_plus: ^13.2.0
+  flutter_secure_storage: ^11.2.0
 
 dev_dependencies:
   flutter_test:

@@ -1,8 +1,6 @@
 import ApplicationServices
 import Cocoa
-import CoreImage
 import FlutterMacOS
-import ScreenCaptureKit
 
 class MainFlutterWindow: NSWindow {
   private let native = SidekickNative()
@@ -30,44 +28,10 @@ class MainFlutterWindow: NSWindow {
 final class SidekickNative {
   private let input = MacInput()
   private let media = MacMedia()
-  private let screen = ScreenStreamer()
-
-  /// Screen sharing for a paired device that views this Mac.
-  private func handleScreen(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    let args = call.arguments as? [String: Any] ?? [:]
-    let maxWidth = (args["maxWidth"] as? NSNumber)?.intValue ?? 1600
-    switch call.method {
-    case "screenStart":
-      screen.start(maxWidth: maxWidth) { error in
-        result(error.map { FlutterError(code: "screen", message: $0, details: nil) })
-      }
-    case "screenFrame":
-      let quality = (args["quality"] as? NSNumber)?.doubleValue ?? 60
-      screen.frame(quality: quality / 100) { data, error in
-        if let error = error {
-          result(FlutterError(code: "screen", message: error, details: nil))
-        } else {
-          result(data.map { FlutterStandardTypedData(bytes: $0) })
-        }
-      }
-    default:
-      screen.stop()
-      result(nil)
-    }
-  }
-
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "permissions":
-      result(["accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess()])
-    case "requestScreenRecording":
-      if !CGRequestScreenCaptureAccess(),
-        let url = URL(
-          string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-      {
-        NSWorkspace.shared.open(url)
-      }
-      result(nil)
+      result(["accessibility": AXIsProcessTrusted()])
     case "requestAccessibility":
       let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
       _ = AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)
@@ -80,8 +44,6 @@ final class SidekickNative {
     case "input":
       if let msg = call.arguments as? [String: Any] { input.handle(msg) }
       result(AXIsProcessTrusted())
-    case "screenStart", "screenFrame", "screenStop":
-      handleScreen(call, result: result)
     case "mediaStatus":
       result(media.status())
     case "mediaAction":
@@ -109,7 +71,6 @@ final class MacInput {
     func num(_ key: String) -> Double { (msg[key] as? NSNumber)?.doubleValue ?? 0 }
     switch msg["t"] as? String {
     case "move": move(dx: num("dx"), dy: num("dy"))
-    case "moveTo": moveTo(x: num("x"), y: num("y"))
     case "click": click(button(msg["b"]), count: max(1, min(3, Int(num("n")))))
     case "down": press(button(msg["b"]), down: true)
     case "up": press(button(msg["b"]), down: false)
@@ -143,16 +104,6 @@ final class MacInput {
     p.x += dx
     p.y += dy
     post(at: clampToDisplays(p))
-  }
-
-  /// [x] and [y] are fractions (0–1) of the main display, the one that's
-  /// shared when a peer views this screen.
-  private func moveTo(x: Double, y: Double) {
-    let b = CGDisplayBounds(CGMainDisplayID())
-    let p = CGPoint(
-      x: b.minX + min(max(x, 0), 1) * (b.width - 1),
-      y: b.minY + min(max(y, 0), 1) * (b.height - 1))
-    post(at: p)
   }
 
   private func post(at p: CGPoint) {
@@ -189,7 +140,7 @@ final class MacInput {
     return best
   }
 
-  // Separate down/up presses (dragging, or clicking on a shared screen) must
+  // Separate down/up presses (e.g. dragging with Hold) must
   // carry a click count, or macOS never sees a double-click.
   private var lastDown = Date.distantPast
   private var lastDownPoint = CGPoint.zero
@@ -360,143 +311,3 @@ final class MacMedia {
   }
 }
 
-/// Streams the main display with ScreenCaptureKit and hands out the newest
-/// frame as JPEG. Needs the Screen Recording permission.
-final class ScreenStreamer: NSObject, SCStreamOutput, SCStreamDelegate {
-  private var stream: SCStream?
-  private let lock = NSLock()
-  private var latest: CVPixelBuffer?
-  private var fresh = false
-  private var failure: String?
-  private let captureQueue = DispatchQueue(label: "dev.sidekick.screen.capture")
-  private let encodeQueue = DispatchQueue(label: "dev.sidekick.screen.encode", qos: .userInitiated)
-  private let context = CIContext()
-
-  static let permissionMessage =
-    "Allow Sidekick in System Settings → Privacy & Security → Screen Recording on the Mac, then quit and "
-    + "reopen Sidekick there. (If it's already on, remove it with − and add it again.)"
-
-  /// Calls [completion] on the main thread with nil once frames flow, or
-  /// with a message for the viewer.
-  func start(maxWidth: Int, completion: @escaping (String?) -> Void) {
-    if stream != nil {
-      completion(nil)
-      return
-    }
-    guard CGPreflightScreenCaptureAccess() else {
-      CGRequestScreenCaptureAccess()
-      completion(ScreenStreamer.permissionMessage)
-      return
-    }
-    SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
-      DispatchQueue.main.async {
-        guard let content = content,
-          let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() })
-            ?? content.displays.first
-        else {
-          completion(error?.localizedDescription ?? ScreenStreamer.permissionMessage)
-          return
-        }
-        let config = SCStreamConfiguration()
-        // SCDisplay sizes are in points; capture sharp on Retina, up to maxWidth.
-        let scale = Double(NSScreen.main?.backingScaleFactor ?? 2)
-        var width = Double(display.width) * scale
-        var height = Double(display.height) * scale
-        if width > Double(maxWidth) {
-          height = height * Double(maxWidth) / width
-          width = Double(maxWidth)
-        }
-        config.width = Int(width)
-        config.height = Int(height)
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 20)
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.showsCursor = true
-        config.queueDepth = 3
-
-        let stream = SCStream(
-          filter: SCContentFilter(display: display, excludingWindows: []), configuration: config, delegate: self)
-        do {
-          try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: self.captureQueue)
-        } catch {
-          completion(error.localizedDescription)
-          return
-        }
-        self.lock.lock()
-        self.failure = nil
-        self.lock.unlock()
-        stream.startCapture { error in
-          DispatchQueue.main.async {
-            if let error = error {
-              completion(error.localizedDescription)
-            } else {
-              self.stream = stream
-              completion(nil)
-            }
-          }
-        }
-      }
-    }
-  }
-
-  func stream(
-    _ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType
-  ) {
-    guard type == .screen, sampleBuffer.isValid, let buffer = sampleBuffer.imageBuffer else { return }
-    // Idle frames (nothing changed) carry no new picture.
-    if let infos = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
-      as? [[SCStreamFrameInfo: Any]],
-      let raw = infos.first?[SCStreamFrameInfo.status] as? Int,
-      let status = SCFrameStatus(rawValue: raw), status != .complete
-    {
-      return
-    }
-    lock.lock()
-    latest = buffer
-    fresh = true
-    lock.unlock()
-  }
-
-  func stream(_ stream: SCStream, didStopWithError error: Error) {
-    lock.lock()
-    latest = nil
-    failure = error.localizedDescription
-    lock.unlock()
-    DispatchQueue.main.async { self.stream = nil }
-  }
-
-  /// The newest frame as JPEG, or nil data if the screen hasn't changed.
-  /// Calls [completion] on the main thread.
-  func frame(quality: Double, completion: @escaping (Data?, String?) -> Void) {
-    lock.lock()
-    let buffer = fresh ? latest : nil
-    fresh = false
-    let failure = self.failure
-    lock.unlock()
-    if let failure = failure {
-      completion(nil, failure)
-      return
-    }
-    guard let buffer = buffer else {
-      completion(nil, nil)
-      return
-    }
-    encodeQueue.async {
-      let image = CIImage(cvPixelBuffer: buffer)
-      let options = [
-        CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): quality
-      ]
-      let data = self.context.jpegRepresentation(
-        of: image, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, options: options)
-      DispatchQueue.main.async { completion(data, nil) }
-    }
-  }
-
-  func stop() {
-    stream?.stopCapture { _ in }
-    stream = nil
-    lock.lock()
-    latest = nil
-    fresh = false
-    lock.unlock()
-  }
-}
