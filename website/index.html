@@ -167,6 +167,8 @@ img, svg { display: block; }
 .btn-tonal { background: var(--secondary-container); color: var(--on-secondary-container); }
 .btn-text { background: transparent; color: var(--primary); padding: 0 16px; }
 .btn-sm { height: 40px; padding: 0 20px; font-size: 14px; }
+.btn:disabled { opacity: .38; cursor: default; box-shadow: none; }
+.btn:disabled::after { display: none; }
 
 .icon-btn {
   position: relative; isolation: isolate; overflow: hidden;
@@ -491,10 +493,147 @@ img, svg { display: block; }
   background: var(--surface-container); margin-top: 10px;
 }
 .navbar div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--on-surface-variant); }
-.navbar .pill { width: 56px; height: 30px; border-radius: 15px; display: grid; place-items: center; }
+.navbar .pill { width: 44px; height: 30px; border-radius: 15px; display: grid; place-items: center; }
 .navbar .icon { font-size: 22px; }
 .navbar .on { color: var(--on-surface); }
 .navbar .on .pill { background: var(--secondary-container); color: var(--on-secondary-container); }
+
+/* The app's page header (PageFrame): bold title, subtitle, device chip. */
+.page-head { position: relative; padding: 8px 16px 10px; }
+.page-head h3 { font-size: 28px; font-weight: 750; letter-spacing: -.02em; line-height: 1.15; }
+.page-head small { display: block; font-size: 13px; color: var(--on-surface-variant); }
+.dev-chip {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 12px 5px 8px;
+  border-radius: 12px; border: 1px solid var(--outline-variant); font-size: 12px; font-weight: 600;
+}
+.dev-chip .icon { font-size: 16px; }
+.dev-chip i { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.72 0.17 150); }
+
+/* ------------------------------------------------------------------ the app, as it looks today */
+.showcase { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 28px; align-items: center; }
+@media (max-width: 1000px) { .showcase { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
+.win {
+  position: relative; width: 100%; border-radius: 22px; overflow: hidden;
+  background: var(--surface-container); box-shadow: var(--shadow-lg); border: 1px solid var(--outline-variant);
+}
+.win-bar { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; font-size: 12px; color: var(--on-surface-variant); }
+.win-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--outline-variant); }
+.win-bar span { margin-left: 8px; font-weight: 600; }
+.win-body { display: flex; min-height: 440px; }
+.rail { width: 86px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 10px 0 18px; }
+.rail .logo { --logo-h: 26px; background: var(--on-surface); margin-bottom: 10px; }
+.rail div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--on-surface-variant); }
+.rail .pill { width: 52px; height: 30px; border-radius: 15px; display: grid; place-items: center; }
+.rail .icon { font-size: 22px; }
+.rail .on { color: var(--on-surface); font-weight: 750; }
+.rail .on .pill { background: var(--secondary-container); color: var(--on-secondary-container); }
+.win-main { position: relative; flex: 1; min-width: 0; margin: 0 8px 8px 0; padding: 22px 26px; border-radius: 26px; background: var(--surface); overflow: hidden; }
+.win-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.win-head h3 { font-size: 32px; font-weight: 750; letter-spacing: -.02em; line-height: 1.1; }
+.win-head small { display: block; color: var(--on-surface-variant); font-size: 14px; margin-top: 2px; }
+.win-head .grow { flex: 1; }
+.win-actions { display: flex; gap: 14px; font-size: 13px; font-weight: 650; color: var(--primary); padding-top: 8px; }
+.win-actions span { display: inline-flex; align-items: center; gap: 4px; }
+.win-actions .icon { font-size: 18px; }
+.this-device {
+  display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 18px 20px; border-radius: 28px;
+  background: linear-gradient(120deg, var(--primary-container), var(--tertiary-container));
+  color: var(--on-primary-container);
+}
+.gbadge {
+  flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 17px;
+  background: linear-gradient(135deg, var(--primary), var(--tertiary)); color: var(--on-primary);
+  box-shadow: 0 6px 16px color-mix(in oklch, var(--primary) 30%, transparent);
+}
+.gbadge .icon { font-size: 26px; }
+.this-device small { display: block; font-size: 12px; font-weight: 600; opacity: .75; }
+.this-device b { display: block; font-size: 20px; font-weight: 750; line-height: 1.2; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.spill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: var(--on-surface-variant);
+  background: color-mix(in oklch, var(--surface) 70%, transparent);
+}
+.spill i { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.72 0.17 150); }
+.spill.bt i { background: var(--primary); }
+.win-section { margin: 20px 0 10px 4px; font-size: 13px; font-weight: 750; color: var(--primary); }
+.paired { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.pcard { padding: 16px 12px 16px 16px; border-radius: 26px; background: var(--surface-container-low); border: 1px solid var(--outline-variant); }
+.pcard-top { display: flex; align-items: center; gap: 12px; }
+.pcard-top .av { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 15px; background: var(--secondary-container); color: var(--on-secondary-container); }
+.pcard-top b { display: block; font-size: 15px; font-weight: 650; }
+.pcard-top .grow { flex: 1; min-width: 0; }
+.pcard-top .more { color: var(--on-surface-variant); }
+.pcard-actions { display: flex; align-items: center; gap: 6px; margin-top: 14px; }
+.pcard-actions .btn { flex: 1; justify-content: center; min-height: 40px; padding: 0 12px; font-size: 13px; }
+.ibtn { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--secondary-container); color: var(--on-secondary-container); }
+.ibtn .icon { font-size: 19px; }
+@media (max-width: 600px) {
+  /* Like the app on a phone: no side rail, actions tucked away. */
+  .rail, .win-actions { display: none; }
+  .win-main { margin: 0 8px 8px; padding: 18px 14px; }
+  .win-body { min-height: 0; }
+}
+.frow { display: flex; align-items: center; gap: 12px; padding: 8px 4px; font-size: 13px; }
+.frow .fi { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--secondary-container); color: var(--on-secondary-container); }
+.frow .fi .icon { font-size: 19px; }
+.frow b { display: block; font-weight: 600; }
+.frow small { display: block; font-size: 11px; color: var(--on-surface-variant); }
+
+/* Sender's full screen ("Waiting for permission…"), over the window */
+.sendover {
+  position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; text-align: center;
+  background: linear-gradient(180deg, color-mix(in oklch, var(--primary-container) 70%, var(--surface)), var(--surface));
+  opacity: 0; pointer-events: none; transform: scale(.96);
+  transition: opacity .35s var(--ease), transform .45s var(--ease-spring);
+}
+.sendover.show { opacity: 1; pointer-events: auto; transform: none; }
+.sendover h4 { font-size: 24px; font-weight: 750; letter-spacing: -.01em; margin: 8px 0 0; }
+.sendover p { margin: 0; color: var(--on-surface-variant); font-size: 14px; }
+.ring-wrap { position: relative; width: 150px; height: 150px; display: grid; place-items: center; }
+.ring-wrap .rings i {
+  position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--primary); opacity: 0;
+  animation: ping 2s var(--ease) infinite;
+}
+.ring-wrap .rings i:nth-child(2) { animation-delay: .66s; }
+.ring-wrap .rings i:nth-child(3) { animation-delay: 1.33s; }
+@keyframes ping { 0% { transform: scale(.55); opacity: .55; } 100% { transform: scale(1); opacity: 0; } }
+.sendover.busy .rings, .sendover.done .rings { display: none; }
+.ring-wrap .gbadge { width: 84px; height: 84px; border-radius: 50%; transition: background .3s var(--ease), transform .45s var(--ease-spring); }
+.ring-wrap .gbadge .icon { font-size: 40px; }
+.sendover.done .gbadge { background: oklch(0.62 0.16 150); transform: scale(1.12); }
+.sendover.no .gbadge { background: oklch(0.6 0.19 25); }
+.sbar { width: min(320px, 80%); height: 10px; border-radius: 6px; background: var(--surface-container-highest); overflow: hidden; opacity: 0; transition: opacity .3s; }
+.sbar i { display: block; height: 100%; width: 0; border-radius: 6px; background: var(--primary); transition: width .2s linear; }
+.sendover.busy .sbar { opacity: 1; }
+.sendover .btn { margin-top: 10px; }
+
+/* The phone that receives: Accept / Decline card */
+.phone.mini { position: relative; right: auto; top: auto; width: 280px; height: 560px; }
+.recv-home { flex: 1; padding: 10px 16px; display: flex; flex-direction: column; gap: 10px; }
+.recv-hint { margin-top: auto; margin-bottom: 26px; text-align: center; font-size: 12px; color: var(--on-surface-variant); }
+.scrim { position: absolute; inset: 0; z-index: 2; background: oklch(0 0 0 / .45); opacity: 0; transition: opacity .3s var(--ease); pointer-events: none; }
+.offer {
+  position: absolute; left: 12px; right: 12px; top: 50%; z-index: 3; padding: 22px 16px 16px; text-align: center;
+  border-radius: 28px; background: var(--surface-container-high); box-shadow: var(--shadow-lg);
+  opacity: 0; transform: translateY(-50%) scale(.7); pointer-events: none;
+  transition: opacity .3s var(--ease), transform .55s var(--ease-spring);
+}
+.phone.asking .scrim, .phone.receiving .scrim { opacity: 1; }
+.phone.asking .offer, .phone.receiving .offer { opacity: 1; transform: translateY(-50%); pointer-events: auto; }
+.offer .gbadge { margin: 0 auto; width: 64px; height: 64px; border-radius: 50%; }
+.offer b { display: block; margin-top: 12px; font-size: 16px; font-weight: 750; }
+.offer small { display: block; font-size: 12px; color: var(--on-surface-variant); }
+.countdown { height: 4px; margin: 14px 0 12px; border-radius: 2px; background: var(--surface-container-highest); overflow: hidden; }
+.countdown i { display: block; height: 100%; width: 100%; background: var(--primary); transform-origin: left; }
+.phone.asking .countdown i { animation: countdown 20s linear forwards; }
+@keyframes countdown { to { transform: scaleX(0); } }
+.offer-actions { display: flex; gap: 8px; }
+.offer-actions .btn { flex: 1; justify-content: center; min-height: 40px; font-size: 13px; padding: 0 10px; }
+.phone.receiving .offer-actions, .phone.receiving .countdown { display: none; }
+.offer .sbar { width: 100%; margin-top: 14px; }
+.phone.receiving .offer .sbar { opacity: 1; }
 
 /* ------------------------------------------------------------------ M3 expressive slider */
 input[type="range"] {
@@ -745,6 +884,7 @@ footer nav a:hover { color: var(--on-surface); }
     </a>
     <nav class="nav" aria-label="Main">
       <a href="#features">Features</a>
+      <a href="#app">The app</a>
       <a href="#platforms">Platforms</a>
       <a href="#how">How it works</a>
     </nav>
@@ -764,7 +904,7 @@ footer nav a:hover { color: var(--on-surface); }
         <span class="eyebrow"><span class="icon">bolt</span> Local-first · No account · No cloud</span>
         <h1>Your phone and PC, <em>finally</em> working together.</h1>
         <p class="lede">
-          Sidekick links your devices over your own Wi-Fi. Use your phone as a remote for your
+          Sidekick links your devices over your own Wi-Fi, or Bluetooth when there's none. Use your phone as a remote for your
           computer, open your phone's files from your desktop, send anything in a tap, and
           play, pause, or skip whatever is on either screen.
         </p>
@@ -834,16 +974,12 @@ footer nav a:hover { color: var(--on-surface); }
                 <span>9:41</span>
                 <span class="icons"><span class="icon fill">wifi</span><span class="icon fill">signal_cellular_alt</span><span class="icon fill">battery_5_bar</span></span>
               </div>
-              <div class="appbar" aria-hidden="true">
-                <h3>Sidekick</h3>
-                <span class="avatar">S</span>
+              <div class="page-head" aria-hidden="true">
+                <h3>Media</h3>
+                <small>What's playing on Gaming PC</small>
+                <span class="dev-chip"><span class="icon">desktop_windows</span>Gaming PC<i></i></span>
               </div>
               <div class="screen-body">
-                <div class="device-card" aria-hidden="true">
-                  <span class="dev-icon"><span class="icon fill">desktop_windows</span></span>
-                  <span class="grow"><b>Desktop</b><small>Connected · Wi-Fi</small></span>
-                  <span class="icon end">tune</span>
-                </div>
 
                 <div class="media-card">
                   <div class="media-top">
@@ -873,16 +1009,13 @@ footer nav a:hover { color: var(--on-surface); }
                   </div>
                 </div>
 
-                <div class="quick" aria-hidden="true">
-                  <div><span class="icon">mouse</span>Touchpad</div>
-                  <div><span class="icon">keyboard</span>Keyboard</div>
-                </div>
               </div>
               <div class="navbar" aria-hidden="true">
                 <div><span class="pill"><span class="icon">devices</span></span>Devices</div>
                 <div><span class="pill"><span class="icon">folder</span></span>Files</div>
-                <div><span class="pill"><span class="icon">gamepad</span></span>Remote</div>
+                <div><span class="pill"><span class="icon">mouse</span></span>Remote</div>
                 <div class="on"><span class="pill"><span class="icon fill">play_circle</span></span>Media</div>
+                <div><span class="pill"><span class="icon">settings</span></span>Settings</div>
               </div>
             </div>
           </div>
@@ -904,17 +1037,17 @@ footer nav a:hover { color: var(--on-surface); }
         <article class="card span-7 reveal">
           <div class="card-icon"><span class="icon">touch_app</span></div>
           <h3>Remote control, both ways</h3>
-          <p>Turn your phone into a touchpad and keyboard for your PC. From your computer, you can control your Android phone and see its screen.</p>
+          <p>Your phone becomes a touchpad and keyboard for your computer, with left and right click, drag, adjustable pointer speed and one-tap shortcuts. From a computer you can also control an Android phone.</p>
           <div class="pad-demo">
             <div class="trackpad" id="trackpad" aria-label="Touchpad demo, move your pointer or finger here">
               <div class="cursor" id="cursor"></div>
               <div class="hint" id="padHint">Move over me · tap to click</div>
             </div>
             <div class="keys">
-              <button class="key" type="button">Esc</button>
-              <button class="key" type="button">Tab</button>
-              <button class="key" type="button">Ctrl</button>
-              <button class="key" type="button">Alt</button>
+              <button class="key" type="button">Copy</button>
+              <button class="key" type="button">Paste</button>
+              <button class="key" type="button">Undo</button>
+              <button class="key" type="button">Enter</button>
               <button class="key wide" type="button"><span class="icon">keyboard</span>Type</button>
             </div>
           </div>
@@ -935,21 +1068,143 @@ footer nav a:hover { color: var(--on-surface); }
 
         <article class="card span-4 reveal">
           <div class="card-icon s"><span class="icon">send</span></div>
-          <h3>Send anything, fast</h3>
-          <p>Drag and drop files of any size, share from any app's menu, or sync your clipboard. Nothing goes through the internet.</p>
+          <h3>Send anything, with a yes first</h3>
+          <p>Drag and drop or pick photos and files. The other device asks before accepting, then both show the progress. Nothing goes through the internet.</p>
         </article>
 
         <article class="card span-4 accent reveal">
           <div class="card-icon"><span class="icon">play_circle</span></div>
           <h3>Media controller</h3>
-          <p>Play, pause, seek, skip, and change the volume for whatever is playing on your PC: YouTube, Spotify, VLC, Netflix, and more.</p>
+          <p>Play, pause, seek, skip and change the volume of whatever is playing on your computer: YouTube, Spotify, VLC, Netflix and more. On iPhone: the volume and Apple Music.</p>
         </article>
 
         <article class="card span-4 reveal">
           <div class="card-icon t"><span class="icon">lock</span></div>
           <h3>Private by design</h3>
-          <p>You pair devices once with a 6-digit code. After that, everything between them is encrypted, over Wi-Fi and Bluetooth, and stays on your local network. No accounts, no servers.</p>
+          <p>Pair once with a 6-digit code. Everything between your devices is encrypted, over Wi-Fi and over Bluetooth when there's no Wi-Fi at all. No accounts, no servers.</p>
         </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ THE APP -->
+  <section class="section" id="app" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <div class="kicker">The app</div>
+        <h2>This is what Sidekick looks like.</h2>
+        <p>Sidekick 2 on a computer, next to a phone. It follows your wallpaper's colors (try the swatches at the top). Press <b>Send files</b> to see what happens on both screens.</p>
+      </div>
+
+      <div class="showcase reveal">
+        <div class="win" id="win">
+          <div class="win-bar" aria-hidden="true"><i></i><i></i><i></i><span>Sidekick</span></div>
+          <div class="win-body">
+            <nav class="rail" aria-hidden="true">
+              <span class="logo logo-3"></span>
+              <div class="on"><span class="pill"><span class="icon fill">devices</span></span>Devices</div>
+              <div><span class="pill"><span class="icon">folder</span></span>Files</div>
+              <div><span class="pill"><span class="icon">mouse</span></span>Remote</div>
+              <div><span class="pill"><span class="icon">play_circle</span></span>Media</div>
+              <div><span class="pill"><span class="icon">settings</span></span>Settings</div>
+            </nav>
+            <div class="win-main">
+              <div class="win-head">
+                <div><h3>Devices</h3><small>2 paired · 2 connected</small></div>
+                <span class="grow"></span>
+                <div class="win-actions" aria-hidden="true">
+                  <span><span class="icon">radar</span>Search</span>
+                  <span><span class="icon">bluetooth_searching</span>Bluetooth</span>
+                  <span><span class="icon">add_link</span>Add by IP</span>
+                </div>
+              </div>
+              <div class="this-device">
+                <span class="gbadge"><span class="icon">desktop_windows</span></span>
+                <div>
+                  <small>This device</small>
+                  <b>Gaming PC</b>
+                  <div class="pills"><span class="spill"><i></i>Wi-Fi · 192.168.1.20</span><span class="spill bt"><i></i>Bluetooth · findable</span></div>
+                </div>
+              </div>
+              <div class="win-section">Paired</div>
+              <div class="paired">
+                <div class="pcard">
+                  <div class="pcard-top">
+                    <span class="av"><span class="icon">phone_android</span></span>
+                    <div class="grow"><b>Pixel 9</b><span class="spill"><i></i>Connected</span></div>
+                    <span class="icon more">more_vert</span>
+                  </div>
+                  <div class="pcard-actions">
+                    <button class="btn btn-filled" type="button" id="demoSend"><span class="icon">send</span>Send files</button>
+                    <span class="ibtn" title="Browse files"><span class="icon">folder_open</span></span>
+                    <span class="ibtn" title="Remote control"><span class="icon">mouse</span></span>
+                    <span class="ibtn" title="Media"><span class="icon">play_circle</span></span>
+                  </div>
+                </div>
+                <div class="pcard">
+                  <div class="pcard-top">
+                    <span class="av"><span class="icon">phone_iphone</span></span>
+                    <div class="grow"><b>iPhone 12</b><span class="spill bt"><i></i>Connected via Bluetooth</span></div>
+                    <span class="icon more">more_vert</span>
+                  </div>
+                  <div class="pcard-actions">
+                    <button class="btn btn-filled" type="button" disabled><span class="icon">send</span>Send files</button>
+                    <span class="ibtn" title="Browse files"><span class="icon">folder_open</span></span>
+                    <span class="ibtn" title="Media"><span class="icon">play_circle</span></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sendover" id="sendover" aria-live="polite">
+                <div class="ring-wrap">
+                  <div class="rings"><i></i><i></i><i></i></div>
+                  <span class="gbadge"><span class="icon" id="sendIcon">phone_android</span></span>
+                </div>
+                <h4 id="sendTitle">Waiting for permission…</h4>
+                <p id="sendSub">Ask Pixel 9 to tap Accept</p>
+                <div class="sbar"><i id="sendFill"></i></div>
+                <button class="btn btn-tonal btn-sm" type="button" id="sendCancel">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="phone mini" id="recvPhone">
+          <div class="screen">
+            <div class="punch"></div>
+            <div class="statusbar" aria-hidden="true">
+              <span>9:41</span>
+              <span class="icons"><span class="icon fill">bluetooth</span><span class="icon fill">signal_cellular_alt</span><span class="icon fill">battery_5_bar</span></span>
+            </div>
+            <div class="page-head" aria-hidden="true"><h3>Files</h3><small>On Gaming PC</small></div>
+            <div class="recv-home" aria-hidden="true">
+              <div class="frow"><span class="fi"><span class="icon">desktop_windows</span></span><span><b>Desktop</b><small>24 items</small></span></div>
+              <div class="frow"><span class="fi"><span class="icon">description</span></span><span><b>Documents</b><small>112 items</small></span></div>
+              <div class="frow"><span class="fi"><span class="icon">download</span></span><span><b>Downloads</b><small>58 items</small></span></div>
+              <div class="frow"><span class="fi"><span class="icon">photo_library</span></span><span><b>Pictures</b><small>1,204 items</small></span></div>
+              <p class="recv-hint" id="recvHint">This is the Pixel 9, browsing the PC</p>
+            </div>
+            <div class="navbar" aria-hidden="true">
+              <div><span class="pill"><span class="icon">devices</span></span>Devices</div>
+              <div class="on"><span class="pill"><span class="icon fill">folder</span></span>Files</div>
+              <div><span class="pill"><span class="icon">mouse</span></span>Remote</div>
+              <div><span class="pill"><span class="icon">play_circle</span></span>Media</div>
+              <div><span class="pill"><span class="icon">settings</span></span>Settings</div>
+            </div>
+            <div class="scrim"></div>
+            <div class="offer" role="dialog" aria-label="Incoming files">
+              <span class="gbadge"><span class="icon">desktop_windows</span></span>
+              <b id="offerTitle">Gaming PC wants to send you</b>
+              <small>3 files · 48 MB</small>
+              <div class="countdown"><i></i></div>
+              <div class="offer-actions">
+                <button class="btn btn-tonal" type="button" id="offerDecline">Decline</button>
+                <button class="btn btn-filled" type="button" id="offerAccept"><span class="icon">download</span>Accept</button>
+              </div>
+              <div class="sbar"><i id="recvFill"></i></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -1078,6 +1333,7 @@ footer nav a:hover { color: var(--on-surface); }
     <a class="brand" href="#top" aria-label="Sidekick"><span class="logo logo-2" aria-hidden="true"></span></a>
     <nav aria-label="Footer">
       <a href="#features">Features</a>
+      <a href="#app">The app</a>
       <a href="#platforms">Platforms</a>
       <a href="#how">How it works</a>
       <a href="https://github.com/michaldaniszewski03-hash/sidekick">GitHub</a>
@@ -1312,6 +1568,80 @@ const OS_INFO = {
   });
   const note = $('#releaseNote');
   note.innerHTML = `Version ${RELEASE.version} · <a href="${RELEASE.page}">Release notes and older versions</a>`;
+})();
+
+/* ---------- the app: Send files → ask → accept → progress, on both screens */
+(() => {
+  const over = $('#sendover'), phone = $('#recvPhone');
+  const title = $('#sendTitle'), sub = $('#sendSub'), icon = $('#sendIcon');
+  const sendFill = $('#sendFill'), recvFill = $('#recvFill');
+  const hint = $('#recvHint'), offerTitle = $('#offerTitle'), cancel = $('#sendCancel');
+  let timers = [];
+  const later = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const stop = () => { timers.forEach(clearTimeout); timers = []; };
+
+  function reset() {
+    stop();
+    over.className = 'sendover';
+    phone.classList.remove('asking', 'receiving');
+    sendFill.style.width = recvFill.style.width = '0%';
+    icon.textContent = 'phone_android';
+    title.textContent = 'Waiting for permission…';
+    sub.textContent = 'Ask Pixel 9 to tap Accept';
+    offerTitle.textContent = 'Gaming PC wants to send you';
+    cancel.textContent = 'Cancel';
+  }
+
+  function start() {
+    reset();
+    over.classList.add('show');
+    later(700, () => phone.classList.add('asking'));
+    // Nobody tapping? Accept on the phone's behalf so the demo plays on.
+    later(7000, accept);
+  }
+
+  function accept() {
+    if (!phone.classList.contains('asking')) return;
+    stop();
+    phone.classList.replace('asking', 'receiving');
+    offerTitle.textContent = 'Receiving from Gaming PC…';
+    over.classList.add('busy');
+    title.textContent = 'Sending to Pixel 9';
+    cancel.textContent = 'Hide';
+    let p = 0;
+    const tick = () => {
+      p = Math.min(100, p + 4 + Math.random() * 6);
+      sendFill.style.width = recvFill.style.width = p + '%';
+      sub.textContent = `${Math.round(48 * p / 100)} MB of 48 MB`;
+      if (p < 100) return later(120, tick);
+      over.classList.replace('busy', 'done');
+      icon.textContent = 'check';
+      title.textContent = 'Sent!';
+      sub.textContent = '3 files are on Pixel 9';
+      offerTitle.textContent = 'All here!';
+      hint.textContent = 'Saved 3 files to Downloads';
+      later(1600, () => { over.classList.remove('show'); phone.classList.remove('receiving'); });
+      later(2200, reset);
+    };
+    tick();
+  }
+
+  function decline() {
+    if (!phone.classList.contains('asking')) return;
+    stop();
+    phone.classList.remove('asking');
+    icon.textContent = 'close';
+    title.textContent = 'Pixel 9 declined';
+    sub.textContent = 'Nothing was sent';
+    over.classList.add('done', 'no');
+    later(1800, () => over.classList.remove('show'));
+    later(2300, reset);
+  }
+
+  $('#demoSend').addEventListener('click', start);
+  $('#offerAccept').addEventListener('click', accept);
+  $('#offerDecline').addEventListener('click', decline);
+  cancel.addEventListener('click', () => { stop(); over.classList.remove('show'); phone.classList.remove('asking', 'receiving'); later(400, reset); });
 })();
 
 /* ---------- reveal on scroll */
