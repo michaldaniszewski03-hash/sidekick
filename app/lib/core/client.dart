@@ -11,9 +11,13 @@ import 'models.dart';
 import 'trust.dart';
 
 class SidekickException implements Exception {
-  SidekickException(this.message, {this.status});
+  SidekickException(this.message, {this.status, this.identityChanged = false});
   final String message;
   final int? status;
+
+  /// The device presented a different certificate than it paired with (it
+  /// was reset or reinstalled): it has to be paired again.
+  final bool identityChanged;
 
   bool get notPaired => status == 401;
 
@@ -91,8 +95,8 @@ class PeerClient {
   SidekickException _tlsFailure() => fingerprint == null
       ? SidekickException("Couldn't connect securely to $host. Make sure both devices run Sidekick 0.3 or newer.")
       : SidekickException(
-          "$host isn't showing the security certificate it paired with. If Sidekick was reinstalled there, "
-          'unpair it and pair again.',
+          "The other device has a new security key (it was reset or updated from 1.0.x). Pair it again.",
+          identityChanged: true,
         );
 
   Future<HttpClientResponse> _send(

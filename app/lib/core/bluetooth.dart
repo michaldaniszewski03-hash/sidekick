@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart';
@@ -197,7 +198,15 @@ class BluetoothService {
       );
       // Just the service UUID: advertisements are tiny (31 bytes), and
       // iPhones/Macs can't advertise anything else. Names come from `info`.
-      await _peripheralManager.startAdvertising(Advertisement(serviceUUIDs: [bleServiceUuid]));
+      await _peripheralManager.startAdvertising(
+        Advertisement(
+          // iPhones and Macs also advertise the name "Sidekick", so they can
+          // be recognized even when a scanner doesn't get the service id.
+          // (On Android a name here would rename the phone's Bluetooth.)
+          name: Platform.isIOS || Platform.isMacOS ? advertisedName : null,
+          serviceUUIDs: [bleServiceUuid],
+        ),
+      );
       _advertising = true;
       _log('Advertising: other devices can find this one');
     } catch (e) {
@@ -292,11 +301,22 @@ class BluetoothService {
     if (_scanning) return;
     _scanning = true;
     _seenThisScan = 0;
+    _seenAny.clear();
+    // Every other scan listens to *all* devices and picks out Sidekick
+    // ones itself (by service id or name): it works even where filtered
+    // scans miss a device, and tells apart "nothing on the air at all"
+    // from "devices around, but none running Sidekick".
+    _unfiltered = !_unfiltered;
     onChanged?.call();
     try {
-      await _centralManager.startDiscovery(serviceUUIDs: [bleServiceUuid]);
+      await _centralManager.startDiscovery(serviceUUIDs: _unfiltered ? null : [bleServiceUuid]);
       await Future<void>.delayed(duration);
-      _log('Scan finished: $_seenThisScan Sidekick device(s) in range');
+      if (_unfiltered) {
+        lastDevicesAround = _seenAny.length;
+        _log('Listened to everything: ${_seenAny.length} Bluetooth device(s) around, $_seenThisScan from Sidekick');
+      } else {
+        _log('Looked for Sidekick: $_seenThisScan found');
+      }
     } catch (e) {
       _log('Scan failed: $e');
     } finally {
@@ -310,6 +330,16 @@ class BluetoothService {
   }
 
   int _seenThisScan = 0;
+  bool _unfiltered = false;
+  final Set<String> _seenAny = {};
+
+  /// How many Bluetooth devices of any kind the last full scan heard (null
+  /// before one ran). Zero means this device hears nothing at all.
+  int? lastDevicesAround;
+
+  static const advertisedName = 'Sidekick';
+
+  static bool isSidekick(Advertisement a) => a.serviceUUIDs.contains(bleServiceUuid) || a.name == advertisedName;
 
   final Set<String> _everSeen = {};
 
@@ -326,18 +356,27 @@ class BluetoothService {
     _searching = true;
     onChanged?.call();
     while (_searching) {
+      final started = DateTime.now();
       if (canScan) {
         await scan(duration: const Duration(seconds: 10));
       } else {
         await refresh();
-        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+      // Never spin: scan() returns at once when another scan is already
+      // running (or fails right away), and a loop of instantly completed
+      // awaits starves the UI, freezing the app.
+      final elapsed = DateTime.now().difference(started);
+      if (elapsed < const Duration(seconds: 1)) {
+        await Future<void>.delayed(const Duration(seconds: 1) - elapsed);
       }
     }
   }
 
+  /// Safe to call while a screen is closing: it doesn't redraw anything
+  /// right away.
   void stopSearch() {
     _searching = false;
-    onChanged?.call();
+    scheduleMicrotask(() => onChanged?.call());
   }
 
   /// Tries reading a device's name again after it failed.
@@ -351,6 +390,10 @@ class BluetoothService {
 
   void _onDiscovered(DiscoveredEventArgs e) {
     final key = '${e.peripheral.uuid}';
+    _seenAny.add(key);
+    // Filtered scans only report Sidekick devices; unfiltered ones report
+    // everything, so check.
+    if (_unfiltered && !isSidekick(e.advertisement)) return;
     _seenThisScan++;
     final candidate = candidates.putIfAbsent(key, () => BleCandidate(e.peripheral))
       ..peripheral = e.peripheral

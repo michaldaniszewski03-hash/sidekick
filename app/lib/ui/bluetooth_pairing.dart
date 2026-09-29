@@ -72,7 +72,11 @@ class _BluetoothPairingState extends State<_BluetoothPairing> {
                   Icon(Icons.bluetooth_searching, color: scheme.primary, size: 28),
                   const SizedBox(width: 12),
                   Expanded(child: Text('Pair over Bluetooth', style: text.headlineSmall)),
-                  if (!isMobile) IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(this.context).maybePop(),
+                    icon: const Icon(Icons.close),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -98,6 +102,17 @@ class _BluetoothPairingState extends State<_BluetoothPairing> {
                                   : 'Waiting for Bluetooth…',
                               textAlign: TextAlign.center,
                             ),
+                            if (bt?.lastDevicesAround case final around?) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                around == 0
+                                    ? "This device doesn't hear any Bluetooth devices at all right now."
+                                    : 'Hears $around Bluetooth device${around == 1 ? '' : 's'} around, but none '
+                                          'running Sidekick yet.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              ),
+                            ],
                           ],
                         ),
                       )

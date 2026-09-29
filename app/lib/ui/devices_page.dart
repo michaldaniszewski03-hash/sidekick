@@ -86,6 +86,16 @@ class DevicesPage extends StatelessWidget {
                             child: const Text('Pair'),
                           ),
                         ),
+                      // Always reachable, not only when nothing's nearby.
+                      if (state.bluetooth != null)
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                          leading: const CircleAvatar(child: Icon(Icons.bluetooth_searching)),
+                          title: const Text('Pair over Bluetooth'),
+                          subtitle: const Text('For a device that isn\'t on this Wi-Fi'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => showBluetoothPairing(context, state),
+                        ),
                     ],
                   ),
                 ),

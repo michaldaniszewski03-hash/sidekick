@@ -348,7 +348,7 @@ class AppState extends ChangeNotifier {
     }
 
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows) {
-      final bt = bluetooth = BluetoothService(self: () => me, server: server)..onChanged = notifyListeners;
+      final bt = bluetooth = BluetoothService(self: () => me, server: server)..onChanged = _bluetoothChanged;
       bt.found.listen(_onBluetoothSighting);
       bt.statusChanges.listen((_) => notifyListeners());
       unawaited(bt.start().then((_) => _maybeScanBluetooth()).catchError((_) {}));
@@ -397,6 +397,7 @@ class AppState extends ChangeNotifier {
     _scanTimer?.cancel();
     _permissionTimer?.cancel();
     _bleTimer?.cancel();
+    _bluetoothRedraw?.cancel();
     for (final t in _directIdle.values) {
       t.cancel();
     }
@@ -511,7 +512,19 @@ class AppState extends ChangeNotifier {
   DeviceInfo? needsRepair(PairedDevice d) {
     final seen = _nearby[d.id]?.info ?? _bleSeen[d.id]?.info;
     final fp = seen?.fingerprint;
-    return fp != null && fp != d.fingerprint ? seen : null;
+    if (fp != null && fp != d.fingerprint) return seen;
+    // Found out the hard way: a connection was refused for a new certificate.
+    if (_identityChanged.contains(d.id)) {
+      return seen ?? DeviceInfo(id: d.id, name: d.name, platform: d.platform, port: d.lastPort, address: d.lastAddress);
+    }
+    return null;
+  }
+
+  final Set<String> _identityChanged = {};
+
+  /// Remembers a device whose certificate changed, so it shows "Pair again".
+  void _noteFailure(PairedDevice d, Object error) {
+    if (error is SidekickException && error.identityChanged && _identityChanged.add(d.id)) notifyListeners();
   }
 
   /// Forgets [d] here (it no longer knows us anyway) so it can be paired
@@ -520,6 +533,7 @@ class AppState extends ChangeNotifier {
     final seen = needsRepair(d)!;
     _paired.remove(d.id);
     trust.remove(d.id);
+    _identityChanged.remove(d.id);
     _savePaired();
     notifyListeners();
     return seen;
@@ -687,6 +701,16 @@ class AppState extends ChangeNotifier {
   /// Bigger transfers than this set up a direct Wi-Fi link when they'd
   /// otherwise crawl over Bluetooth.
   static const directLinkThreshold = 2 * 1024 * 1024;
+
+  // Bluetooth can report dozens of advertisements a second; redraw at most
+  // four times a second so the app stays responsive.
+  Timer? _bluetoothRedraw;
+  void _bluetoothChanged() {
+    _bluetoothRedraw ??= Timer(const Duration(milliseconds: 250), () {
+      _bluetoothRedraw = null;
+      notifyListeners();
+    });
+  }
 
   /// Devices seen over Bluetooth recently, for Settings → Bluetooth.
   List<BleSighting> get bluetoothSightings => _bleSeen.values.toList()..sort((a, b) => b.seen.compareTo(a.seen));
@@ -918,13 +942,18 @@ class AppState extends ChangeNotifier {
   /// Sends local files to [d]. With [remoteDir] they go into that folder on
   /// the other device; otherwise into its receive folder.
   Future<void> sendFiles(PairedDevice d, List<File> localFiles, {String? remoteDir}) async {
+    if (localFiles.isEmpty) return;
     var total = 0;
     for (final file in localFiles) {
       try {
         total += await file.length();
       } catch (_) {}
     }
+    final what = localFiles.length == 1 ? p.basename(localFiles.first.path) : '${localFiles.length} files';
+    _notices.add(Notice('Sending $what to ${d.name}…'));
     final client = await _clientForTransfer(d, total);
+    var sent = 0;
+    Object? failure;
     for (final file in localFiles) {
       final t = _startTransfer(p.basename(file.path), d, upload: true);
       try {
@@ -937,13 +966,26 @@ class AppState extends ChangeNotifier {
         t
           ..state = TransferState.done
           ..security = client.lastSecurity;
+        sent++;
       } catch (e) {
+        failure ??= e;
+        _noteFailure(d, e);
         t
           ..state = TransferState.failed
           ..error = '$e';
       }
       notifyListeners();
     }
+    // Say how it went where the user is, not only in the Files tab.
+    _notices.add(
+      Notice(
+        failure == null
+            ? 'Sent $what to ${d.name}'
+            : sent == 0
+            ? "Couldn't send to ${d.name}: $failure"
+            : 'Sent $sent of ${localFiles.length} files to ${d.name}. $failure',
+      ),
+    );
   }
 
   Future<File?> download(PairedDevice d, RemoteEntry entry) async {
@@ -962,6 +1004,7 @@ class AppState extends ChangeNotifier {
       _notices.add(Notice('Saved ${entry.name}', revealPath: file.path));
       return file;
     } catch (e) {
+      _noteFailure(d, e);
       t
         ..state = TransferState.failed
         ..error = '$e';
