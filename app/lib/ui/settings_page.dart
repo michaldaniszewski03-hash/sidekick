@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../app_state.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
+import '../platform/sound.dart';
 import 'permissions.dart';
 import 'theme_chooser.dart';
 import 'widgets.dart';
@@ -65,7 +66,7 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SectionLabel('This device'),
+                  const SectionLabel('This device', icon: Icons.smartphone_rounded),
                   _Group(
                     children: [
                       Padding(
@@ -75,53 +76,66 @@ class _SettingsPageState extends State<SettingsPage> {
                           maxLength: 40,
                           decoration: const InputDecoration(
                             labelText: 'Device name',
-                            helperText: 'How this device appears to your other devices',
+                            prefixIcon: Icon(Icons.badge_outlined),
+                            helperText: 'What your other devices see',
                           ),
                           onSubmitted: state.setName,
                           onTapOutside: (_) => state.setName(_name.text),
                         ),
                       ),
                       ListTile(
-                        leading: const Icon(Icons.download_outlined),
+                        leading: const IconTile(Icons.download_rounded, tone: TileTone.primary),
                         title: const Text('Save received files to'),
                         subtitle: Text(_receiveDir ?? '…'),
-                        trailing: TextButton(onPressed: _pickReceiveDir, child: const Text('Change')),
+                        trailing: IconButton.filledTonal(
+                          tooltip: 'Change',
+                          onPressed: _pickReceiveDir,
+                          icon: const Icon(Icons.edit_rounded),
+                        ),
                       ),
                       SwitchListTile(
-                        secondary: const Icon(Icons.front_hand_outlined),
+                        secondary: const IconTile(Icons.front_hand_outlined, tone: TileTone.tertiary),
                         title: const Text('Ask before receiving files'),
-                        subtitle: const Text('Accept or decline each time a device sends you something.'),
+                        subtitle: const Text('Accept or decline each time'),
                         value: state.askBeforeReceiving,
                         onChanged: state.setAskBeforeReceiving,
                       ),
+                      if (hostIsMacOS)
+                        SwitchListTile(
+                          secondary: const IconTile(Icons.music_note_rounded),
+                          title: const Text('Startup sound'),
+                          subtitle: const Text('A short chime when Sidekick opens'),
+                          value: state.startupSound,
+                          onChanged: (v) {
+                            state.setStartupSound(v);
+                            if (v) playStartupSound();
+                          },
+                        ),
                     ],
                   ),
                   if (hostIsAndroid) ...[
-                    const SectionLabel('Android permissions'),
+                    const SectionLabel('Android permissions', icon: Icons.shield_outlined),
                     _Group(children: _androidPermissions()),
                   ],
                   if (hostIsMacOS) ...[
-                    const SectionLabel('Mac permissions'),
+                    const SectionLabel('Mac permissions', icon: Icons.shield_outlined),
                     _Group(children: [const MacAccessibilityRow()]),
                   ],
                   if (state.bluetooth case final bt?) ...[
-                    const SectionLabel('Bluetooth'),
+                    const SectionLabel('Bluetooth', icon: Icons.bluetooth_rounded),
                     _Group(
                       children: [
                         ListTile(
-                          leading: const Icon(Icons.bluetooth),
+                          leading: const IconTile(Icons.bluetooth_rounded, tone: TileTone.primary),
                           title: const Text('Connect without Wi-Fi'),
                           subtitle: Text(switch (bt.status) {
                             _ when bt.problem != null => bt.problem!,
-                            BluetoothStatus.on =>
-                              "On. When your devices aren't on the same Wi-Fi, Sidekick connects over Bluetooth "
-                                  'for pairing, files and media.',
+                            BluetoothStatus.on => 'On. Used when your devices aren\'t on the same Wi-Fi.',
                             BluetoothStatus.off => 'Bluetooth is off. Turn it on to connect without Wi-Fi.',
                             BluetoothStatus.unauthorized => "Sidekick isn't allowed to use Bluetooth.",
                             BluetoothStatus.unsupported => "This device doesn't support Bluetooth LE.",
                             BluetoothStatus.starting => 'Starting…',
                           }),
-                          isThreeLine: true,
                           trailing: switch (bt.status) {
                             _ when bt.problem != null => const Icon(Icons.error_outline, color: Colors.orange),
                             BluetoothStatus.on => const Icon(Icons.check_circle, color: Colors.green),
@@ -133,7 +147,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           },
                         ),
                         ExpansionTile(
-                          leading: const Icon(Icons.troubleshoot_outlined),
+                          leading: const IconTile(Icons.troubleshoot_rounded),
                           title: const Text('Details'),
                           subtitle: Text(
                             [
@@ -170,47 +184,37 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                   if (hostIsIOS) ...[
-                    const SectionLabel('iPhone'),
+                    const SectionLabel('iPhone', icon: Icons.phone_iphone_rounded),
                     _Group(
                       children: [
                         SwitchListTile(
-                          secondary: const Icon(Icons.bolt_outlined),
+                          secondary: const IconTile(Icons.bolt_rounded, tone: TileTone.tertiary),
                           title: const Text('Keep running in the background'),
                           subtitle: const Text(
-                            'iOS pauses apps you\'re not using, so your computer couldn\'t change the volume, control '
-                            'Apple Music or send files while you\'re in another app. This keeps Sidekick awake with '
-                            'a silent sound that never interrupts your music. Uses a little more battery.',
+                            'So your computer can reach this iPhone while you use other apps. '
+                            'Uses a little more battery.',
                           ),
-                          isThreeLine: true,
                           value: state.keepRunning,
                           onChanged: state.setKeepRunning,
                         ),
                       ],
                     ),
                   ],
-                  const SectionLabel('What paired devices can do here'),
+                  const SectionLabel('What paired devices can do here', icon: Icons.tune_rounded),
                   _Group(
                     children: [
                       SwitchListTile(
-                        secondary: const Icon(Icons.folder_open_outlined),
+                        secondary: const IconTile(Icons.folder_open_rounded, tone: TileTone.primary),
                         title: const Text('Browse and download files'),
-                        subtitle: Text(
-                          hostIsIOS
-                              ? "Paired devices can open Sidekick's folder in the Files app"
-                              : 'Paired devices can open any folder on this device',
-                        ),
+                        subtitle: Text(hostIsIOS ? "Sidekick's folder in the Files app" : 'Any folder on this device'),
                         value: perms.files,
                         onChanged: (v) => state.setPermissions(perms.copyWith(files: v)),
                       ),
                       if (state.media.supported)
                         SwitchListTile(
-                          secondary: const Icon(Icons.play_circle_outline),
+                          secondary: const IconTile(Icons.play_circle_rounded, tone: TileTone.tertiary),
                           title: const Text('Control media'),
-                          subtitle: Text(
-                            hostIsIOS
-                                ? 'Change the volume and control Apple Music (iOS doesn\'t let apps control others)'
-                                : 'Play, pause, seek and change volume',
-                          ),
+                          subtitle: Text(hostIsIOS ? 'Volume and Apple Music' : 'Play, pause, seek and volume'),
                           value: perms.media,
                           onChanged: (v) => state.setPermissions(perms.copyWith(media: v)),
                         ),
@@ -218,7 +222,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       // switch only exists elsewhere.
                       if (!hostIsIOS) ...[
                         SwitchListTile(
-                          secondary: const Icon(Icons.mouse_outlined),
+                          secondary: const IconTile(Icons.mouse_rounded),
                           title: const Text('Control mouse and keyboard'),
                           subtitle: const Text('Use this device remotely'),
                           value: perms.input,
@@ -227,39 +231,37 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     ],
                   ),
-                  const SectionLabel('Paired devices'),
+                  const SectionLabel('Paired devices', icon: Icons.link_rounded),
                   _Group(
                     children: [
-                      if (state.paired.isEmpty) const ListTile(title: Text('No paired devices yet')),
+                      if (state.paired.isEmpty)
+                        const ListTile(leading: IconTile(Icons.link_off_rounded), title: Text('No paired devices yet')),
                       for (final d in state.paired)
                         ListTile(
-                          leading: Icon(platformIcon(d.platform)),
+                          leading: IconTile(platformIcon(d.platform), tone: TileTone.primary),
                           title: Text(d.name),
-                          subtitle: Text(
-                            [if (d.lastAddress != null) d.lastAddress!, 'Tap for security code'].join(' · '),
-                          ),
+                          subtitle: const Text('Tap for its security code'),
                           onTap: () => _showSecurityCode(d),
-                          trailing: TextButton(onPressed: () => state.unpair(d.id), child: const Text('Unpair')),
+                          trailing: IconButton(
+                            tooltip: 'Unpair',
+                            onPressed: () => state.unpair(d.id),
+                            icon: const Icon(Icons.link_off_rounded),
+                          ),
                         ),
                     ],
                   ),
-                  const SectionLabel('Encryption'),
+                  const SectionLabel('Security', icon: Icons.lock_outline_rounded),
                   _Group(
                     children: [
                       const ListTile(
-                        leading: Icon(Icons.lock_outline),
-                        title: Text('Everything between paired devices is encrypted'),
-                        subtitle: Text(
-                          'Wi-Fi: TLS with each device\'s own certificate, checked on every connection. '
-                          'Bluetooth: AES-256-GCM. Pairing uses the 6-digit code in a way that can\'t be '
-                          'intercepted or guessed offline.',
-                        ),
-                        isThreeLine: true,
+                        leading: IconTile(Icons.lock_rounded, tone: TileTone.primary),
+                        title: Text('Everything is encrypted'),
+                        subtitle: Text('TLS over Wi-Fi, AES-256-GCM over Bluetooth'),
                       ),
                       ListTile(
-                        leading: Icon(
-                          state.secrets.secure ? Icons.key_outlined : Icons.key_off_outlined,
-                          color: state.secrets.secure ? null : Theme.of(context).colorScheme.error,
+                        leading: IconTile(
+                          state.secrets.secure ? Icons.key_rounded : Icons.key_off_rounded,
+                          tone: state.secrets.secure ? TileTone.secondary : TileTone.error,
                         ),
                         title: Text(
                           state.secrets.secure
@@ -272,17 +274,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                 }}'
                               : "Keys are in app settings: this device's secure storage didn't work",
                         ),
-                        subtitle: const Text('Your private key and pairing keys never leave this device.'),
+                        subtitle: const Text('They never leave this device'),
                       ),
                     ],
                   ),
-                  const SectionLabel('Theme'),
+                  const SectionLabel('Look', icon: Icons.palette_outlined),
                   _Group(children: [ThemeChooser(state: state)]),
-                  const SectionLabel('About'),
+                  const SectionLabel('About', icon: Icons.info_outline_rounded),
                   _Group(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.info_outline),
+                        leading: const IconTile(Icons.info_outline_rounded),
                         title: Text(state.appVersion.isEmpty ? 'Sidekick' : 'Sidekick ${state.appVersion}'),
                         subtitle: Text('Device ID ${state.id.substring(0, 8)} · port ${state.me.port}'),
                       ),
@@ -304,7 +306,7 @@ extension on _SettingsPageState {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.verified_user_outlined),
+        icon: const Icon(Icons.verified_user_rounded),
         title: Text('Security code for ${d.name}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -337,10 +339,12 @@ class _Group extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Card.filled(
-    clipBehavior: Clip.antiAlias,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    child: Column(children: children),
+  Widget build(BuildContext context) => Entrance(
+    child: Card.filled(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Column(children: children),
+    ),
   );
 }
 

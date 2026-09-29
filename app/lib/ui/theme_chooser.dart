@@ -69,7 +69,7 @@ class ThemeChooser extends StatelessWidget {
           }, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
         ),
       SwitchListTile(
-        secondary: const Icon(Icons.contrast),
+        secondary: const IconTile(Icons.contrast_rounded),
         title: const Text('Pure black in dark mode'),
         subtitle: const Text('Darker backgrounds; saves battery on OLED screens'),
         value: state.pureBlack,

@@ -71,7 +71,16 @@ class _ShellState extends State<Shell> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(
-        content: Text(notice.message),
+        content: Row(
+          children: [
+            Icon(
+              notice.revealPath != null ? Icons.download_done_rounded : Icons.info_outline_rounded,
+              color: Theme.of(context).colorScheme.inversePrimary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(notice.message)),
+          ],
+        ),
         action: notice.revealPath == null || !canRevealFiles
             ? null
             : SnackBarAction(label: 'Show in folder', onPressed: () => revealInFolder(notice.revealPath!)),
@@ -134,7 +143,10 @@ class _ShellState extends State<Shell> {
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, animation) => FadeTransition(
                 opacity: animation,
-                child: ScaleTransition(scale: Tween(begin: 0.98, end: 1.0).animate(animation), child: child),
+                child: SlideTransition(
+                  position: Tween(begin: const Offset(0, 0.015), end: Offset.zero).animate(animation),
+                  child: ScaleTransition(scale: Tween(begin: 0.985, end: 1.0).animate(animation), child: child),
+                ),
               ),
               child: KeyedSubtree(key: ValueKey(_index), child: pages[_index]),
             ),
@@ -231,7 +243,7 @@ class _PinDialogState extends State<_PinDialog> {
     final pin = widget.request.pin;
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      icon: const Icon(Icons.link),
+      icon: const Icon(Icons.link_rounded),
       title: Text('Pair with ${widget.request.device.name}?'),
       content: Column(
         mainAxisSize: MainAxisSize.min,

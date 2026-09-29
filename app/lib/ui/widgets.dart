@@ -140,18 +140,168 @@ class PageFrame extends StatelessWidget {
 }
 
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(this.text, {super.key});
+  const SectionLabel(this.text, {super.key, this.icon});
   final String text;
+  final IconData? icon;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 24, bottom: 10, left: 4),
-    child: Text(
-      text,
-      style: Theme.of(context).textTheme.titleSmall
-          ?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700),
-    ),
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 10, left: 4),
+      child: Row(
+        children: [
+          if (icon != null) ...[Icon(icon, size: 18, color: color), const SizedBox(width: 8)],
+          Flexible(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Which container color an [IconTile] uses.
+enum TileTone { primary, secondary, tertiary, error }
+
+/// A small rounded square with a tinted icon: the leading icon of settings
+/// rows and list items.
+class IconTile extends StatelessWidget {
+  const IconTile(this.icon, {super.key, this.tone = TileTone.secondary, this.size = 40});
+  final IconData icon;
+  final TileTone tone;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (bg, fg) = switch (tone) {
+      TileTone.primary => (scheme.primaryContainer, scheme.onPrimaryContainer),
+      TileTone.secondary => (scheme.secondaryContainer, scheme.onSecondaryContainer),
+      TileTone.tertiary => (scheme.tertiaryContainer, scheme.onTertiaryContainer),
+      TileTone.error => (scheme.errorContainer, scheme.onErrorContainer),
+    };
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(size * 0.32)),
+      child: Icon(icon, size: size * 0.52, color: fg),
+    );
+  }
+}
+
+/// Fades and slides [child] into place the first time it's built. Give
+/// siblings increasing [index]es for a staggered cascade.
+class Entrance extends StatefulWidget {
+  const Entrance({super.key, required this.child, this.index = 0});
+  final Widget child;
+  final int index;
+
+  @override
+  State<Entrance> createState() => _EntranceState();
+}
+
+class _EntranceState extends State<Entrance> with SingleTickerProviderStateMixin {
+  static const _step = 60, _length = 420;
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: Duration(milliseconds: _length + _step * widget.index.clamp(0, 8)),
   );
+  late final Animation<double> _t = CurvedAnimation(
+    parent: _c,
+    curve: Interval(1 - _length / _c.duration!.inMilliseconds, 1, curve: Curves.easeOutCubic),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_c.isDismissed) {
+      MediaQuery.of(context).disableAnimations ? _c.value = 1 : _c.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _t,
+    builder: (context, child) => Opacity(
+      opacity: _t.value,
+      child: Transform.translate(offset: Offset(0, 18 * (1 - _t.value)), child: child),
+    ),
+    child: widget.child,
+  );
+}
+
+/// Expanding rings around an icon: "looking for devices".
+class Radar extends StatefulWidget {
+  const Radar({super.key, required this.icon, this.size = 64});
+  final IconData icon;
+  final double size;
+
+  @override
+  State<Radar> createState() => _RadarState();
+}
+
+class _RadarState extends State<Radar> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!MediaQuery.of(context).disableAnimations && !_c.isAnimating) _c.repeat();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final s = widget.size;
+    return SizedBox.square(
+      dimension: s,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, child) => Stack(
+          alignment: Alignment.center,
+          children: [
+            for (final offset in const [0.0, 0.5])
+              Builder(
+                builder: (context) {
+                  final t = (_c.value + offset) % 1;
+                  return Container(
+                    width: s * (0.55 + 0.45 * t),
+                    height: s * (0.55 + 0.45 * t),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: scheme.primary.withValues(alpha: 0.18 * (1 - t)),
+                    ),
+                  );
+                },
+              ),
+            child!,
+          ],
+        ),
+        child: Container(
+          width: s * 0.55,
+          height: s * 0.55,
+          decoration: BoxDecoration(color: scheme.primaryContainer, shape: BoxShape.circle),
+          child: Icon(widget.icon, size: s * 0.3, color: scheme.onPrimaryContainer),
+        ),
+      ),
+    );
+  }
 }
 
 class EmptyState extends StatelessWidget {
@@ -166,24 +316,26 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GradientBadge(icon: icon, size: 88),
-              const SizedBox(height: 24),
-              Text(title, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.onSurfaceVariant),
-              ),
-              if (action != null) ...[const SizedBox(height: 20), action!],
-            ],
+      child: Entrance(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GradientBadge(icon: icon, size: 88),
+                const SizedBox(height: 24),
+                Text(title, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: scheme.onSurfaceVariant),
+                ),
+                if (action != null) ...[const SizedBox(height: 20), action!],
+              ],
+            ),
           ),
         ),
       ),
@@ -224,18 +376,22 @@ class GradientBadge extends StatelessWidget {
   }
 }
 
-/// A small rounded label with a colored dot, for statuses.
+/// A small rounded label for statuses: an icon, or a colored dot.
 class StatusPill extends StatelessWidget {
-  const StatusPill({super.key, required this.label, required this.color, this.background});
+  const StatusPill({super.key, required this.label, required this.color, this.background, this.icon});
   final String label;
   final Color color;
   final Color? background;
 
+  /// Shown in [color] instead of the dot.
+  final IconData? icon;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: EdgeInsets.fromLTRB(icon == null ? 10 : 8, 4, 10, 4),
       decoration: BoxDecoration(
         color: background ?? scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
@@ -243,11 +399,15 @@ class StatusPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
+          if (icon != null)
+            Icon(icon, size: 15, color: color)
+          else
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -503,5 +663,15 @@ Future<void> prepareFilePicker() async {
 }
 
 void showError(BuildContext context, Object error) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Row(
+        children: [
+          Icon(Icons.error_outline_rounded, color: Theme.of(context).colorScheme.inversePrimary),
+          const SizedBox(width: 12),
+          Expanded(child: Text('$error')),
+        ],
+      ),
+    ),
+  );
 }

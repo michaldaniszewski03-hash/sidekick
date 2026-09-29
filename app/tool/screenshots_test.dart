@@ -151,6 +151,10 @@ void main() {
     Future<void> shot(String name, {bool waitForData = false}) async {
       await settle();
       if (waitForData) await loaded();
+      // Let entrance animations (list rows, cards) finish.
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       await tester.runAsync(() async {
         final image = await render.toImage();
@@ -211,15 +215,11 @@ void main() {
     await tester.dragUntilVisible(find.text('What paired devices can do here'), list, const Offset(0, -200));
     await shot('iphone-settings-permissions');
     expect(find.text('Control mouse and keyboard'), findsNothing);
-    await tester.dragUntilVisible(
-      find.text('Everything between paired devices is encrypted'),
-      list,
-      const Offset(0, -200),
-    );
+    await tester.dragUntilVisible(find.text('Everything is encrypted'), list, const Offset(0, -200));
     await shot('iphone-settings-encryption');
-    await tester.ensureVisible(find.textContaining('Tap for security code'));
+    await tester.ensureVisible(find.textContaining('security code'));
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('Tap for security code'));
+    await tester.tap(find.textContaining('security code'));
     await shot('iphone-security-code');
     await tester.tap(find.text('Done'));
     await tester.dragUntilVisible(find.text('Pure black in dark mode'), list, const Offset(0, -200));
@@ -229,6 +229,32 @@ void main() {
     state.setPureBlack(true);
     await shot('iphone-settings-theme-teal-dark');
     debugHostPlatform = null;
+
+    // The startup animation, a few frames in (desktop, light).
+    debugForceMobile = false;
+    state.setThemeColor('purple');
+    state.setThemeMode(ThemeMode.light);
+    state.setPureBlack(false);
+    tester.view.physicalSize = const Size(1280, 840);
+    await settle(); // let the theme change finish first
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundary,
+        child: SidekickApp(state: state, splash: true),
+      ),
+    );
+    // Every 50 ms, for a GIF: startup-00.png, startup-01.png, …
+    for (var frame = 0; frame * 50 <= 1800; frame++) {
+      await tester.pump(Duration(milliseconds: frame == 0 ? 0 : 50));
+      final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      await tester.runAsync(() async {
+        final image = await render.toImage(pixelRatio: 0.5);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        File(p.join(out.path, 'startup-${frame.toString().padLeft(2, '0')}.png'))
+            .writeAsBytesSync(bytes!.buffer.asUint8List());
+      });
+    }
+    await tester.pump(const Duration(seconds: 1));
 
     await tester.runAsync(() async {
       await phone.stop();

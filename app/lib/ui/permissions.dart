@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../platform/android.dart';
 import '../platform/macos.dart';
+import 'widgets.dart';
 
 /// The Android permissions Sidekick asks for, one row each with a button
 /// to the system screen that grants it (Settings and the welcome screen).
@@ -14,7 +15,7 @@ List<Widget> androidPermissionRows() {
     required bool granted,
     required Future<void> Function() grant,
   }) => ListTile(
-    leading: Icon(icon),
+    leading: IconTile(icon),
     title: Text(title),
     subtitle: Text(why),
     isThreeLine: true,
@@ -48,7 +49,7 @@ List<Widget> androidPermissionRows() {
     ),
     if (!perms.accessibility)
       ListTile(
-        leading: const SizedBox(),
+        leading: const SizedBox(width: 40),
         title: const Text('Open App info'),
         subtitle: const Text('For "Allow restricted settings" on Android 13 and newer'),
         onTap: AndroidBridge.openAppSettings,
@@ -62,7 +63,7 @@ class MacAccessibilityRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: const Icon(Icons.mouse_outlined),
+    leading: const IconTile(Icons.mouse_rounded),
     title: const Text('Accessibility'),
     subtitle: const Text(
       'So your other devices can move the mouse, click and type on this Mac. If Sidekick is '

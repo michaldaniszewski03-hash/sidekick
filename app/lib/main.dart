@@ -2,20 +2,25 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
+import 'platform/sound.dart';
 import 'ui/shell.dart';
+import 'ui/startup.dart';
 import 'ui/welcome.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final state = await AppState.load();
   await state.start();
-  runApp(SidekickApp(state: state));
+  runApp(SidekickApp(state: state, splash: true));
 }
 
 class SidekickApp extends StatelessWidget {
-  const SidekickApp({super.key, required this.state});
+  const SidekickApp({super.key, required this.state, this.splash = false});
 
   final AppState state;
+
+  /// Play the startup animation (and on a Mac, the chime) first.
+  final bool splash;
 
   /// Material You, Sidekick style: the colors come from the wallpaper or the
   /// chosen theme; shapes are soft and generous, headlines bold.
@@ -154,12 +159,17 @@ class SidekickApp extends StatelessWidget {
           themeMode: state.themeMode,
           theme: _theme(_scheme(lightDynamic, Brightness.light)),
           darkTheme: _theme(_scheme(darkDynamic, Brightness.dark)),
-          home: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 400),
-            child: state.welcomed ? Shell(state: state) : WelcomeFlow(state: state),
+          home: _maybeSplash(
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: state.welcomed ? Shell(state: state) : WelcomeFlow(state: state),
+            ),
           ),
         ),
       ),
     );
   }
+
+  Widget _maybeSplash(Widget app) =>
+      splash ? StartupSplash(onStart: state.startupSound ? playStartupSound : null, child: app) : app;
 }

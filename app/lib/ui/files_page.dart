@@ -117,12 +117,12 @@ class _BrowserState extends State<_Browser> {
           onPressed: () => setState(() => _showHidden = !_showHidden),
           icon: Icon(_showHidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
         ),
-        IconButton(tooltip: 'Refresh', onPressed: _load, icon: const Icon(Icons.refresh)),
+        IconButton(tooltip: 'Refresh', onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
         if (_current != null) ...[
           const SizedBox(width: 4),
           FilledButton.icon(
             onPressed: _pickAndUpload,
-            icon: const Icon(Icons.upload),
+            icon: const Icon(Icons.upload_rounded),
             label: const Text('Upload here'),
           ),
         ],
@@ -189,7 +189,7 @@ class _BrowserState extends State<_Browser> {
       itemCount: entries.length,
       itemBuilder: (context, i) {
         final e = entries[i];
-        return ListTile(
+        final row = ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
           leading: Container(
             width: 40,
@@ -209,14 +209,16 @@ class _BrowserState extends State<_Browser> {
               ? null
               : Text([formatBytes(e.size), if (e.modified != null) _date(e.modified!)].join(' · ')),
           trailing: e.isDir
-              ? const Icon(Icons.chevron_right)
+              ? const Icon(Icons.chevron_right_rounded)
               : IconButton(
                   tooltip: 'Download',
-                  icon: const Icon(Icons.download_outlined),
+                  icon: const Icon(Icons.download_rounded),
                   onPressed: () => widget.state.download(widget.device, e),
                 ),
           onTap: e.isDir ? () => _open(e.path) : () => widget.state.download(widget.device, e),
         );
+        // The first screenful cascades in; rows further down just scroll.
+        return i < 14 ? Entrance(key: ValueKey(e.path), index: i, child: row) : row;
       },
     );
   }

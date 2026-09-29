@@ -216,6 +216,9 @@ class AppState extends ChangeNotifier {
 
   /// Ask before accepting files sent to this device (Settings → Files).
   bool askBeforeReceiving = true;
+
+  /// Play the startup chime when Sidekick opens (Mac only).
+  bool startupSound = true;
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
 
@@ -256,6 +259,7 @@ class AppState extends ChangeNotifier {
     pureBlack = _prefs.getBool('pureBlack') ?? false;
     keepRunning = _prefs.getBool('keepRunning') ?? true;
     askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
+    startupSound = _prefs.getBool('startupSound') ?? true;
     welcomed = _prefs.getBool('welcomed') ?? false;
     permissions = Permissions(
       files: _prefs.getBool('allowFiles') ?? true,
@@ -1159,6 +1163,12 @@ class AppState extends ChangeNotifier {
   void setAskBeforeReceiving(bool value) {
     askBeforeReceiving = value;
     _prefs.setBool('askBeforeReceiving', value);
+    notifyListeners();
+  }
+
+  void setStartupSound(bool value) {
+    startupSound = value;
+    _prefs.setBool('startupSound', value);
     notifyListeners();
   }
 

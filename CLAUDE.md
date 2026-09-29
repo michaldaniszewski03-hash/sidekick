@@ -34,8 +34,15 @@ its biggest features and fixes, and bumps the website links (see
     the `bluetooth_low_energy` plugin on Android and Windows.
 - `app/lib/ui/`: screens. `transfer_screens.dart` holds the sender's full
   screen and the receiver's Accept/Decline card.
+  - `startup.dart`: the startup animation (every platform; a tap skips it,
+    reduced motion turns it off).
+  - `widgets.dart` has the shared pieces: `PageFrame`, `SectionLabel` (with
+    an icon), `IconTile` (tinted icon square for rows), `StatusPill`,
+    `Entrance` (fade/slide-in cascade), `Radar` (searching), `GradientBadge`.
 - `app/lib/platform/`: per-OS glue (input, media, files, device names,
-  secret storage, hotspot).
+  secret storage, hotspot, the Mac startup chime in `sound.dart`, played
+  with `afplay`). The chime (`app/assets/sounds/startup.wav`) comes from
+  `app/tool/make_sound.py`.
 - Native code:
   - `app/ios/Runner/SidekickBLE.swift` and `app/macos/Runner/SidekickBLE.swift`
     must stay **identical** (copy one to the other after any edit).
@@ -62,6 +69,8 @@ its biggest features and fixes, and bumps the website links (see
   - `flutter test tool/screenshots_test.dart` renders the tabs.
   - `flutter test tool/transfer_shots_test.dart` renders the send and
     receive screens.
+  - The first also renders the startup animation as `startup-NN.png`
+    frames (50 ms apart).
   - Output goes to `build/screenshots/`.
 - Swift can't be compiled here. CI (`ios` and `macos` jobs) is the check.
 - Bluetooth:

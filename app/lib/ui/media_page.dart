@@ -378,58 +378,76 @@ class _NowPlaying extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final nothing = !status.available;
-    return Row(
-      children: [
-        Container(
-          width: 112,
-          height: 112,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [scheme.primary, scheme.tertiary],
+    // A new track slides in over the old one.
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0.04, 0), end: Offset.zero).animate(animation),
+          child: child,
+        ),
+      ),
+      child: Row(
+        key: ValueKey((status.title, status.artist, status.available)),
+        children: [
+          Container(
+            width: 112,
+            height: 112,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [scheme.primary, scheme.tertiary],
+              ),
+            ),
+            child: Icon(
+              nothing ? Icons.music_off_rounded : Icons.music_note_rounded,
+              size: 48,
+              color: scheme.onPrimary,
             ),
           ),
-          child: Icon(nothing ? Icons.music_off_rounded : Icons.music_note_rounded, size: 48, color: scheme.onPrimary),
-        ),
-        const SizedBox(width: 24),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                !status.nowPlaying
-                    ? 'Media controls'
-                    : nothing && iPhone
-                    ? 'iPhone volume'
-                    : nothing
-                    ? 'Nothing playing'
-                    : (status.title.isEmpty ? 'Unknown title' : status.title),
-                style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                !status.nowPlaying
-                    ? "This device doesn't share what's playing, but play/pause, skip and volume work."
-                    : nothing && iPhone
-                    ? "iOS doesn't let other apps see or control Spotify, YouTube and other players, so only "
-                          'the volume works from here. Apple Music can be fully controlled.'
-                    : nothing && status.note != null
-                    ? "Couldn't read what's playing (${status.note}). Play/pause and volume still work."
-                    : nothing
-                    ? 'Start something in Spotify, YouTube, VLC or any other player.'
-                    : [status.artist, status.app].where((x) => x.isNotEmpty).join(' · '),
-                style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
-                maxLines: iPhone ? 4 : 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+          const SizedBox(width: 24),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  !status.nowPlaying
+                      ? 'Media controls'
+                      : nothing && iPhone
+                      ? 'iPhone volume'
+                      : nothing
+                      ? 'Nothing playing'
+                      : (status.title.isEmpty ? 'Unknown title' : status.title),
+                  style: text.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  !status.nowPlaying
+                      ? "This device doesn't share what's playing, but play/pause, skip and volume work."
+                      : nothing && iPhone
+                      ? "iOS doesn't let other apps see or control Spotify, YouTube and other players, so only "
+                            'the volume works from here. Apple Music can be fully controlled.'
+                      : nothing && status.note != null
+                      ? "Couldn't read what's playing (${status.note}). Play/pause and volume still work."
+                      : nothing
+                      ? 'Start something in Spotify, YouTube, VLC or any other player.'
+                      : [status.artist, status.app].where((x) => x.isNotEmpty).join(' · '),
+                  style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                  maxLines: iPhone ? 4 : 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
