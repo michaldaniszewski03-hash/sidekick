@@ -96,6 +96,11 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.1.1
+- **"Connect device"** (was "Add device") on the Devices tab, with plain
+  options: **Wi-Fi**, **Bluetooth** and **IP address**, each with one short
+  line on when to use it.
+
 ### 2.1.0
 - **Startup animation** on every platform: the "sk" tile pops in, ripples
   spread, the name rises, then it zooms away into the app. A tap skips it;
