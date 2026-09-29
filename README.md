@@ -121,10 +121,15 @@ In GitHub, go to **Settings → Secrets and variables → Actions** and add:
 | **Devices** | Finds Sidekick devices on your Wi-Fi, pairs with a 6-digit code, **Add by IP** if discovery is blocked, drag files onto a device card to send them |
 | **Files** | Browse the other device's folders and drives, download files, upload into the open folder (button or drag and drop), transfer progress |
 | **Remote** | Touchpad (drag to move, tap/click, right-click or long-press, scroll or two-finger scroll), a **Hold** toggle for dragging, typing (live keyboard capture on PC, a type-as-you-go box on the phone), shortcuts: Alt+Tab, Win+D, Ctrl+C/V… for a PC; Back, Home, Recent apps, Notifications… for a phone |
+| **Remote → Screen** | See the other device's screen live and control it by clicking where you look (like AnyDesk): mouse, drag, wheel and keyboard from a computer; tap, double-tap, long-press (right-click), long-press and move (drag) and pinch to zoom from a phone. **Full window** for a bigger view. Needs Wi-Fi (or the direct Wi-Fi link) |
 | **Media** | Title, artist and app of whatever's playing, play/pause, previous/next, ±10 s, a seek bar, a volume slider, mute |
 | **Settings** | Device name, the folder received files go to, switches for what paired devices may do, light/dark mode |
 
-When a paired device is controlling this device, a banner says so, with a button that unpairs it and stops the session right away.
+When a paired device is controlling this device, a banner says so, with a button that unpairs it and stops the session right away. When one is watching the screen, a banner says so with **Stop sharing**.
+
+**Sharing a screen:** Windows shares its main monitor with no setup. A Mac needs **Screen Recording** (Settings → Mac permissions → Grant, then quit and reopen Sidekick; the Mac needs macOS 12.3+). An Android phone asks its owner to tap **Start now** each time and shows a notification while shared. iPhones can view other screens but iOS never lets an iPhone's own screen be shared or controlled.
+
+**Controlling an iPhone's audio from a computer:** iOS only lets apps change the system volume (and mute) and control **Apple Music**; it doesn't allow controlling other apps like YouTube or Spotify. Keep Sidekick open on the iPhone while you do, since iOS pauses apps in the background.
 
 **Controlling the phone from the PC:** clicks become taps at the dot, the wheel becomes swipes, and Esc/Win map to Back/Home. Typing goes into whatever text field is focused on the phone.
 
