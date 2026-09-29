@@ -248,6 +248,16 @@ void main() {
     await expectLater(phone.confirmWith(pc, target, pin), throwsA(isA<SidekickException>()));
   });
 
+  /// Offers [files] to the PC and has the PC accept; returns the ticket.
+  Future<String> accepted(PeerClient client, List<(String, int)> files) async {
+    final offered = pc.server.events.only<TransferOffered>().first;
+    final reply = client.offerFiles(newToken().substring(0, 16), files);
+    (await offered).offer.accept();
+    final answer = await reply;
+    expect(answer.accepted, isTrue);
+    return answer.ticket!;
+  }
+
   test('browse, download and upload files', () async {
     final client = await pair();
     final docs = Directory(p.join(pc.home.path, 'Documents'))..createSync();
@@ -269,7 +279,8 @@ void main() {
 
     final received = pc.server.events.only<FileReceived>().first;
     final upload = File(p.join(tmp.path, 'photo.jpg'))..writeAsBytesSync(List.filled(300000, 7));
-    final saved = await client.upload(upload);
+    final ticket = await accepted(client, [('photo.jpg', 300000), ('photo.jpg', 300000)]);
+    final saved = await client.upload(upload, ticket: ticket);
     // The label comes from the connection: the certificate the PC presented.
     expect(client.lastSecurity?.bluetooth, isFalse);
     expect(client.lastSecurity?.certificate, pc.identity.fingerprint);
@@ -279,7 +290,7 @@ void main() {
     expect((await received).from.id, phone.id);
 
     // Same name again doesn't overwrite.
-    final saved2 = await client.upload(upload);
+    final saved2 = await client.upload(upload, ticket: ticket);
     expect(p.basename(saved2), 'photo (1).jpg');
 
     // Upload into a folder we browsed to.
@@ -292,9 +303,69 @@ void main() {
   test('upload names are sanitized', () async {
     final client = await pair();
     final f = File(p.join(tmp.path, 'x'))..writeAsStringSync('x');
-    final saved = await client.upload(f, name: r'..\..\Windows\evil:name?.txt');
+    final ticket = await accepted(client, [(r'..\..\Windows\evil:name?.txt', 1)]);
+    final saved = await client.upload(f, name: r'..\..\Windows\evil:name?.txt', ticket: ticket);
     expect(p.dirname(saved), p.join(pc.home.path, 'Received'));
     expect(p.basename(saved), 'evil_name_.txt');
+  });
+
+  test('sending asks first: accept, decline, cancel, and tickets', () async {
+    final client = await pair();
+    final f = File(p.join(tmp.path, 'song.mp3'))..writeAsBytesSync(List.filled(5000, 1));
+
+    // No ticket, no file.
+    await expectLater(client.upload(f), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 403)));
+    expect(Directory(p.join(pc.home.path, 'Received')).existsSync(), isFalse);
+
+    // The PC sees who and what, then declines.
+    var offered = pc.server.events.only<TransferOffered>().first;
+    var reply = client.offerFiles('offer-1', [('song.mp3', 5000)]);
+    final offer = (await offered).offer;
+    expect(offer.from.id, phone.id);
+    expect(offer.files.single.name, 'song.mp3');
+    expect(offer.totalBytes, 5000);
+    offer.decline();
+    expect((await reply).accepted, isFalse);
+    expect((await reply).answer, 'declined');
+
+    // The phone gives up while the PC's prompt is open: it closes.
+    offered = pc.server.events.only<TransferOffered>().first;
+    reply = client.offerFiles('offer-2', [('song.mp3', 5000)]);
+    final waiting = (await offered).offer;
+    await client.cancelOffer('offer-2');
+    expect(await waiting.answer, OfferAnswer.cancelled);
+    expect((await reply).answer, 'cancelled');
+
+    // Accepted: the PC follows the progress, and the ticket covers exactly
+    // the files offered.
+    offered = pc.server.events.only<TransferOffered>().first;
+    reply = client.offerFiles('offer-3', [('song.mp3', 5000)]);
+    final accepted = (await offered).offer..accept();
+    final progress = accepted.progress.toList();
+    final ticket = (await reply).ticket!;
+    await client.upload(f, ticket: ticket);
+    expect((await progress).last, 5000);
+    expect(accepted.complete, isTrue);
+    await expectLater(client.upload(f, ticket: ticket), throwsA(isA<SidekickException>()));
+
+    // Another device can't use someone else's ticket.
+    offered = pc.server.events.only<TransferOffered>().first;
+    reply = client.offerFiles('offer-4', [('song.mp3', 5000)]);
+    (await offered).offer.accept();
+    final stolen = (await reply).ticket!;
+    final other = Node('laptop', tmp);
+    await other.server.start(port: 0, address: InternetAddress.loopbackIPv4);
+    final requested = pc.server.events.only<PairRequested>().first;
+    final target = await other.requestFrom(pc);
+    final paired = await other.confirmWith(pc, target, (await requested).request.pin);
+    final laptop = PeerClient(
+      host: '127.0.0.1',
+      port: pc.server.port,
+      token: paired.device.token,
+      fingerprint: pc.identity.fingerprint,
+    );
+    await expectLater(laptop.upload(f, ticket: stolen), throwsA(isA<SidekickException>()));
+    await other.server.stop();
   });
 
   test('media status and actions', () async {

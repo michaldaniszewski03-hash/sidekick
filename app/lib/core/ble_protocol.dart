@@ -202,6 +202,7 @@ class BleRpcClient {
     List<int> body = const [],
     Duration timeout = const Duration(seconds: 30),
     BleSeal? seal,
+    void Function(int sent, int total)? onSent,
   }) async {
     if (body.length > bleMaxBody) throw StateError('Too large to send over Bluetooth. Use Wi-Fi for big files.');
     final id = _nextId;
@@ -221,8 +222,11 @@ class BleRpcClient {
     _pending[id] = _Pending(completer, seal, nonce);
     // Chunks of one message must not interleave with another's writes.
     final sent = _sending.then((_) async {
+      var sent = 0;
       for (final chunk in chunkMessage(id, message, await chunkSize())) {
         await send(chunk);
+        sent += chunk.length - bleChunkHeader;
+        onSent?.call(sent, message.length);
       }
     });
     _sending = sent.catchError((_) {});

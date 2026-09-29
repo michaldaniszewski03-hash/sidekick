@@ -10,6 +10,16 @@ import 'crypto.dart';
 import 'models.dart';
 import 'trust.dart';
 
+/// The other device's answer to [PeerClient.offerFiles].
+class OfferReply {
+  const OfferReply({required this.accepted, required this.answer, this.ticket});
+  final bool accepted;
+
+  /// accepted, declined, cancelled or timedOut.
+  final String answer;
+  final String? ticket;
+}
+
 class SidekickException implements Exception {
   SidekickException(this.message, {this.status, this.identityChanged = false});
   final String message;
@@ -149,6 +159,7 @@ class PeerClient {
     List<int> body = const [],
     Map<String, String> headers = const {},
     Duration timeout = const Duration(seconds: 30),
+    void Function(int sent, int total)? onSent,
   }) async {
     final BleResponse res;
     try {
@@ -160,6 +171,7 @@ class PeerClient {
         body: body,
         timeout: timeout,
         seal: seal,
+        onSent: onSent,
       );
     } on TimeoutException {
       throw SidekickException('The device took too long to answer over Bluetooth.');
@@ -197,7 +209,7 @@ class PeerClient {
       );
       return jsonDecode(utf8.decode(res.body));
     }
-    final res = await _send('POST', path, json: body);
+    final res = await _send('POST', path, json: body, timeout: timeout);
     return jsonDecode(await utf8.decodeStream(res));
   }
 
@@ -372,11 +384,35 @@ class PeerClient {
     }
   }
 
+  /// Asks the other device to accept [files] (name, size) and waits for the
+  /// answer. [id] lets [cancelOffer] withdraw it. A device too old to ask
+  /// counts as accepting, without a ticket.
+  Future<OfferReply> offerFiles(String id, List<(String, int)> files) async {
+    try {
+      final json = await _postJson('/v1/transfer/offer', {
+        'id': id,
+        'files': [
+          for (final (name, size) in files) {'name': name, 'size': size},
+        ],
+      }, timeout: const Duration(seconds: 90)) as Map<String, dynamic>;
+      return OfferReply(
+        accepted: json['accepted'] == true,
+        answer: json['answer'] as String? ?? '',
+        ticket: json['ticket'] as String?,
+      );
+    } on SidekickException catch (e) {
+      if (e.status == 404) return const OfferReply(accepted: true, answer: 'accepted');
+      rethrow;
+    }
+  }
+
+  Future<void> cancelOffer(String id) => _postJson('/v1/transfer/cancel', {'id': id});
+
   /// Uploads [file]. Without [remoteDir] it goes to the device's receive
   /// folder. Returns the path it was saved to on the other device.
-  Future<String> upload(File file, {String? name, String? remoteDir, Progress? onProgress}) async {
+  Future<String> upload(File file, {String? name, String? remoteDir, String? ticket, Progress? onProgress}) async {
     final total = await file.length();
-    final query = {'name': name ?? file.uri.pathSegments.last, 'dir': ?remoteDir};
+    final query = {'name': name ?? file.uri.pathSegments.last, 'dir': ?remoteDir, 'ticket': ?ticket};
     if (ble != null) {
       if (total > bleMaxBody) {
         throw SidekickException('This file is too big for Bluetooth. Connect both devices to the same Wi-Fi.');
@@ -388,6 +424,8 @@ class PeerClient {
         query: query,
         body: await file.readAsBytes(),
         timeout: const Duration(minutes: 30),
+        // The message is a little bigger than the file (header, sealing).
+        onSent: (sent, all) => onProgress?.call((sent * total ~/ (all == 0 ? 1 : all)).clamp(0, total), total),
       );
       onProgress?.call(total, total);
       return (jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>)['path'] as String;

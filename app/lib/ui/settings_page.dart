@@ -80,6 +80,13 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle: Text(_receiveDir ?? '…'),
                         trailing: TextButton(onPressed: _pickReceiveDir, child: const Text('Change')),
                       ),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.front_hand_outlined),
+                        title: const Text('Ask before receiving files'),
+                        subtitle: const Text('Accept or decline each time a device sends you something.'),
+                        value: state.askBeforeReceiving,
+                        onChanged: state.setAskBeforeReceiving,
+                      ),
                     ],
                   ),
                   if (hostIsAndroid) ...[

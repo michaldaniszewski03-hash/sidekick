@@ -57,6 +57,71 @@ class FileReceived extends ServerEvent {
   final TransferSecurity security;
 }
 
+/// A paired device wants to send files here. Show [offer] and answer it;
+/// it closes by itself if the sender gives up or nobody answers in time.
+class TransferOffered extends ServerEvent {
+  TransferOffered(this.offer);
+  final TransferOffer offer;
+}
+
+/// A file announced in a [TransferOffer].
+class OfferedFile {
+  const OfferedFile(this.name, this.size);
+  final String name;
+  final int size;
+}
+
+enum OfferAnswer { accepted, declined, cancelled, timedOut }
+
+/// Files a paired device asked to send. Accepting gives the sender a
+/// ticket, and uploads to the receive folder need one.
+class TransferOffer {
+  TransferOffer({required this.id, required this.from, required this.files});
+  final String id;
+  final TrustedPeer from;
+  final List<OfferedFile> files;
+
+  int get totalBytes => files.fold(0, (sum, f) => sum + f.size);
+
+  final _answer = Completer<OfferAnswer>();
+  final _progress = StreamController<int>.broadcast();
+  int received = 0;
+  int filesReceived = 0;
+
+  /// How it was answered (or why it closed without an answer).
+  Future<OfferAnswer> get answer => _answer.future;
+  bool get isOpen => !_answer.isCompleted;
+
+  /// Bytes received so far, once accepted. Closes when every file is in.
+  Stream<int> get progress => _progress.stream;
+  bool get complete => filesReceived >= files.length;
+
+  void accept() => _close(OfferAnswer.accepted);
+  void decline() => _close(OfferAnswer.declined);
+
+  void _close(OfferAnswer answer) {
+    if (!_answer.isCompleted) _answer.complete(answer);
+  }
+
+  void _addReceived(int bytes) {
+    received += bytes;
+    if (!_progress.isClosed) _progress.add(received);
+  }
+
+  void _fileDone() {
+    filesReceived++;
+    if (complete) _progress.close();
+  }
+}
+
+class _Ticket {
+  _Ticket(this.peerId, this.offer) : expires = DateTime.now().add(const Duration(minutes: 30));
+  final String peerId;
+  final TransferOffer offer;
+  final DateTime expires;
+  int uses = 0;
+}
+
 /// A peer tried remote control, but this device can't accept it yet (e.g.
 /// the Mac's Accessibility permission is missing).
 class InputBlocked extends ServerEvent {
@@ -88,7 +153,9 @@ class SidekickServer {
     Permissions Function()? permissions,
     DirectLink? link,
     Future<bool> Function()? inputReady,
-  }) : inputReady = inputReady ?? (() async => input.supported),
+    bool Function()? askBeforeReceiving,
+  }) : askBeforeReceiving = askBeforeReceiving ?? (() => true),
+       inputReady = inputReady ?? (() async => input.supported),
        permissions = permissions ?? (() => const Permissions()),
        link = link ?? NoDirectLink();
 
@@ -110,6 +177,15 @@ class SidekickServer {
 
   /// Opens or joins a direct Wi-Fi link when a peer asks over Bluetooth.
   final DirectLink link;
+
+  /// Whether files sent here wait for the user to accept them.
+  final bool Function() askBeforeReceiving;
+
+  /// How long an offer waits for an answer.
+  static const offerTimeout = Duration(seconds: 60);
+
+  final Map<String, TransferOffer> _offers = {};
+  final Map<String, _Ticket> _tickets = {};
 
   final _events = StreamController<ServerEvent>.broadcast();
   Stream<ServerEvent> get events => _events.stream;
@@ -193,6 +269,8 @@ class SidekickServer {
       ..get('/v1/fs/list', _authed(_list, (p) => p.files))
       ..get('/v1/fs/download', _authed(_download, (p) => p.files))
       ..post('/v1/fs/upload', _authed(_upload, (p) => p.files))
+      ..post('/v1/transfer/offer', _authed(_offer, (p) => p.files))
+      ..post('/v1/transfer/cancel', _authed(_cancelOffer, (p) => p.files))
       ..get('/v1/media', _authed(_mediaStatus, (p) => p.media))
       ..post('/v1/media', _authed(_mediaAction, (p) => p.media))
       ..get('/v1/input/status', _authed(_inputStatus, (p) => p.input))
@@ -452,6 +530,51 @@ class SidekickServer {
     );
   }
 
+  /// `POST /v1/transfer/offer`, body `{id, files: [{name, size}]}`: asks
+  /// the user here to accept files, and waits (up to [offerTimeout]) for
+  /// the answer: `{accepted, ticket?, answer}`. Uploads to the receive
+  /// folder then carry the ticket.
+  Future<Response> _offer(Request r) async {
+    final body = await _body(r);
+    final id = body['id'];
+    final list = body['files'];
+    if (id is! String || id.isEmpty || id.length > 64 || list is! List || list.isEmpty || list.length > 1000) {
+      return _error(400, 'Bad offer');
+    }
+    final files = [
+      for (final f in list.whereType<Map>())
+        OfferedFile(sanitizeFileName('${f['name'] ?? 'file'}'), (f['size'] as num?)?.toInt() ?? 0),
+    ];
+    final peer = _peer(r);
+    _offers.removeWhere((_, o) => !o.isOpen);
+    if (_offers.values.where((o) => o.from.id == peer.id).length >= 3) {
+      return _error(429, 'Too many offers waiting. Try again in a minute.');
+    }
+    final offer = TransferOffer(id: id, from: peer, files: files);
+    if (askBeforeReceiving()) {
+      _offers[id] = offer;
+      _events.add(TransferOffered(offer));
+      Timer(offerTimeout, () => offer._close(OfferAnswer.timedOut));
+    } else {
+      offer.accept();
+    }
+    final answer = await offer.answer;
+    _offers.remove(id);
+    if (answer != OfferAnswer.accepted) return _json({'accepted': false, 'answer': answer.name});
+    _tickets.removeWhere((_, t) => DateTime.now().isAfter(t.expires));
+    final ticket = newToken();
+    _tickets[ticket] = _Ticket(peer.id, offer);
+    return _json({'accepted': true, 'answer': answer.name, 'ticket': ticket});
+  }
+
+  /// `POST /v1/transfer/cancel`, body `{id}`: the sender stopped waiting.
+  Future<Response> _cancelOffer(Request r) async {
+    final id = (await _body(r))['id'];
+    final offer = _offers[id];
+    if (offer != null && offer.from.id == _peer(r).id) offer._close(OfferAnswer.cancelled);
+    return _json({'ok': true});
+  }
+
   /// `POST /v1/fs/upload?name=photo.jpg[&dir=C:\Users\me\Desktop]`, raw bytes
   /// in the body. Without `dir` the file lands in the receive folder.
   Future<Response> _upload(Request r) async {
@@ -460,6 +583,27 @@ class SidekickServer {
     final dir = (dirParam == null || dirParam.isEmpty) ? await receiveDir() : dirParam;
     if (dirParam != null && dirParam.isNotEmpty && !await Directory(dir).exists()) {
       return _error(404, 'Folder not found');
+    }
+    // Files sent to the receive folder need a ticket from an accepted offer
+    // (a paired device browsing a folder already has full file access).
+    _Ticket? ticket;
+    if (dirParam == null || dirParam.isEmpty) {
+      ticket = _tickets[r.url.queryParameters['ticket'] ?? ''];
+      final valid =
+          ticket != null &&
+          ticket.peerId == _peer(r).id &&
+          DateTime.now().isBefore(ticket.expires) &&
+          ticket.uses < ticket.offer.files.length;
+      if (!valid) {
+        if (askBeforeReceiving()) {
+          return _error(
+            403,
+            '${self().name} asks before receiving files. Update Sidekick on this device and send again.',
+          );
+        }
+        ticket = null;
+      }
+      ticket?.uses++;
     }
     await Directory(dir).create(recursive: true);
 
@@ -472,6 +616,7 @@ class SidekickServer {
       await sink.addStream(
         r.read().map((chunk) {
           size += chunk.length;
+          ticket?.offer._addReceived(chunk.length);
           return chunk;
         }),
       );
@@ -484,9 +629,12 @@ class SidekickServer {
       final security = _overBluetooth(r)
           ? const TransferSecurity.bluetooth()
           : TransferSecurity.wifi(certificate: _peer(r).fingerprint);
+      ticket?.offer._fileDone();
       _events.add(FileReceived(_peer(r), saved, size, security));
       return _json({'path': saved.path, 'size': size});
     } catch (_) {
+      // Counts as finished, so the receiving screen doesn't wait for it.
+      ticket?.offer._fileDone();
       await sink.close().catchError((_) {});
       if (await partial.exists()) await partial.delete();
       rethrow;

@@ -206,7 +206,13 @@ void main() {
 
       final local = File(p.join(home.path, 'photo.jpg'))..writeAsBytesSync(List.generate(20000, (i) => i % 256));
       final received = pc.events.where((e) => e is FileReceived).cast<FileReceived>().first;
-      final saved = await client.upload(local);
+      // Asking first works over Bluetooth too.
+      final offered = pc.events.where((e) => e is TransferOffered).cast<TransferOffered>().first;
+      final reply = client.offerFiles('ble-offer', [('photo.jpg', 20000)]);
+      (await offered).offer.accept();
+      var sent = 0;
+      final saved = await client.upload(local, ticket: (await reply).ticket, onProgress: (d, _) => sent = d);
+      expect(sent, 20000);
       expect(client.lastSecurity?.bluetooth, isTrue, reason: 'the reply decrypted with the pairing key');
       expect((await received).security.bluetooth, isTrue);
       expect(anon.lastSecurity, isNull, reason: 'pairing requests are not sealed');

@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
+import '../core/server.dart';
 import '../core/trust.dart';
 import 'devices_page.dart';
 import 'files_page.dart';
 import 'media_page.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
+import 'transfer_screens.dart';
 
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.state});
@@ -37,7 +39,12 @@ class _ShellState extends State<Shell> {
   @override
   void initState() {
     super.initState();
-    _subs = [state.pairRequests.listen(_showPin), state.notices.listen(_showNotice)];
+    _subs = [
+      state.pairRequests.listen(_showPin),
+      state.notices.listen(_showNotice),
+      state.transferOffers.listen(_showOffer),
+      state.sends.listen(_showSend),
+    ];
     _lifecycle = AppLifecycleListener(onResume: state.refreshPlatform);
   }
 
@@ -51,6 +58,14 @@ class _ShellState extends State<Shell> {
   }
 
   void _go(int index) => setState(() => _index = index);
+
+  void _showOffer(TransferOffer offer) {
+    if (mounted) showIncomingOffer(context, offer);
+  }
+
+  void _showSend(OutgoingSend send) {
+    if (mounted) showSendingScreen(context, send);
+  }
 
   void _showNotice(Notice notice) {
     final messenger = ScaffoldMessenger.of(context);

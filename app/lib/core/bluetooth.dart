@@ -387,12 +387,19 @@ class BluetoothService {
     if (existing != null) return Future.value(existing);
     return _opening[id] ??= () async {
       try {
-        final maxWrite = await _ble.open(id).timeout(const Duration(seconds: 20));
-        return _links[id] = _Link(_ble, id, maxWrite);
-      } catch (e) {
-        unawaited(_ble.close(id).catchError((_) {}));
-        _log('Connecting over Bluetooth failed: ${_describe(e)}');
-        rethrow;
+        // Twice: the first try can meet the tail of the short connection
+        // that read the device's name, which is still hanging up.
+        for (var attempt = 1; ; attempt++) {
+          try {
+            final maxWrite = await _ble.open(id).timeout(const Duration(seconds: 20));
+            return _links[id] = _Link(_ble, id, maxWrite);
+          } catch (e) {
+            unawaited(_ble.close(id).catchError((_) {}));
+            _log('Connecting over Bluetooth failed: ${_describe(e)}');
+            if (attempt >= 2) rethrow;
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+          }
+        }
       } finally {
         unawaited(_opening.remove(id));
       }

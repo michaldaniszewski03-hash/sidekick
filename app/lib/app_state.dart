@@ -65,6 +65,50 @@ class Transfer {
   double? get fraction => total > 0 ? done / total : null;
 }
 
+enum SendPhase { connecting, waiting, sending, done, declined, noAnswer, failed }
+
+/// Files being sent with Send: asks the other device first, then uploads.
+/// The full-screen sending view follows it.
+class OutgoingSend extends ChangeNotifier {
+  OutgoingSend({required this.device, required this.names, required this.total});
+  final PairedDevice device;
+  final List<String> names;
+  final int total;
+
+  SendPhase phase = SendPhase.connecting;
+  int done = 0;
+
+  /// Index of the file being sent (0-based).
+  int current = 0;
+  String? error;
+  bool cancelled = false;
+  Future<void> Function()? _cancelOffer;
+
+  bool get finished => phase.index >= SendPhase.done.index;
+  double get fraction => total > 0 ? (done / total).clamp(0.0, 1.0) : (phase == SendPhase.done ? 1 : 0);
+
+  void _set(SendPhase p, {String? error}) {
+    phase = p;
+    this.error = error;
+    notifyListeners();
+  }
+
+  void _progress(int bytes) {
+    done = bytes;
+    notifyListeners();
+  }
+
+  /// Stops waiting for an answer (the other device's prompt closes too).
+  Future<void> cancel() async {
+    if (phase != SendPhase.connecting && phase != SendPhase.waiting) return;
+    cancelled = true;
+    notifyListeners();
+    try {
+      await _cancelOffer?.call();
+    } catch (_) {}
+  }
+}
+
 class NearbyDevice {
   NearbyDevice(this.info) : lastSeen = DateTime.now();
   DeviceInfo info;
@@ -161,6 +205,17 @@ class AppState extends ChangeNotifier {
   Set<String> get connectingDirect => _directConnecting.keys.toSet();
 
   final _pairRequests = StreamController<PairingRequest>.broadcast();
+  final _offers = StreamController<TransferOffer>.broadcast();
+  final _sends = StreamController<OutgoingSend>.broadcast();
+
+  /// Another device wants to send files here: ask the user.
+  Stream<TransferOffer> get transferOffers => _offers.stream;
+
+  /// A Send started here: show it full screen.
+  Stream<OutgoingSend> get sends => _sends.stream;
+
+  /// Ask before accepting files sent to this device (Settings → Files).
+  bool askBeforeReceiving = true;
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
 
@@ -200,6 +255,7 @@ class AppState extends ChangeNotifier {
     if (themeColor != 'system' && !themeColors.containsKey(themeColor)) themeColor = 'system';
     pureBlack = _prefs.getBool('pureBlack') ?? false;
     keepRunning = _prefs.getBool('keepRunning') ?? true;
+    askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
     welcomed = _prefs.getBool('welcomed') ?? false;
     permissions = Permissions(
       files: _prefs.getBool('allowFiles') ?? true,
@@ -317,6 +373,7 @@ class AppState extends ChangeNotifier {
       permissions: () => permissions,
       link: directLink,
       inputReady: _inputReady,
+      askBeforeReceiving: () => askBeforeReceiving,
     );
     server.events.listen(_onServerEvent);
     try {
@@ -860,6 +917,8 @@ class AppState extends ChangeNotifier {
     switch (event) {
       case PairRequested(:final request):
         _pairRequests.add(request);
+      case TransferOffered(:final offer):
+        _offers.add(offer);
       case Paired(:final device):
         _addPaired(device);
         _notices.add(Notice('Paired with ${device.name}'));
@@ -940,28 +999,77 @@ class AppState extends ChangeNotifier {
   }
 
   /// Sends local files to [d]. With [remoteDir] they go into that folder on
-  /// the other device; otherwise into its receive folder.
+  /// the other device (it's browsing-level access, so nobody is asked);
+  /// otherwise the other device is asked to accept them first, and they land
+  /// in its receive folder.
   Future<void> sendFiles(PairedDevice d, List<File> localFiles, {String? remoteDir}) async {
     if (localFiles.isEmpty) return;
-    var total = 0;
+    final sizes = <int>[];
     for (final file in localFiles) {
       try {
-        total += await file.length();
-      } catch (_) {}
+        sizes.add(await file.length());
+      } catch (_) {
+        sizes.add(0);
+      }
     }
-    final what = localFiles.length == 1 ? p.basename(localFiles.first.path) : '${localFiles.length} files';
-    _notices.add(Notice('Sending $what to ${d.name}…'));
-    final client = await _clientForTransfer(d, total);
+    final total = sizes.fold(0, (a, b) => a + b);
+    final names = [for (final f in localFiles) p.basename(f.path)];
+    final what = localFiles.length == 1 ? names.first : '${localFiles.length} files';
+    if (remoteDir != null) {
+      _notices.add(Notice('Sending $what to ${d.name}…'));
+    }
+    final send = OutgoingSend(device: d, names: names, total: total);
+    if (remoteDir == null) _sends.add(send);
+
+    final PeerClient client;
+    String? ticket;
+    try {
+      client = await _clientForTransfer(d, total);
+      if (remoteDir == null) {
+        if (send.cancelled) return;
+        send._set(SendPhase.waiting);
+        final offerId = newToken().substring(0, 16);
+        send._cancelOffer = () => client.cancelOffer(offerId);
+        final reply = await client.offerFiles(offerId, [for (var i = 0; i < names.length; i++) (names[i], sizes[i])]);
+        if (send.cancelled || reply.answer == 'cancelled') {
+          send._set(SendPhase.failed, error: 'Cancelled');
+          return;
+        }
+        if (!reply.accepted) {
+          final declined = reply.answer == 'declined';
+          send._set(declined ? SendPhase.declined : SendPhase.noAnswer);
+          _notices.add(Notice(declined ? '${d.name} declined $what' : 'No answer from ${d.name}. Nothing was sent.'));
+          return;
+        }
+        ticket = reply.ticket;
+        send._set(SendPhase.sending);
+      }
+    } catch (e) {
+      _noteFailure(d, e);
+      send._set(SendPhase.failed, error: '$e');
+      _notices.add(Notice("Couldn't send to ${d.name}: $e"));
+      return;
+    }
+
     var sent = 0;
+    var before = 0;
     Object? failure;
-    for (final file in localFiles) {
-      final t = _startTransfer(p.basename(file.path), d, upload: true);
+    for (var i = 0; i < localFiles.length; i++) {
+      final file = localFiles[i];
+      final t = _startTransfer(names[i], d, upload: true);
+      send
+        ..current = i
+        .._progress(before);
       try {
         await client.upload(
           file,
-          name: p.basename(file.path),
+          name: names[i],
           remoteDir: remoteDir,
-          onProgress: (a, b) => _progress(t, a, b),
+          ticket: ticket,
+          onProgress: (a, b) {
+            _progress(t, a, b);
+            send._progress(before + a);
+          },
         );
         t
           ..state = TransferState.done
@@ -974,7 +1082,14 @@ class AppState extends ChangeNotifier {
           ..state = TransferState.failed
           ..error = '$e';
       }
+      before += sizes[i];
+      send._progress(before);
       notifyListeners();
+    }
+    if (failure == null) {
+      send._set(SendPhase.done);
+    } else {
+      send._set(SendPhase.failed, error: sent == 0 ? '$failure' : 'Sent $sent of ${localFiles.length}. $failure');
     }
     // Say how it went where the user is, not only in the Files tab.
     _notices.add(
@@ -1038,6 +1153,12 @@ class AppState extends ChangeNotifier {
   void finishWelcome() {
     welcomed = true;
     _prefs.setBool('welcomed', true);
+    notifyListeners();
+  }
+
+  void setAskBeforeReceiving(bool value) {
+    askBeforeReceiving = value;
+    _prefs.setBool('askBeforeReceiving', value);
     notifyListeners();
   }
 
