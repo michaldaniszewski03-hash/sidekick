@@ -4,9 +4,10 @@
     python app/tool/make_icons.py        # from the repo root
 
 Sources:
-  website/2.png  the SIDEKICK wordmark (also used in the website header)
-  website/3.png  the "sk" monogram, used where the wordmark would be too
-                 small to read (64 px and below)
+  website/3.png  the "sk" monogram: every app icon (dock, desktop, taskbar,
+                 home screens), at every size
+  website/2.png  the SIDEKICK wordmark: the logo inside the app (the website
+                 header uses it too)
 
 Writes the Windows .ico, Android launcher icons, macOS and iOS app icon sets,
 and the in-app logo. Re-run it whenever the artwork changes.
@@ -24,7 +25,9 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "app"
 BG = (204, 197, 255)  # lavender background of the artwork
 INK = (42, 28, 86)  # dark purple lettering
-SMALL = 64  # at or below this many pixels, use the monogram (the wide wordmark is unreadable there)
+# How much of the tile the monogram's longer side covers: enough to read at
+# 16 px, with room to breathe so it doesn't look crammed edge to edge.
+MONOGRAM_FRAC = 0.56
 
 
 def load_mask(path: Path) -> Image.Image:
@@ -41,13 +44,10 @@ WORDMARK = load_mask(ROOT / "website" / "2.png")
 MONOGRAM = load_mask(ROOT / "website" / "3.png")
 
 
-def paste_logo(canvas: Image.Image, box: tuple, size: int, *, width_frac: float, color=INK) -> None:
-    """Centres the right logo for `size` px inside `box` (x, y, w, h)."""
+def paste_logo(canvas: Image.Image, box: tuple, *, frac: float = MONOGRAM_FRAC, color=INK) -> None:
+    """Centres the "sk" monogram inside `box` (x, y, w, h)."""
     x, y, w, h = box
-    small = size <= SMALL
-    mask = MONOGRAM if small else WORDMARK
-    # Monogram fills more of the tile; wordmark is wide so it's width-bound.
-    frac = 0.62 if small else width_frac
+    mask = MONOGRAM
     scale = min(w * frac / mask.width, h * frac / mask.height)
     m = mask.resize((max(1, round(mask.width * scale)), max(1, round(mask.height * scale))), Image.LANCZOS)
     layer = Image.new("RGBA", m.size, color + (255,))
@@ -55,7 +55,7 @@ def paste_logo(canvas: Image.Image, box: tuple, size: int, *, width_frac: float,
     canvas.alpha_composite(layer, (x + (w - m.width) // 2, y + (h - m.height) // 2))
 
 
-def tile(size: int, *, radius_frac: float = 0.0, inset_frac: float = 0.0, width_frac: float = 0.72) -> Image.Image:
+def tile(size: int, *, radius_frac: float = 0.0, inset_frac: float = 0.0) -> Image.Image:
     """Lavender (rounded) square with the logo, drawn at 4x then downscaled."""
     s = size * 4
     canvas = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -67,7 +67,7 @@ def tile(size: int, *, radius_frac: float = 0.0, inset_frac: float = 0.0, width_
     )
     fill = Image.new("RGBA", (s, s), BG + (255,))
     canvas.paste(fill, (0, 0), shape)
-    paste_logo(canvas, box, size, width_frac=width_frac)
+    paste_logo(canvas, box)
     return canvas.resize((size, size), Image.LANCZOS)
 
 
@@ -103,11 +103,12 @@ def android() -> None:
         folder.mkdir(parents=True, exist_ok=True)
         # Legacy launchers: a rounded square.
         tile(round(48 * k), radius_frac=0.22).save(folder / "ic_launcher.png", optimize=True)
-        # Adaptive icon foreground: 108dp canvas, logo inside the 66dp safe
-        # circle (a 60dp-wide wordmark keeps its corners inside it).
+        # Adaptive icon foreground: 108dp canvas; launchers mask it to a
+        # 72dp shape and only the 66dp circle is safe. The monogram's corners
+        # stay inside it (about the same size as on the other icons).
         px = round(108 * k)
         fg = Image.new("RGBA", (px * 4, px * 4), (0, 0, 0, 0))
-        paste_logo(fg, (0, 0, px * 4, px * 4), 999, width_frac=60 / 108)
+        paste_logo(fg, (0, 0, px * 4, px * 4), frac=MONOGRAM_FRAC * 72 / 108)
         fg.resize((px, px), Image.LANCZOS).save(folder / "ic_launcher_foreground.png", optimize=True)
     (res / "values/colors.xml").write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
@@ -143,7 +144,7 @@ def macos() -> None:
     # Big Sur style: rounded square with a margin, on a transparent canvas.
     appiconset(
         APP / "macos/Runner/Assets.xcassets/AppIcon.appiconset",
-        lambda px: tile(px, radius_frac=0.225, inset_frac=0.1, width_frac=0.72),
+        lambda px: tile(px, radius_frac=0.225, inset_frac=0.1),
     )
 
 
@@ -151,7 +152,7 @@ def ios() -> None:
     # iOS rounds the corners itself and rejects transparency: full-bleed, RGB.
     appiconset(
         APP / "ios/Runner/Assets.xcassets/AppIcon.appiconset",
-        lambda px: tile(px, width_frac=0.72).convert("RGB"),
+        lambda px: tile(px).convert("RGB"),
     )
 
 

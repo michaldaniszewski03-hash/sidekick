@@ -83,7 +83,7 @@ class _WelcomeFlowState extends State<WelcomeFlow> {
                 children: [
                   Row(
                     children: [
-                      Image.asset('assets/logo/wordmark.png', height: 22, color: scheme.onSurface),
+                      Image.asset('assets/logo/wordmark.png', width: 206, color: scheme.onSurface),
                       const Spacer(),
                       // Hidden rather than removed, so the header doesn't jump.
                       Visibility.maintain(

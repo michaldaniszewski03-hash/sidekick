@@ -80,10 +80,18 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.0.1
+- **App icons are the "sk" monogram** (`website/3.png`) everywhere the
+  system shows Sidekick: Mac dock, Windows desktop/taskbar/Start menu and
+  installer, Android and iPhone home screens, at every size, with a little
+  more breathing room around it. The website keeps the wide wordmark
+  (`website/2.png`), and so does the logo inside the app.
+- The logo inside the app is 10 px smaller (welcome screen 206 px wide,
+  desktop side rail 66 px).
+
 ### 2.0.0
-- **New logo:** the wide SIDEKICK wordmark (`website/2.png`) on every app
-  icon, in the app and on the website. Icons 64 px and smaller use the "sk"
-  monogram.
+- **New logo:** the wide SIDEKICK wordmark (`website/2.png`) on app icons
+  (replaced by the "sk" monogram in 2.0.1), in the app and on the website.
 - **Redesign, still Material You** (wallpaper/theme colors unchanged):
   - One app-wide theme (`main.dart`): bold headlines, soft 16–28 px shapes,
     44 px buttons, rounded outlined fields, check icons on switches, the
