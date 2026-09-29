@@ -646,7 +646,11 @@ class AppState extends ChangeNotifier {
     if (reachableViaWifi(d.id) || sighting == null || bt == null || !reachableViaBluetooth(d.id)) {
       return PeerClient.forDevice(d);
     }
-    return _bleClients[d.id] ??= PeerClient.bluetooth(
+    // Paired again since (new key or token): the cached client would seal
+    // with the old key, and the other device would refuse everything.
+    final cached = _bleClients[d.id];
+    if (cached != null && cached.token == d.token && base64.encode(cached.seal!.key) == d.key) return cached;
+    return _bleClients[d.id] = PeerClient.bluetooth(
       bt.clientFor(sighting.bleId),
       token: d.token,
       seal: BleSeal(senderId: id, key: base64.decode(d.key)),

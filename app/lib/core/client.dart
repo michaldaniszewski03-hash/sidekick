@@ -187,6 +187,11 @@ class PeerClient {
         final json = jsonDecode(utf8.decode(res.body));
         if (json is Map && json['error'] is String) message = json['error'] as String;
       } catch (_) {}
+      if (message == 'Message failed authentication') {
+        message =
+            "The other device couldn't verify what this device sent over Bluetooth. If this keeps happening, "
+            'unpair the two devices and pair them again.';
+      }
       throw SidekickException(message, status: res.status);
     }
     return res;
@@ -418,17 +423,7 @@ class PeerClient {
         throw SidekickException('This file is too big for Bluetooth. Connect both devices to the same Wi-Fi.');
       }
       onProgress?.call(0, total);
-      final res = await _bleSend(
-        'POST',
-        '/v1/fs/upload',
-        query: query,
-        body: await file.readAsBytes(),
-        timeout: const Duration(minutes: 30),
-        // The message is a little bigger than the file (header, sealing).
-        onSent: (sent, all) => onProgress?.call((sent * total ~/ (all == 0 ? 1 : all)).clamp(0, total), total),
-      );
-      onProgress?.call(total, total);
-      return (jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>)['path'] as String;
+      return _bleUploadInParts(file, total, query, onProgress);
     }
     try {
       final req = await _http.openUrl('POST', _uri('/v1/fs/upload', query));
@@ -454,6 +449,73 @@ class PeerClient {
     } on HttpException catch (e) {
       throw SidekickException('Connection problem: ${e.message}');
     }
+  }
+
+  /// How much of a file goes in one Bluetooth request: a few seconds of
+  /// radio time, so a damaged packet only costs a resend of this much.
+  static const blePartSize = 32 * 1024;
+
+  /// Sends [file] over Bluetooth in sealed parts (`/v1/fs/upload/part`).
+  /// Each part is retried if it gets damaged on the way ("failed
+  /// authentication"), times out, or the link hiccups.
+  Future<String> _bleUploadInParts(File file, int total, Map<String, String> query, Progress? onProgress) async {
+    final uploadId = newToken().substring(0, 24);
+    final raf = await file.open();
+    try {
+      var offset = 0;
+      while (true) {
+        final length = (total - offset).clamp(0, blePartSize);
+        await raf.setPosition(offset);
+        final bytes = await raf.read(length);
+        final start = offset;
+        Map<String, dynamic>? answer;
+        for (var attempt = 1; answer == null; attempt++) {
+          try {
+            final res = await _bleSend(
+              'POST',
+              '/v1/fs/upload/part',
+              query: {...query, 'upload': uploadId, 'offset': '$start', 'total': '$total'},
+              body: bytes,
+              timeout: const Duration(minutes: 2),
+              // The message is a little bigger than the part (header, sealing).
+              onSent: (sent, all) =>
+                  onProgress?.call((start + sent * length ~/ (all == 0 ? 1 : all)).clamp(0, total), total),
+            );
+            answer = jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>;
+          } on SidekickException catch (e) {
+            // An older Sidekick on the other side: send it whole, as before.
+            if (e.status == 404 && start == 0 && e.message != 'Folder not found') {
+              return await _bleUploadWhole(file, total, query, onProgress);
+            }
+            final retryable = e.status == null || e.status == 401 || e.status! >= 500;
+            if (!retryable || attempt >= 4) rethrow;
+            await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
+          }
+        }
+        if (answer['path'] is String) {
+          onProgress?.call(total, total);
+          return answer['path'] as String;
+        }
+        offset = (answer['received'] as num).toInt();
+        onProgress?.call(offset, total);
+      }
+    } finally {
+      await raf.close();
+    }
+  }
+
+  /// The whole file in one Bluetooth request (Sidekick before 2.1.2).
+  Future<String> _bleUploadWhole(File file, int total, Map<String, String> query, Progress? onProgress) async {
+    final res = await _bleSend(
+      'POST',
+      '/v1/fs/upload',
+      query: query,
+      body: await file.readAsBytes(),
+      timeout: const Duration(minutes: 30),
+      onSent: (sent, all) => onProgress?.call((sent * total ~/ (all == 0 ? 1 : all)).clamp(0, total), total),
+    );
+    onProgress?.call(total, total);
+    return (jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>)['path'] as String;
   }
 
   // ------------------------------------------------------------ media

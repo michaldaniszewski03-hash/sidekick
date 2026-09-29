@@ -75,6 +75,12 @@ its biggest features and fixes, and bumps the website links (see
 - Swift can't be compiled here. CI (`ios` and `macos` jobs) is the check.
 - Bluetooth:
   - Writes are always one packet (MTU minus 3), never long writes.
+  - Files go over Bluetooth in 32 KB sealed parts (`/v1/fs/upload/part`),
+    each retried if it arrives damaged ("Message failed authentication"),
+    never as one giant message: one bad packet in a multi-MB message used
+    to fail the whole file. Older receivers get the whole file (fallback).
+  - Message ids start at a random number per client, so two clients on one
+    connection never mix their chunks.
   - iPhone and Mac use native CoreBluetooth, not the plugin: the plugin
     reported no devices on Apple.
   - Windows advertises through `addService` only. Its advertiser rejects

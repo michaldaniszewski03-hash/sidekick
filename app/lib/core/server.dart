@@ -130,6 +130,26 @@ class _Ticket {
   int uses = 0;
 }
 
+/// A file arriving in parts (`/v1/fs/upload/part`).
+class _PartUpload {
+  _PartUpload({
+    required this.peerId,
+    required this.name,
+    required this.dir,
+    required this.total,
+    required this.ticket,
+    required this.partial,
+  });
+  final String peerId;
+  final String name;
+  final String dir;
+  final int total;
+  final _Ticket? ticket;
+  final File partial;
+  int received = 0;
+  DateTime touched = DateTime.now();
+}
+
 /// A peer tried remote control, but this device can't accept it yet (e.g.
 /// the Mac's Accessibility permission is missing).
 class InputBlocked extends ServerEvent {
@@ -289,6 +309,7 @@ class SidekickServer {
       ..get('/v1/fs/list', _authed(_list, (p) => p.files))
       ..get('/v1/fs/download', _authed(_download, (p) => p.files))
       ..post('/v1/fs/upload', _authed(_upload, (p) => p.files))
+      ..post('/v1/fs/upload/part', _authed(_uploadPart, (p) => p.files))
       ..post('/v1/transfer/offer', _authed(_offer, (p) => p.files))
       ..post('/v1/transfer/cancel', _authed(_cancelOffer, (p) => p.files))
       ..get('/v1/media', _authed(_mediaStatus, (p) => p.media))
@@ -595,6 +616,117 @@ class SidekickServer {
     return _json({'ok': true});
   }
 
+  /// Files sent to the receive folder need a ticket from an accepted offer
+  /// (a paired device browsing a folder already has full file access). Uses
+  /// up one of the ticket's files.
+  (_Ticket?, Response?) _takeTicket(Request r, String? dirParam) {
+    if (dirParam != null && dirParam.isNotEmpty) return (null, null);
+    var ticket = _tickets[r.url.queryParameters['ticket'] ?? ''];
+    final valid =
+        ticket != null &&
+        ticket.peerId == _peer(r).id &&
+        DateTime.now().isBefore(ticket.expires) &&
+        ticket.uses < ticket.offer.files.length;
+    if (!valid) {
+      if (askBeforeReceiving()) {
+        return (
+          null,
+          _error(403, '${self().name} asks before receiving files. Update Sidekick on this device and send again.'),
+        );
+      }
+      ticket = null;
+    }
+    ticket?.uses++;
+    return (ticket, null);
+  }
+
+  /// Uploads arriving in parts (see [_uploadPart]), by upload id.
+  final Map<String, _PartUpload> _partUploads = {};
+
+  /// `POST /v1/fs/upload/part?name=…&upload=<id>&offset=<n>&total=<n>[&dir=…][&ticket=…]`,
+  /// one piece of a file. Bluetooth sends files this way: each part is
+  /// sealed and checked on its own, so one damaged packet costs a resend of
+  /// that part instead of the whole file. Parts must come in order; a part
+  /// that was already stored (a retry) is simply acknowledged. Answers
+  /// `{received}` until the last part, then `{path, size}`.
+  Future<Response> _uploadPart(Request r) async {
+    final q = r.url.queryParameters;
+    final id = q['upload'] ?? '';
+    final offset = int.tryParse(q['offset'] ?? '');
+    final total = int.tryParse(q['total'] ?? '');
+    if (id.isEmpty || id.length > 64 || offset == null || offset < 0 || total == null || total < 0) {
+      return _error(400, 'Bad upload part');
+    }
+    final body = await r
+        .read()
+        .fold<BytesBuilder>(BytesBuilder(copy: false), (b, c) => b..add(c))
+        .then((b) => b.takeBytes());
+
+    // Uploads nobody finished within 10 minutes are dropped.
+    final now = DateTime.now();
+    for (final stale in _partUploads.entries.where((e) => now.difference(e.value.touched).inMinutes >= 10).toList()) {
+      _partUploads.remove(stale.key);
+      stale.value.ticket?.offer._fileDone(0);
+      await stale.value.partial.delete().catchError((_) => stale.value.partial);
+    }
+
+    var up = _partUploads[id];
+    if (up != null && up.peerId != _peer(r).id) return _error(403, 'Not your upload');
+    if (up == null) {
+      if (offset != 0) return _error(409, 'The transfer was interrupted. Send it again.');
+      final dirParam = q['dir'];
+      final dir = (dirParam == null || dirParam.isEmpty) ? await receiveDir() : dirParam;
+      if (dirParam != null && dirParam.isNotEmpty && !await Directory(dir).exists()) {
+        return _error(404, 'Folder not found');
+      }
+      final (ticket, refusal) = _takeTicket(r, dirParam);
+      if (refusal != null) return refusal;
+      await Directory(dir).create(recursive: true);
+      final name = sanitizeFileName(q['name'] ?? 'file');
+      up = _partUploads[id] = _PartUpload(
+        peerId: _peer(r).id,
+        name: name,
+        dir: dir,
+        total: total,
+        ticket: ticket,
+        partial: File(p.join(dir, '.$name.${newToken().substring(0, 8)}.sidekick-part')),
+      );
+      await up.partial.writeAsBytes(const [], flush: true);
+    }
+    up.touched = now;
+
+    // In order: a retry of a stored part, or a gap, just reports where we are.
+    if (offset == up.received && body.isNotEmpty) {
+      if (up.received + body.length > up.total) {
+        await _dropPartUpload(id, up);
+        return _error(400, 'More data than announced');
+      }
+      try {
+        await up.partial.writeAsBytes(body, mode: FileMode.append, flush: true);
+      } catch (e) {
+        await _dropPartUpload(id, up);
+        rethrow;
+      }
+      up.received += body.length;
+    }
+    if (up.received < up.total) return _json({'received': up.received});
+
+    _partUploads.remove(id);
+    final saved = await up.partial.rename((await uniqueFile(up.dir, up.name)).path);
+    final security = _overBluetooth(r)
+        ? const TransferSecurity.bluetooth()
+        : TransferSecurity.wifi(certificate: _peer(r).fingerprint);
+    up.ticket?.offer._fileDone(up.total);
+    _events.add(FileReceived(_peer(r), saved, up.total, security));
+    return _json({'path': saved.path, 'size': up.total, 'received': up.total});
+  }
+
+  Future<void> _dropPartUpload(String id, _PartUpload up) async {
+    _partUploads.remove(id);
+    up.ticket?.offer._fileDone(0);
+    if (await up.partial.exists()) await up.partial.delete();
+  }
+
   /// `POST /v1/fs/upload?name=photo.jpg[&dir=C:\Users\me\Desktop]`, raw bytes
   /// in the body. Without `dir` the file lands in the receive folder.
   Future<Response> _upload(Request r) async {
@@ -604,27 +736,8 @@ class SidekickServer {
     if (dirParam != null && dirParam.isNotEmpty && !await Directory(dir).exists()) {
       return _error(404, 'Folder not found');
     }
-    // Files sent to the receive folder need a ticket from an accepted offer
-    // (a paired device browsing a folder already has full file access).
-    _Ticket? ticket;
-    if (dirParam == null || dirParam.isEmpty) {
-      ticket = _tickets[r.url.queryParameters['ticket'] ?? ''];
-      final valid =
-          ticket != null &&
-          ticket.peerId == _peer(r).id &&
-          DateTime.now().isBefore(ticket.expires) &&
-          ticket.uses < ticket.offer.files.length;
-      if (!valid) {
-        if (askBeforeReceiving()) {
-          return _error(
-            403,
-            '${self().name} asks before receiving files. Update Sidekick on this device and send again.',
-          );
-        }
-        ticket = null;
-      }
-      ticket?.uses++;
-    }
+    final (ticket, refusal) = _takeTicket(r, dirParam);
+    if (refusal != null) return refusal;
     await Directory(dir).create(recursive: true);
 
     // Write to a temporary name, then rename, so a half-sent file never

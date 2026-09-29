@@ -18,13 +18,25 @@ import 'package:sidekick/platform/media.dart';
 
 /// Wires a [BleRpcClient] to a server's [BleRequestDispatcher] through an
 /// in-memory "radio" with tiny packets, like the smallest Bluetooth MTU.
-PeerClient bluetoothClient(SidekickServer server, {String? token, BleSeal? seal, int mtu = 23}) {
+/// [radio] may change or drop (return null) chunks on their way to the
+/// server, like a real radio sometimes does.
+PeerClient bluetoothClient(
+  SidekickServer server, {
+  String? token,
+  BleSeal? seal,
+  int mtu = 23,
+  Uint8List? Function(Uint8List chunk)? radio,
+}) {
   final toClient = StreamController<Uint8List>();
   final dispatcher = BleRequestDispatcher(server.handleBle, keyFor: server.bleKeyFor, onReceiving: server.bleReceiving);
   final rpc = BleRpcClient(
     chunkSize: () async => mtu - 3,
     incoming: toClient.stream,
-    send: (chunk) => dispatcher.onChunk('central-1', chunk, maxChunk: mtu - 3, sendChunk: (c) async => toClient.add(c)),
+    send: (chunk) async {
+      final delivered = radio == null ? chunk : radio(chunk);
+      if (delivered == null) return;
+      await dispatcher.onChunk('central-1', delivered, maxChunk: mtu - 3, sendChunk: (c) async => toClient.add(c));
+    },
   );
   return PeerClient.bluetooth(rpc, token: token, seal: seal);
 }
@@ -168,6 +180,75 @@ void main() {
     });
 
     tearDown(() => home.delete(recursive: true));
+
+    test('big files go in parts and survive damaged packets', () async {
+      final anon = bluetoothClient(pc);
+      expect((await anon.info()).id, pcId);
+      expect(() => anon.roots(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 401)));
+
+      final phone = DeviceInfo(id: newDeviceId(), name: 'Phone', platform: DevicePlatform.android, port: 0);
+      final requested = pc.events.where((e) => e is PairRequested).cast<PairRequested>().first;
+      final target = await anon.requestPairing(phone, myFingerprint: phoneIdentity.fingerprint);
+      final pin = (await requested).request.pin;
+      final paired = await anon.confirmPairing(
+        myId: phone.id,
+        myFingerprint: phoneIdentity.fingerprint,
+        target: target,
+        pin: pin,
+      );
+      expect(paired.device.lastAddress, isNull, reason: 'no IP over Bluetooth');
+      expect(paired.device.fingerprint, pcIdentity.fingerprint);
+
+      // Paired traffic must be sealed: the token alone isn't enough.
+      final unsealed = bluetoothClient(pc, token: paired.device.token);
+      await expectLater(unsealed.roots(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 401)));
+      // Sealed with the wrong key: refused too.
+      final forged = bluetoothClient(
+        pc,
+        token: paired.device.token,
+        seal: BleSeal(senderId: phone.id, key: randomBytes(32)),
+      );
+      await expectLater(forged.roots(), throwsA(isA<SidekickException>()));
+
+      final seal = BleSeal(senderId: phone.id, key: base64.decode(paired.key));
+      // Every 3000th chunk arrives with a flipped bit; one gets lost.
+      var n = 0;
+      final client = bluetoothClient(
+        pc,
+        token: paired.device.token,
+        seal: seal,
+        mtu: 185,
+        radio: (chunk) {
+          n++;
+          if (n == 4500) return null;
+          if (n % 3000 == 0 && chunk.length > 10) return Uint8List.fromList(chunk)..[chunk.length - 1] ^= 1;
+          return chunk;
+        },
+      );
+      final size = 3 * 1024 * 1024 + 17;
+      final local = File(p.join(home.path, 'big.jpg'))..writeAsBytesSync(List.generate(size, (i) => (i * 7) % 256));
+      final empty = File(p.join(home.path, 'empty.txt'))..writeAsBytesSync(const []);
+      final offered = pc.events.where((e) => e is TransferOffered).cast<TransferOffered>().first;
+      final reply = client.offerFiles('big', [('big.jpg', size), ('empty.txt', 0)]);
+      (await offered).offer.accept();
+      final ticket = (await reply).ticket;
+      final progress = <int>[];
+      final upload = client.upload(local, ticket: ticket, onProgress: (d, _) => progress.add(d));
+      // Other requests at the same time.
+      final others = [for (var i = 0; i < 5; i++) client.mediaStatus()];
+      final saved = await upload;
+      await Future.wait(others);
+      expect(File(saved).readAsBytesSync(), local.readAsBytesSync());
+      expect(progress.last, size);
+      // Without resends it would be about size / 182 + one chunk per part.
+      expect(n, greaterThan(size ~/ 182 + 100 + 5 * 180), reason: 'damaged parts were sent again');
+      expect(File(await client.upload(empty, ticket: ticket)).lengthSync(), 0);
+      // Nothing half-sent is left behind.
+      expect(
+        Directory(p.join(home.path, 'Received')).listSync().where((f) => f.path.endsWith('.sidekick-part')),
+        isEmpty,
+      );
+    });
 
     test('pair, browse, upload, download and media', () async {
       final anon = bluetoothClient(pc);

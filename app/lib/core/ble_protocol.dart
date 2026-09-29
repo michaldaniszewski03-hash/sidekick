@@ -22,6 +22,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:bluetooth_low_energy/bluetooth_low_energy.dart' show UUID;
@@ -102,32 +103,52 @@ const _maxSkew = Duration(minutes: 2);
 
 /// A decoded message.
 class BleMessage {
-  BleMessage(this.id, this.header, this.body);
+  BleMessage(this.id, this.header, this.body, {this.firstChunkAt});
   final int id;
   final Map<String, dynamic> header;
   final Uint8List body;
+
+  /// When its first chunk arrived (big messages take minutes over Bluetooth).
+  final DateTime? firstChunkAt;
 }
 
 /// Reassembles chunks (possibly from interleaved messages) into messages.
 class BleReassembler {
   final Map<int, BytesBuilder> _parts = {};
+  final Map<int, DateTime> _started = {};
 
   /// Returns the finished message when [chunk] is its last piece.
   BleMessage? add(Uint8List chunk) {
     if (chunk.length < bleChunkHeader) throw const FormatException('Chunk too short');
     final id = (chunk[1] << 8) | chunk[2];
+    final now = DateTime.now();
+    if (!_started.containsKey(id)) {
+      // A message whose last chunk never came (lost on the way) is dropped
+      // after a while; the sender has long since retried it.
+      for (final stale in _started.entries.where((e) => now.difference(e.value).inMinutes >= 10).toList()) {
+        _started.remove(stale.key);
+        _parts.remove(stale.key);
+      }
+      _started[id] = now;
+    }
     final builder = _parts.putIfAbsent(id, () => BytesBuilder(copy: true))
       ..add(Uint8List.sublistView(chunk, bleChunkHeader));
     if (builder.length > bleMaxBody + 64 * 1024) {
       _parts.remove(id);
+      _started.remove(id);
       throw const FormatException('Message too large for Bluetooth');
     }
     if (chunk[0] & _last == 0) return null;
     _parts.remove(id);
-    return decodeMessage(id, builder.takeBytes());
+    final started = _started.remove(id);
+    final message = decodeMessage(id, builder.takeBytes());
+    return BleMessage(message.id, message.header, message.body, firstChunkAt: started);
   }
 
-  void clear() => _parts.clear();
+  void clear() {
+    _parts.clear();
+    _started.clear();
+  }
 }
 
 /// A response to a Bluetooth request.
@@ -156,7 +177,10 @@ class BleRpcClient {
   late final StreamSubscription<Uint8List> _sub;
   final _reassembler = BleReassembler();
   final Map<int, _Pending> _pending = {};
-  int _nextId = 1;
+  // Random start: two clients on one connection (say, an old one still
+  // finishing while a new one starts) must not reuse each other's ids, or
+  // the receiver would glue their chunks together.
+  int _nextId = 1 + Random().nextInt(0xfffe);
   Future<void> _sending = Future.value();
 
   void _onChunk(Uint8List chunk) {
@@ -308,7 +332,10 @@ class BleRequestDispatcher {
         final ts = DateTime.fromMillisecondsSinceEpoch((message.header['ts'] as num?)?.toInt() ?? 0);
         final now = DateTime.now();
         _seen.removeWhere((_, t) => now.difference(t) > _maxSkew * 2);
-        if (now.difference(ts).abs() > _maxSkew) throw const _Refused(401, 'Clock too far off, or a replay');
+        // Compared with when it started arriving: a big message can take
+        // longer than the allowed skew to come through.
+        final arriving = request.firstChunkAt ?? now;
+        if (arriving.difference(ts).abs() > _maxSkew) throw const _Refused(401, 'Clock too far off, or a replay');
         if (_seen.containsKey(nonce)) throw const _Refused(401, 'Replayed message');
         _seen[nonce] = now;
         inner = BleMessage(id, {...message.header, 'sealedBy': sealedBy}, message.body);
