@@ -210,14 +210,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: perms.files,
                         onChanged: (v) => state.setPermissions(perms.copyWith(files: v)),
                       ),
-                      if (state.media.supported)
-                        SwitchListTile(
-                          secondary: const IconTile(Icons.play_circle_rounded, tone: TileTone.tertiary),
-                          title: const Text('Control media'),
-                          subtitle: Text(hostIsIOS ? 'Volume and Apple Music' : 'Play, pause, seek and volume'),
-                          value: perms.media,
-                          onChanged: (v) => state.setPermissions(perms.copyWith(media: v)),
-                        ),
                       // iOS never lets another device control an iPhone, so the
                       // switch only exists elsewhere.
                       if (!hostIsIOS) ...[

@@ -14,7 +14,7 @@ class DevicesPage extends StatelessWidget {
 
   final AppState state;
 
-  /// Switches to a tab (1 Files, 2 Remote, 3 Media).
+  /// Switches to a tab (1 Files, 2 Remote).
   final void Function(int tab) onOpen;
 
   @override
@@ -403,7 +403,7 @@ class _PairedCardState extends State<_PairedCard> {
     final status = _dragging
         ? 'Drop to send'
         : reset
-        ? 'Was reset: pair again'
+        ? 'Pair again'
         : state.connectingDirect.contains(device.id)
         ? 'Setting up direct Wi-Fi…'
         : state.viaBluetooth(device.id)
@@ -478,6 +478,20 @@ class _PairedCardState extends State<_PairedCard> {
                             color: reset ? scheme.error : (online ? Colors.green : scheme.outline),
                             background: _dragging ? scheme.surface : null,
                           ),
+                          if (state.runsOlderApp(device))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Tooltip(
+                                message:
+                                    '${device.name} runs ${state.appVersionOf(device) == null ? 'an older Sidekick' : 'Sidekick ${state.appVersionOf(device)}'}'
+                                    ', this device ${state.appVersion}. Update it so they work well together.',
+                                child: const StatusPill(
+                                  icon: Icons.system_update_rounded,
+                                  label: 'Update Sidekick on it',
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -529,14 +543,6 @@ class _PairedCardState extends State<_PairedCard> {
                                 tooltip: 'Remote control',
                                 onPressed: () => _open(2),
                                 icon: const Icon(Icons.mouse_outlined),
-                              ),
-                            ],
-                            if (caps?.media ?? true) ...[
-                              const SizedBox(width: 4),
-                              IconButton.filledTonal(
-                                tooltip: 'Media',
-                                onPressed: () => _open(3),
-                                icon: const Icon(Icons.play_circle_outline),
                               ),
                             ],
                           ],

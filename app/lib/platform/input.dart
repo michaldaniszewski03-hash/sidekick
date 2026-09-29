@@ -29,9 +29,6 @@ abstract class InputInjector {
   /// Types arbitrary text.
   void text(String text);
 
-  /// Sends a raw virtual-key tap. Used for the media keys.
-  void virtualKey(int vk);
-
   static InputInjector forCurrentPlatform() {
     if (Platform.isWindows) return WindowsInputInjector();
     if (Platform.isAndroid) return AndroidInputInjector();
@@ -113,8 +110,6 @@ class UnsupportedInputInjector implements InputInjector {
   void key(String key, {List<String> modifiers = const []}) {}
   @override
   void text(String text) {}
-  @override
-  void virtualKey(int vk) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -223,17 +218,6 @@ const Map<String, int> _vk = {
 
 /// Keys that need KEYEVENTF_EXTENDEDKEY to behave correctly.
 const Set<int> _extendedVk = {0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2C, 0x2D, 0x2E, 0x5B, 0x5D};
-
-/// Media and volume virtual keys, used by the media controller fallback.
-abstract final class MediaKeys {
-  static const volumeMute = 0xAD;
-  static const volumeDown = 0xAE;
-  static const volumeUp = 0xAF;
-  static const next = 0xB0;
-  static const previous = 0xB1;
-  static const stop = 0xB2;
-  static const playPause = 0xB3;
-}
 
 int? virtualKeyFor(String name) {
   final lower = name.toLowerCase();
@@ -344,7 +328,4 @@ class WindowsInputInjector implements InputInjector {
   ]);
 
   List<void Function(_Input)> _enter() => [_vkEvent(0x0D, up: false), _vkEvent(0x0D, up: true)];
-
-  @override
-  void virtualKey(int vk) => _send([_vkEvent(vk, up: false), _vkEvent(vk, up: true)]);
 }

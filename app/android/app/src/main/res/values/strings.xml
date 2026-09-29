@@ -2,5 +2,4 @@
 <resources>
     <string name="accessibility_label">Sidekick remote control</string>
     <string name="accessibility_description">Lets devices you paired with Sidekick tap, scroll and type on this phone. Sidekick only acts on commands from paired devices and does not read or store what is on your screen.</string>
-    <string name="media_listener_label">Sidekick media control</string>
 </resources>

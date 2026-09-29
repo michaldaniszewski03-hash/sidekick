@@ -98,6 +98,9 @@ List<int> _aad(String kind, int id) => utf8.encode('sidekick-ble $kind $id');
 
 String _nonceOf(Uint8List sealed) => base64.encode(sealed.sublist(0, 12));
 
+/// The refusal when a sender sealed with another pairing key than ours.
+const keysDontMatch = "Pairing keys don't match";
+
 /// How far a sealed request's clock may be off before we refuse it.
 const _maxSkew = Duration(minutes: 2);
 
@@ -241,7 +244,7 @@ class BleRpcClient {
       final inner = encodeMessage({...header, 'ts': DateTime.now().millisecondsSinceEpoch}, body);
       final sealed = sealBytes(seal.key, inner, aad: _aad('req', id));
       nonce = _nonceOf(sealed);
-      message = encodeMessage({'sealed': seal.senderId}, sealed);
+      message = encodeMessage({'sealed': seal.senderId, 'kid': keyId(seal.key)}, sealed);
     }
     _pending[id] = _Pending(completer, seal, nonce);
     // Chunks of one message must not interleave with another's writes.
@@ -272,8 +275,12 @@ class BleRpcClient {
 /// requests for [handler] (the same one the Wi-Fi server uses, so pairing,
 /// auth and permissions behave identically) and chunks the responses back.
 class BleRequestDispatcher {
-  BleRequestDispatcher(this.handler, {Uint8List? Function(String peerId)? keyFor, this.onReceiving})
+  BleRequestDispatcher(this.handler, {Uint8List? Function(String peerId)? keyFor, this.onReceiving, this.onRefused})
     : keyFor = keyFor ?? ((_) => null);
+
+  /// A sealed request was refused (for the Bluetooth log): who sent it,
+  /// why, and how big it was.
+  final void Function(String peerId, String reason, int bytes)? onRefused;
 
   final Future<BleResponse> Function(BleMessage request) handler;
 
@@ -319,12 +326,29 @@ class BleRequestDispatcher {
       final sealedBy = request.header['sealed'];
       if (sealedBy is String) {
         key = keyFor(sealedBy);
-        if (key == null) throw const _Refused(401, 'Not paired');
+        if (key == null) {
+          onRefused?.call(sealedBy, 'not paired with it', request.body.length);
+          throw const _Refused(401, 'Not paired');
+        }
+        // Senders from 2.1.3 say which key they used.
+        final kid = request.header['kid'];
+        if (kid is String && kid != keyId(key)) {
+          key = null; // Don't answer with a key the sender doesn't have.
+          onRefused?.call(sealedBy, 'it sealed with a different pairing key', request.body.length);
+          throw const _Refused(401, keysDontMatch);
+        }
         final Uint8List plain;
         try {
           plain = unseal(key, request.body, aad: _aad('req', id));
         } on FormatException {
-          key = null; // Don't answer with a key the sender may not have.
+          key = null;
+          onRefused?.call(
+            sealedBy,
+            kid is String
+                ? 'damaged on the way (same key)'
+                : "couldn't decrypt it (older sender: damaged, or another key)",
+            request.body.length,
+          );
           throw const _Refused(401, 'Message failed authentication');
         }
         nonce = _nonceOf(request.body);

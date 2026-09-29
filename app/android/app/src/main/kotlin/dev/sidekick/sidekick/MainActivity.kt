@@ -2,7 +2,6 @@ package dev.sidekick.sidekick
 
 import android.Manifest
 import android.content.ActivityNotFoundException
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -20,16 +19,14 @@ import io.flutter.plugin.common.MethodChannel
 /**
  * Hosts the Flutter UI and answers the `sidekick/android` channel, which the
  * Dart side uses for everything Android-specific: permissions, remote input,
- * media sessions and the multicast lock.
+ * the hotspot and the multicast lock.
  */
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var hotspot: WifiManager.LocalOnlyHotspotReservation? = null
-    private lateinit var media: MediaBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        media = MediaBridge(applicationContext)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/android")
             .setMethodCallHandler { call, result ->
                 try {
@@ -50,10 +47,6 @@ class MainActivity : FlutterActivity() {
                             open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                             result.success(null)
                         }
-                        "openNotificationAccessSettings" -> {
-                            open(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                            result.success(null)
-                        }
                         "openAppSettings" -> {
                             open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                             result.success(null)
@@ -67,15 +60,6 @@ class MainActivity : FlutterActivity() {
                             val args = call.arguments as? Map<*, *>
                             if (service != null && args != null) service.handle(args)
                             result.success(service != null)
-                        }
-                        "mediaStatus" -> result.success(media.status())
-                        "mediaAction" -> {
-                            media.perform(
-                                call.argument<String>("action") ?: "",
-                                call.argument<Number>("positionMs")?.toLong(),
-                                call.argument<Number>("volume")?.toDouble(),
-                            )
-                            result.success(null)
                         }
                         else -> result.notImplemented()
                     }
@@ -180,15 +164,8 @@ class MainActivity : FlutterActivity() {
 
     private fun permissions(): Map<String, Boolean> = mapOf(
         "accessibility" to (SidekickAccessibilityService.instance != null),
-        "notifications" to hasNotificationAccess(),
         "allFiles" to hasAllFilesAccess(),
     )
-
-    private fun hasNotificationAccess(): Boolean {
-        val enabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: return false
-        val me = ComponentName(this, MediaListenerService::class.java)
-        return enabled.split(":").any { ComponentName.unflattenFromString(it) == me }
-    }
 
     private fun hasAllFilesAccess(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

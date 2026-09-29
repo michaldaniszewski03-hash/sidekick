@@ -62,6 +62,10 @@ class BluetoothService {
     server.handleBle,
     keyFor: server.bleKeyFor,
     onReceiving: server.bleReceiving,
+    onRefused: (peerId, reason, bytes) => _log(
+      'Refused a Bluetooth request from ${server.trust.byId(peerId)?.name ?? peerId.substring(0, peerId.length.clamp(0, 8))}'
+      ' ($bytes bytes): $reason',
+    ),
   );
 
   final _found = StreamController<BleSighting>.broadcast();

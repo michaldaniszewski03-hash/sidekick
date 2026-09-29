@@ -24,8 +24,6 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>NSAppleMusicUsageDescription</key>
-	<string>So your computer can show and control what's playing in Apple Music.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Sidekick uses Bluetooth to find and connect to your computer when you're not on the same Wi-Fi.</string>
 	<key>NSLocalNetworkUsageDescription</key>

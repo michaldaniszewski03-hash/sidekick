@@ -32,13 +32,6 @@ List<Widget> androidPermissionRows() {
       grant: AndroidBridge.requestAllFilesAccess,
     ),
     row(
-      icon: Icons.play_circle_outline,
-      title: 'Notification access',
-      why: "So your PC can see what's playing and seek. Sidekick doesn't read your notifications.",
-      granted: perms.notifications,
-      grant: AndroidBridge.openNotificationAccessSettings,
-    ),
-    row(
       icon: Icons.touch_app_outlined,
       title: 'Remote control (Accessibility)',
       why:

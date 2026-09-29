@@ -7,7 +7,6 @@ import '../core/server.dart';
 import '../core/trust.dart';
 import 'devices_page.dart';
 import 'files_page.dart';
-import 'media_page.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
 import 'transfer_screens.dart';
@@ -32,7 +31,6 @@ class _ShellState extends State<Shell> {
     (icon: Icons.devices_outlined, selected: Icons.devices, label: 'Devices'),
     (icon: Icons.folder_outlined, selected: Icons.folder, label: 'Files'),
     (icon: Icons.mouse_outlined, selected: Icons.mouse, label: 'Remote'),
-    (icon: Icons.play_circle_outline, selected: Icons.play_circle, label: 'Media'),
     (icon: Icons.settings_outlined, selected: Icons.settings, label: 'Settings'),
   ];
 
@@ -105,7 +103,6 @@ class _ShellState extends State<Shell> {
       DevicesPage(state: state, onOpen: _go),
       FilesPage(state: state, onGoToDevices: () => _go(0)),
       RemotePage(state: state, onGoToDevices: () => _go(0)),
-      MediaPage(state: state, onGoToDevices: () => _go(0)),
       SettingsPage(state: state),
     ];
     final wide = MediaQuery.sizeOf(context).width >= 700;
@@ -265,7 +262,7 @@ class _PinDialogState extends State<_PinDialog> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Only pair with devices you own. A paired device can browse files, control media and use the mouse and keyboard.',
+            'Only pair with devices you own. A paired device can send and browse files and use the mouse and keyboard.',
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
           ),

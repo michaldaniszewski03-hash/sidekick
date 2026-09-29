@@ -14,7 +14,6 @@ import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/input.dart';
-import 'package:sidekick/platform/media.dart';
 
 /// The air between fake radios: who's advertising, and packet delivery.
 class FakeAir {
@@ -177,7 +176,6 @@ void main() {
     self: () => DeviceInfo(id: id, name: name, platform: platform, port: sidekickPort),
     trust: TrustStore(),
     files: FileService(home: home.path),
-    media: UnsupportedMediaController(),
     input: UnsupportedInputInjector(),
     receiveDir: () async => p.join(home.path, 'Received'),
   );

@@ -26,10 +26,9 @@ class MainFlutterWindow: NSWindow {
 }
 
 /// The Mac side of the `sidekick/macos` channel: remote mouse/keyboard input
-/// (needs the Accessibility permission), media keys and system volume.
+/// (needs the Accessibility permission).
 final class SidekickNative {
   private let input = MacInput()
-  private let media = MacMedia()
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "permissions":
@@ -46,12 +45,6 @@ final class SidekickNative {
     case "input":
       if let msg = call.arguments as? [String: Any] { input.handle(msg) }
       result(AXIsProcessTrusted())
-    case "mediaStatus":
-      result(media.status())
-    case "mediaAction":
-      let args = call.arguments as? [String: Any] ?? [:]
-      media.perform(args["action"] as? String ?? "", volume: (args["volume"] as? NSNumber)?.doubleValue)
-      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -251,65 +244,3 @@ final class MacInput {
     }
   }
 }
-
-/// Media keys and system volume. macOS doesn't let apps read other apps'
-/// now-playing info any more, so status reports volume only.
-final class MacMedia {
-  // NX_KEYTYPE_* from IOKit/hidsystem/ev_keymap.h
-  private let play: Int32 = 16
-  private let next: Int32 = 17
-  private let previous: Int32 = 18
-
-  func status() -> [String: Any] {
-    var out: [String: Any] = ["ok": true, "available": false, "nowPlaying": false, "muted": muted()]
-    if let v = volume() { out["volume"] = v }
-    return out
-  }
-
-  func perform(_ action: String, volume v: Double?) {
-    switch action {
-    case "playPause", "play", "pause": mediaKey(play)
-    case "next": mediaKey(next)
-    case "previous": mediaKey(previous)
-    case "setVolume":
-      if let v = v { setVolume(v) }
-    case "volumeUp": setVolume((volume() ?? 0.5) + 0.06)
-    case "volumeDown": setVolume((volume() ?? 0.5) - 0.06)
-    case "toggleMute":
-      _ = script("set volume output muted (not (output muted of (get volume settings)))")
-    default: break
-    }
-  }
-
-  private func mediaKey(_ key: Int32) {
-    for down in [true, false] {
-      let state: Int32 = down ? 0xA : 0xB
-      let event = NSEvent.otherEvent(
-        with: .systemDefined, location: .zero,
-        modifierFlags: NSEvent.ModifierFlags(rawValue: UInt(state) << 8), timestamp: 0,
-        windowNumber: 0, context: nil, subtype: 8,
-        data1: Int((key << 16) | (state << 8)), data2: -1)
-      event?.cgEvent?.post(tap: .cghidEventTap)
-    }
-  }
-
-  @discardableResult
-  private func script(_ source: String) -> NSAppleEventDescriptor? {
-    var error: NSDictionary?
-    return NSAppleScript(source: source)?.executeAndReturnError(&error)
-  }
-
-  private func volume() -> Double? {
-    guard let d = script("output volume of (get volume settings)") else { return nil }
-    return Double(d.int32Value) / 100
-  }
-
-  private func muted() -> Bool {
-    script("output muted of (get volume settings)")?.booleanValue ?? false
-  }
-
-  private func setVolume(_ v: Double) {
-    script("set volume output volume \(Int((min(max(v, 0), 1) * 100).rounded()))")
-  }
-}
-

@@ -1,8 +1,8 @@
 # Sidekick
 
 Use your phone and computer as one: send files both ways, control one device
-from another (touchpad, keyboard, shortcuts), control media and volume, and
-connect over Bluetooth when there's no shared Wi-Fi. Everything is encrypted.
+from another (touchpad, keyboard, shortcuts), and connect over Bluetooth
+when there's no shared Wi-Fi. Everything is encrypted.
 
 One Flutter app for **Windows, macOS, Android and iOS** (`app/`), plus a
 download page (`website/index.html`, not hosted anywhere yet).
@@ -21,7 +21,7 @@ its biggest features and fixes, and bumps the website links (see
   transfers, settings), and sending and receiving.
 - `app/lib/core/`: platform-independent logic, unit-tested.
   - `server.dart`: HTTPS server on port 53318 (the same handler also serves
-    Bluetooth). Pairing, files, transfer offers and tickets, media, input.
+    Bluetooth). Pairing, files, transfer offers and tickets, input.
   - `client.dart`: `PeerClient`, over HTTPS (pinned certificate) or Bluetooth.
   - `crypto.dart`: identity certificates, SPAKE2 pairing, AES-GCM sealing,
     security codes.
@@ -39,7 +39,7 @@ its biggest features and fixes, and bumps the website links (see
   - `widgets.dart` has the shared pieces: `PageFrame`, `SectionLabel` (with
     an icon), `IconTile` (tinted icon square for rows), `StatusPill`,
     `Entrance` (fade/slide-in cascade), `Radar` (searching), `GradientBadge`.
-- `app/lib/platform/`: per-OS glue (input, media, files, device names,
+- `app/lib/platform/`: per-OS glue (input, files, device names,
   secret storage, hotspot, the Mac startup chime in `sound.dart`, played
   with `afplay`). The chime (`app/assets/sounds/startup.wav`) comes from
   `app/tool/make_sound.py`.
@@ -81,6 +81,14 @@ its biggest features and fixes, and bumps the website links (see
     to fail the whole file. Older receivers get the whole file (fallback).
   - Message ids start at a random number per client, so two clients on one
     connection never mix their chunks.
+  - Sealed messages carry `kid` (a short fingerprint of the pairing key).
+    A mismatch is refused as "Pairing keys don't match" and the app shows
+    "Pair again"; a failed decrypt with the same key means a damaged packet.
+    Every refusal is written to the receiver's Bluetooth log.
+- Devices announce their release (`DeviceInfo.app`, "2.2.0"); a paired card
+  shows "Update Sidekick on it" when the other device runs an older one.
+- There is no Media feature (removed in 2.2.0: iPhones can't control other
+  apps' playback). Don't bring it back.
   - iPhone and Mac use native CoreBluetooth, not the plugin: the plugin
     reported no devices on Apple.
   - Windows advertises through `addService` only. Its advertiser rejects

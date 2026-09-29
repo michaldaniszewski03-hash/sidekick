@@ -13,7 +13,6 @@ import 'package:shelf_web_socket/shelf_web_socket.dart';
 import '../platform/files.dart';
 import '../platform/hotspot.dart';
 import '../platform/input.dart';
-import '../platform/media.dart';
 import 'ble_protocol.dart';
 import 'crypto.dart';
 import 'models.dart';
@@ -21,13 +20,12 @@ import 'trust.dart';
 
 /// What this device lets paired peers do. Mirrors the toggles in Settings.
 class Permissions {
-  const Permissions({this.files = true, this.media = true, this.input = true});
+  const Permissions({this.files = true, this.input = true});
   final bool files;
-  final bool media;
   final bool input;
 
-  Permissions copyWith({bool? files, bool? media, bool? input}) =>
-      Permissions(files: files ?? this.files, media: media ?? this.media, input: input ?? this.input);
+  Permissions copyWith({bool? files, bool? input}) =>
+      Permissions(files: files ?? this.files, input: input ?? this.input);
 }
 
 sealed class ServerEvent {}
@@ -175,7 +173,6 @@ class SidekickServer {
     required this.self,
     required this.trust,
     required this.files,
-    required this.media,
     required this.input,
     required this.receiveDir,
     Permissions Function()? permissions,
@@ -194,7 +191,6 @@ class SidekickServer {
   final DeviceInfo Function() self;
   final TrustStore trust;
   final FileService files;
-  final MediaController media;
   final InputInjector input;
   final Future<String> Function() receiveDir;
   final Permissions Function() permissions;
@@ -312,8 +308,6 @@ class SidekickServer {
       ..post('/v1/fs/upload/part', _authed(_uploadPart, (p) => p.files))
       ..post('/v1/transfer/offer', _authed(_offer, (p) => p.files))
       ..post('/v1/transfer/cancel', _authed(_cancelOffer, (p) => p.files))
-      ..get('/v1/media', _authed(_mediaStatus, (p) => p.media))
-      ..post('/v1/media', _authed(_mediaAction, (p) => p.media))
       ..get('/v1/input/status', _authed(_inputStatus, (p) => p.input))
       ..get('/v1/input', _authed(_inputSocket, (p) => p.input))
       ..post('/v1/link/hotspot', _authed(_linkHotspot))
@@ -773,24 +767,6 @@ class SidekickServer {
       if (await partial.exists()) await partial.delete();
       rethrow;
     }
-  }
-
-  // -------------------------------------------------------------- media
-
-  Future<Response> _mediaStatus(Request r) async => _json((await media.status()).toJson());
-
-  Future<Response> _mediaAction(Request r) async {
-    final body = await _body(r);
-    final action = MediaAction.values.where((a) => a.name == body['action']).firstOrNull;
-    if (action == null) return _error(400, 'Unknown action');
-    final positionMs = body['positionMs'];
-    final volume = body['volume'];
-    await media.perform(
-      action,
-      position: positionMs is num ? Duration(milliseconds: positionMs.toInt()) : null,
-      volume: volume is num ? volume.toDouble() : null,
-    );
-    return _json({'ok': true});
   }
 
   // -------------------------------------------------------------- input

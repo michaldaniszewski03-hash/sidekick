@@ -21,21 +21,18 @@ DevicePlatform platformFromName(String? name) =>
 
 /// What a device lets its paired peers do to it.
 class Capabilities {
-  const Capabilities({this.files = false, this.media = false, this.input = false});
+  const Capabilities({this.files = false, this.input = false});
 
   /// Peers can browse, download and upload files.
   final bool files;
 
-  /// Peers can see and control what's playing.
-  final bool media;
-
   /// Peers can move the mouse and type.
   final bool input;
 
-  Map<String, dynamic> toJson() => {'files': files, 'media': media, 'input': input};
+  Map<String, dynamic> toJson() => {'files': files, 'input': input};
 
   factory Capabilities.fromJson(Map<String, dynamic>? json) =>
-      Capabilities(files: json?['files'] == true, media: json?['media'] == true, input: json?['input'] == true);
+      Capabilities(files: json?['files'] == true, input: json?['input'] == true);
 }
 
 /// A device on the network, as announced over discovery or `/v1/info`.
@@ -49,7 +46,12 @@ class DeviceInfo {
     this.address,
     this.version = protocolVersion,
     this.fingerprint,
+    this.app,
   });
+
+  /// The Sidekick release it runs ("2.1.3"); null before 2.1.3, which didn't
+  /// say. Lets the other device point out that one of them needs updating.
+  final String? app;
 
   /// SHA-256 of the device's certificate, as it announces it. Only a hint
   /// for the UI ("this device was reset, pair again"): trust comes from the
@@ -82,6 +84,7 @@ class DeviceInfo {
     address: address ?? this.address,
     version: version,
     fingerprint: fingerprint,
+    app: app,
   );
 
   Map<String, dynamic> toJson() => {
@@ -92,6 +95,7 @@ class DeviceInfo {
     'port': port,
     'caps': capabilities.toJson(),
     'fp': ?fingerprint,
+    'app': ?app,
   };
 
   factory DeviceInfo.fromJson(Map<String, dynamic> json, {String? address}) => DeviceInfo(
@@ -103,7 +107,20 @@ class DeviceInfo {
     address: address,
     version: (json['v'] as num?)?.toInt() ?? 1,
     fingerprint: json['fp'] as String?,
+    app: json['app'] as String?,
   );
+}
+
+/// Compares release numbers like "2.1.10" and "2.1.9" (negative: [a] is
+/// older). Anything that isn't a number counts as 0.
+int compareVersions(String a, String b) {
+  List<int> parts(String v) => [for (final x in v.split('+').first.split('.')) int.tryParse(x) ?? 0];
+  final x = parts(a), y = parts(b);
+  for (var i = 0; i < x.length || i < y.length; i++) {
+    final d = (i < x.length ? x[i] : 0) - (i < y.length ? y[i] : 0);
+    if (d != 0) return d.sign;
+  }
+  return 0;
 }
 
 /// A device we have paired with. [token] is what *we* send to *them*.
@@ -222,95 +239,6 @@ class RemoteEntry {
     modified: json['modified'] == null ? null : DateTime.tryParse(json['modified'] as String),
   );
 }
-
-enum PlaybackStatus { playing, paused, stopped, unknown }
-
-/// What's playing on a device right now.
-class MediaStatus {
-  const MediaStatus({
-    this.available = false,
-    this.title = '',
-    this.artist = '',
-    this.app = '',
-    this.status = PlaybackStatus.unknown,
-    this.position = Duration.zero,
-    this.duration = Duration.zero,
-    this.canSeek = false,
-    this.volume,
-    this.muted = false,
-    this.nowPlaying = true,
-    this.canNext = true,
-    this.canPrevious = true,
-    this.note,
-  });
-
-  /// False when nothing is playing or the platform can't report it.
-  final bool available;
-  final String title;
-  final String artist;
-
-  /// The app that owns the session, e.g. "Spotify" or "chrome".
-  final String app;
-  final PlaybackStatus status;
-  final Duration position;
-  final Duration duration;
-  final bool canSeek;
-
-  /// System volume from 0.0 to 1.0, or null if unknown.
-  final double? volume;
-  final bool muted;
-
-  /// False when the platform can't report what's playing at all (macOS),
-  /// as opposed to nothing playing right now.
-  final bool nowPlaying;
-
-  /// Whether the playing app accepts next/previous. YouTube, for example,
-  /// only offers "next" in a playlist or with autoplay's up-next.
-  final bool canNext;
-  final bool canPrevious;
-
-  /// Why now-playing info is missing, if something went wrong.
-  final String? note;
-
-  bool get isPlaying => status == PlaybackStatus.playing;
-
-  Map<String, dynamic> toJson() => {
-    'available': available,
-    'title': title,
-    'artist': artist,
-    'app': app,
-    'status': status.name,
-    'positionMs': position.inMilliseconds,
-    'durationMs': duration.inMilliseconds,
-    'canSeek': canSeek,
-    'volume': volume,
-    'muted': muted,
-    'nowPlaying': nowPlaying,
-    'canNext': canNext,
-    'canPrevious': canPrevious,
-    'note': note,
-  };
-
-  factory MediaStatus.fromJson(Map<String, dynamic> json) => MediaStatus(
-    available: json['available'] == true,
-    title: (json['title'] as String?) ?? '',
-    artist: (json['artist'] as String?) ?? '',
-    app: (json['app'] as String?) ?? '',
-    status: PlaybackStatus.values.firstWhere((s) => s.name == json['status'], orElse: () => PlaybackStatus.unknown),
-    position: Duration(milliseconds: (json['positionMs'] as num?)?.toInt() ?? 0),
-    duration: Duration(milliseconds: (json['durationMs'] as num?)?.toInt() ?? 0),
-    canSeek: json['canSeek'] == true,
-    volume: (json['volume'] as num?)?.toDouble(),
-    muted: json['muted'] == true,
-    nowPlaying: json['nowPlaying'] != false,
-    canNext: json['canNext'] != false,
-    canPrevious: json['canPrevious'] != false,
-    note: json['note'] as String?,
-  );
-}
-
-/// Commands the media endpoint accepts.
-enum MediaAction { playPause, play, pause, next, previous, stop, seek, setVolume, volumeUp, volumeDown, toggleMute }
 
 /// How a file was protected on its way between two devices. Recorded from
 /// the connection that actually carried it, never assumed.

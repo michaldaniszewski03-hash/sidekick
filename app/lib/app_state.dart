@@ -24,7 +24,6 @@ import 'platform/ios.dart';
 import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
-import 'platform/media.dart';
 import 'platform/secret_store.dart';
 
 /// The color themes in Settings → Theme: name and seed color.
@@ -154,7 +153,7 @@ class AppState extends ChangeNotifier {
   bool welcomed = false;
 
   /// iPhone: keep running while other apps are open, so computers can still
-  /// reach it (volume, Apple Music, files).
+  /// reach it (files, browsing).
   bool keepRunning = true;
 
   /// This build's version, e.g. "0.4.0" (shown in Settings → About).
@@ -173,7 +172,6 @@ class AppState extends ChangeNotifier {
   String? networkError;
 
   late final InputInjector input = InputInjector.forCurrentPlatform();
-  late final MediaController media = MediaController.forCurrentPlatform(input);
   late final FileService files;
   late final SidekickServer server;
 
@@ -261,11 +259,7 @@ class AppState extends ChangeNotifier {
     askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
     startupSound = _prefs.getBool('startupSound') ?? true;
     welcomed = _prefs.getBool('welcomed') ?? false;
-    permissions = Permissions(
-      files: _prefs.getBool('allowFiles') ?? true,
-      media: _prefs.getBool('allowMedia') ?? true,
-      input: _prefs.getBool('allowInput') ?? true,
-    );
+    permissions = Permissions(files: _prefs.getBool('allowFiles') ?? true, input: _prefs.getBool('allowInput') ?? true);
     _receiveDir = _prefs.getString('receiveDir');
     selectedId = _prefs.getString('selectedId');
   }
@@ -339,9 +333,9 @@ class AppState extends ChangeNotifier {
     platform: currentPlatform,
     port: server.port == 0 ? sidekickPort : server.port,
     fingerprint: identity.fingerprint,
+    app: appVersion.isEmpty ? null : appVersion,
     capabilities: Capabilities(
       files: permissions.files && (!Platform.isAndroid || AndroidBridge.permissions.allFiles),
-      media: permissions.media && media.supported,
       input: permissions.input && input.supported,
     ),
   );
@@ -371,7 +365,6 @@ class AppState extends ChangeNotifier {
       self: () => me,
       trust: trust,
       files: files,
-      media: media,
       input: input,
       receiveDir: receiveDir,
       permissions: () => permissions,
@@ -467,7 +460,6 @@ class AppState extends ChangeNotifier {
     bluetooth?.stop();
     discovery.stop();
     server.stop();
-    media.dispose();
     super.dispose();
   }
 
@@ -582,6 +574,24 @@ class AppState extends ChangeNotifier {
   }
 
   final Set<String> _identityChanged = {};
+
+  /// The Sidekick release [d] runs, if it says (2.1.3 and later do).
+  String? appVersionOf(PairedDevice d) => (_nearby[d.id]?.info ?? _bleSeen[d.id]?.info)?.app;
+
+  /// [d] runs an older Sidekick than this device (or one too old to say
+  /// which): the two may not understand each other fully until it updates.
+  bool runsOlderApp(PairedDevice d) {
+    final seen = _nearby[d.id]?.info ?? _bleSeen[d.id]?.info;
+    if (seen == null || appVersion.isEmpty) return false;
+    final theirs = seen.app;
+    return theirs == null || compareVersions(theirs, appVersion) < 0;
+  }
+
+  /// Adds "update it" to an error when [d] runs an older Sidekick.
+  String _withUpdateHint(PairedDevice d, Object error) => runsOlderApp(d)
+      ? '$error\n${d.name} runs an older Sidekick${appVersionOf(d) == null ? '' : ' (${appVersionOf(d)})'}: '
+            'update it to $appVersion.'
+      : '$error';
 
   /// Remembers a device whose certificate changed, so it shows "Pair again".
   void _noteFailure(PairedDevice d, Object error) {
@@ -1054,8 +1064,8 @@ class AppState extends ChangeNotifier {
       }
     } catch (e) {
       _noteFailure(d, e);
-      send._set(SendPhase.failed, error: '$e');
-      _notices.add(Notice("Couldn't send to ${d.name}: $e"));
+      send._set(SendPhase.failed, error: _withUpdateHint(d, e));
+      _notices.add(Notice("Couldn't send to ${d.name}: ${_withUpdateHint(d, e)}"));
       return;
     }
 
@@ -1097,7 +1107,8 @@ class AppState extends ChangeNotifier {
     if (failure == null) {
       send._set(SendPhase.done);
     } else {
-      send._set(SendPhase.failed, error: sent == 0 ? '$failure' : 'Sent $sent of ${localFiles.length}. $failure');
+      final why = _withUpdateHint(d, failure);
+      send._set(SendPhase.failed, error: sent == 0 ? why : 'Sent $sent of ${localFiles.length}. $why');
     }
     // Say how it went where the user is, not only in the Files tab.
     _notices.add(
@@ -1199,7 +1210,6 @@ class AppState extends ChangeNotifier {
     permissions = value;
     _prefs
       ..setBool('allowFiles', value.files)
-      ..setBool('allowMedia', value.media)
       ..setBool('allowInput', value.input);
     discovery.announce();
     notifyListeners();

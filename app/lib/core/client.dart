@@ -187,10 +187,18 @@ class PeerClient {
         final json = jsonDecode(utf8.decode(res.body));
         if (json is Map && json['error'] is String) message = json['error'] as String;
       } catch (_) {}
+      if (message == keysDontMatch) {
+        // Only pairing again gives both devices the same key.
+        throw SidekickException(
+          "These two devices don't share the same pairing any more. Pair them again.",
+          status: res.status,
+          identityChanged: true,
+        );
+      }
       if (message == 'Message failed authentication') {
         message =
             "The other device couldn't verify what this device sent over Bluetooth. If this keeps happening, "
-            'unpair the two devices and pair them again.';
+            'update Sidekick on both devices, or pair them again.';
       }
       throw SidekickException(message, status: res.status);
     }
@@ -487,7 +495,7 @@ class PeerClient {
             if (e.status == 404 && start == 0 && e.message != 'Folder not found') {
               return await _bleUploadWhole(file, total, query, onProgress);
             }
-            final retryable = e.status == null || e.status == 401 || e.status! >= 500;
+            final retryable = !e.identityChanged && (e.status == null || e.status == 401 || e.status! >= 500);
             if (!retryable || attempt >= 4) rethrow;
             await Future<void>.delayed(Duration(milliseconds: 400 * attempt));
           }
@@ -517,16 +525,6 @@ class PeerClient {
     onProgress?.call(total, total);
     return (jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>)['path'] as String;
   }
-
-  // ------------------------------------------------------------ media
-
-  Future<MediaStatus> mediaStatus() async => MediaStatus.fromJson(await _getJson('/v1/media') as Map<String, dynamic>);
-
-  Future<void> media(MediaAction action, {Duration? position, double? volume}) => _postJson('/v1/media', {
-    'action': action.name,
-    if (position != null) 'positionMs': position.inMilliseconds,
-    'volume': ?volume,
-  });
 
   // ------------------------------------------------------------ input
 

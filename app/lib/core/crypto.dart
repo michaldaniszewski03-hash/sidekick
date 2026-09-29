@@ -4,7 +4,7 @@
 ///   SHA-256 fingerprint is the device's cryptographic identity.
 /// * **Wi-Fi:** all traffic is HTTPS. After pairing, each side only accepts
 ///   the exact certificate it paired with (pinning), so nobody on the
-///   network can read or tamper with files, input or media commands.
+///   network can read or tamper with files or input.
 /// * **Pairing:** the 6-digit PIN runs through SPAKE2, a password-
 ///   authenticated key exchange. Both certificate fingerprints are part of
 ///   it, so a man in the middle is detected, and someone watching can't
@@ -210,6 +210,12 @@ String securityCode(String fingerprintA, String fingerprintB) {
 }
 
 // ------------------------------------------------------------------ sealing
+
+/// A short, harmless fingerprint of a pairing key. Sealed Bluetooth messages
+/// carry it, so a receiver can tell "we have different keys: pair again"
+/// apart from "a packet got damaged on the way".
+String keyId(Uint8List key) =>
+    base64.encode(c.Hmac(c.sha256, key).convert(utf8.encode('sidekick key id')).bytes.sublist(0, 6));
 
 /// AES-256-GCM: `nonce (12 bytes) || ciphertext+tag`.
 Uint8List sealBytes(Uint8List key, List<int> plaintext, {List<int> aad = const []}) {

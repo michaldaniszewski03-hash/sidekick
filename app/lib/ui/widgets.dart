@@ -423,7 +423,7 @@ class StatusPill extends StatelessWidget {
   }
 }
 
-/// Chooses which paired device the Files, Remote and Media tabs act on.
+/// Chooses which paired device the Files and Remote tabs act on.
 /// Shows an empty state when nothing is paired yet.
 class DeviceGate extends StatelessWidget {
   const DeviceGate({
@@ -545,7 +545,7 @@ class OfflineBanner extends StatelessWidget {
                     ? 'Connected to ${device.name} over Bluetooth because you\'re not on the same Wi-Fi. '
                           'Big files and remote control switch to a direct Wi-Fi link automatically.'
                     : 'Connected to ${device.name} over Bluetooth because you\'re not on the same Wi-Fi. '
-                          'Files and media work but are slower; remote control needs Wi-Fi.',
+                          'Files work but are slower; remote control needs Wi-Fi.',
                 style: TextStyle(color: scheme.onSecondaryContainer),
               ),
             ),

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +11,6 @@ import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/platform/device_name.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/input.dart';
-import 'package:sidekick/platform/media.dart';
 import 'package:sidekick/ui/remote_page.dart';
 
 extension<T> on Stream<T> {
@@ -35,28 +33,6 @@ class FakeInput implements InputInjector {
   void key(String key, {List<String> modifiers = const []}) => log.add('key ${[...modifiers, key].join('+')}');
   @override
   void text(String text) => log.add('text $text');
-  @override
-  void virtualKey(int vk) => log.add('vk $vk');
-}
-
-class FakeMedia implements MediaController {
-  final actions = <String>[];
-  @override
-  bool get supported => true;
-  @override
-  Future<MediaStatus> status() async => const MediaStatus(
-    available: true,
-    title: 'Night Drive',
-    status: PlaybackStatus.playing,
-    position: Duration(seconds: 84),
-    duration: Duration(seconds: 252),
-    volume: 0.5,
-  );
-  @override
-  Future<void> perform(MediaAction action, {Duration? position, double? volume}) async =>
-      actions.add([action.name, if (position != null) position.inSeconds, ?volume].join(' '));
-  @override
-  Future<void> dispose() async {}
 }
 
 /// One simulated device: a server plus what it knows.
@@ -69,7 +45,6 @@ class Node {
       self: () => DeviceInfo(id: id, name: name, platform: DevicePlatform.windows, port: server.port),
       trust: trust,
       files: FileService(home: home.path),
-      media: media,
       input: input,
       receiveDir: () async => p.join(home.path, 'Received'),
       permissions: () => permissions,
@@ -82,7 +57,6 @@ class Node {
   final identity = Identity.generate();
   final trust = TrustStore();
   final input = FakeInput();
-  final media = FakeMedia();
   Permissions permissions = const Permissions();
   late final SidekickServer server;
 
@@ -155,7 +129,7 @@ void main() {
   test('everything else needs a token', () async {
     expect(() => pc.anonymous().roots(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 401)));
     final bad = PeerClient(host: '127.0.0.1', port: pc.server.port, token: newToken());
-    expect(() => bad.mediaStatus(), throwsA(isA<SidekickException>().having((e) => e.notPaired, 'notPaired', true)));
+    expect(() => bad.roots(), throwsA(isA<SidekickException>().having((e) => e.notPaired, 'notPaired', true)));
   });
 
   test('pairing is mutual', () async {
@@ -163,7 +137,7 @@ void main() {
     final client = await pair();
 
     // The phone can use the PC…
-    expect((await client.mediaStatus()).title, 'Night Drive');
+    expect(await client.roots(), isNotEmpty);
     // …and the PC got a token that works on the phone.
     final back = (await paired).device;
     expect(back.id, phone.id);
@@ -368,22 +342,11 @@ void main() {
     await other.server.stop();
   });
 
-  test('media status and actions', () async {
-    final client = await pair();
-    final status = await client.mediaStatus();
-    expect(status.isPlaying, isTrue);
-    expect(status.duration, const Duration(seconds: 252));
-    await client.media(MediaAction.playPause);
-    await client.media(MediaAction.seek, position: const Duration(seconds: 30));
-    await client.media(MediaAction.setVolume, volume: 0.25);
-    expect(pc.media.actions, ['playPause', 'seek 30', 'setVolume 0.25']);
-  });
-
   test('permissions switch features off', () async {
     final client = await pair();
-    pc.permissions = const Permissions(files: false, media: true, input: true);
+    pc.permissions = const Permissions(files: false, input: true);
     expect(() => client.roots(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 403)));
-    expect((await client.mediaStatus()).available, isTrue);
+    expect(await client.info(), isNotNull, reason: 'the rest still works');
   });
 
   test('remote input over WebSocket', () async {
@@ -447,6 +410,16 @@ void main() {
   });
 
   group('helpers', () {
+    test('release numbers compare as numbers, and devices say theirs', () {
+      expect(compareVersions('2.1.10', '2.1.9'), 1);
+      expect(compareVersions('2.1.2', '2.1.3'), -1);
+      expect(compareVersions('2.1', '2.1.0'), 0);
+      expect(compareVersions('2.1.3+80', '2.1.3'), 0);
+      const me = DeviceInfo(id: 'a', name: 'Mac', platform: DevicePlatform.macos, port: 1, app: '2.1.3');
+      expect(DeviceInfo.fromJson(me.toJson()).app, '2.1.3');
+      expect(DeviceInfo.fromJson({'id': 'b', 'v': 2}).app, isNull, reason: 'older releases say nothing');
+    });
+
     test('sanitizeFileName', () {
       expect(sanitizeFileName('a/b/c.txt'), 'c.txt');
       expect(sanitizeFileName(r'C:\x\y.png'), 'y.png');
@@ -462,13 +435,6 @@ void main() {
       expect(typingDiff('hello', 'hell'), (1, ''));
       expect(typingDiff('teh ', 'the '), (3, 'he '), reason: 'autocorrect rewrite');
       expect(typingDiff('abc', ''), (3, ''));
-    });
-
-    test('prettyAppName', () {
-      expect(prettyAppName('Spotify.exe'), 'Spotify');
-      expect(prettyAppName('chrome'), 'Chrome');
-      expect(prettyAppName('Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic'), 'Media Player');
-      expect(prettyAppName('308046B0AF4A39CB'), '308046B0AF4A39CB');
     });
 
     test('INPUT struct matches the 64-bit Win32 layout', () {
@@ -497,21 +463,6 @@ void main() {
       expect(isLegacyDefaultName('My ios'), isTrue);
       expect(isLegacyDefaultName('My android'), isTrue);
       expect(isLegacyDefaultName('ambiaPC'), isFalse);
-    });
-
-    test('media status round-trips through JSON', () {
-      const s = MediaStatus(
-        available: true,
-        title: 'T',
-        status: PlaybackStatus.paused,
-        position: Duration(seconds: 5),
-        volume: 0.3,
-      );
-      final back = MediaStatus.fromJson(jsonDecode(jsonEncode(s.toJson())) as Map<String, dynamic>);
-      expect(back.title, 'T');
-      expect(back.status, PlaybackStatus.paused);
-      expect(back.position, const Duration(seconds: 5));
-      expect(back.volume, 0.3);
     });
   });
 }

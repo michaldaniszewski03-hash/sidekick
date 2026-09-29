@@ -24,33 +24,7 @@ import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/main.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/input.dart';
-import 'package:sidekick/platform/media.dart';
 import 'package:sidekick/ui/widgets.dart';
-
-class _FakeMedia implements MediaController {
-  bool playing = true;
-  @override
-  bool get supported => true;
-  @override
-  Future<MediaStatus> status() async => MediaStatus(
-    available: true,
-    title: 'Night Drive',
-    artist: 'Kavinsky',
-    app: 'Spotify',
-    status: playing ? PlaybackStatus.playing : PlaybackStatus.paused,
-    position: const Duration(seconds: 84),
-    duration: const Duration(minutes: 4, seconds: 12),
-    canSeek: true,
-    volume: 0.64,
-  );
-  @override
-  Future<void> perform(MediaAction action, {Duration? position, double? volume}) async {
-    if (action == MediaAction.playPause) playing = !playing;
-  }
-
-  @override
-  Future<void> dispose() async {}
-}
 
 Future<void> _loadFonts() async {
   final fonts = p.join(
@@ -98,11 +72,10 @@ void main() {
           name: 'Pixel 9',
           platform: DevicePlatform.android,
           port: phone.port,
-          capabilities: const Capabilities(files: true, media: true, input: true),
+          capabilities: const Capabilities(files: true, input: true),
         ),
         trust: TrustStore(),
         files: FileService(home: home.path),
-        media: _FakeMedia(),
         input: UnsupportedInputInjector(),
         // Pretend remote control is allowed, so Remote shows a live touchpad.
         inputReady: () async => true,
@@ -185,21 +158,24 @@ void main() {
     }
     await tester.tap(find.text('Remote').last);
     await shot('3-remote', waitForData: true);
-    await tester.tap(find.text('Media').last);
-    await shot('4-media', waitForData: true);
     await tester.tap(find.text('Settings').last);
     await shot('5-settings');
     state.setThemeMode(ThemeMode.dark);
-    await tester.tap(find.text('Media').last);
-    await shot('6-media-dark', waitForData: true);
+    await tester.tap(find.text('Devices').last);
+    await shot('6-devices-dark');
 
     // Phone layout.
     state.setThemeMode(ThemeMode.light);
     debugForceMobile = true;
     tester.view.physicalSize = const Size(412, 915);
-    for (final (tab, name) in [('Devices', 'devices'), ('Files', 'files'), ('Remote', 'remote'), ('Media', 'media')]) {
+    for (final (tab, name) in [
+      ('Devices', 'devices'),
+      ('Files', 'files'),
+      ('Remote', 'remote'),
+      ('Settings', 'settings'),
+    ]) {
       await tester.tap(find.text(tab).last);
-      await shot('phone-$name', waitForData: name != 'devices');
+      await shot('phone-$name', waitForData: name == 'files' || name == 'remote');
     }
 
     // The welcome flow on a phone.

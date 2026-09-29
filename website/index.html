@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sidekick</title>
-<meta name="description" content="Sidekick links your phone and computer. Control either device from the other, browse and send files, and control whatever is playing.">
+<meta name="description" content="Sidekick links your phone and computer. Control either device from the other, and browse and send files, over Wi-Fi or Bluetooth.">
 <meta name="theme-color" content="#f7f5fb">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -699,6 +699,7 @@ section { scroll-margin-top: 80px; }
 .span-7 { grid-column: span 7; }
 .span-5 { grid-column: span 5; }
 .span-4 { grid-column: span 4; }
+.span-6 { grid-column: span 6; }
 .card.accent { background: var(--primary-container); color: var(--on-primary-container); border-color: transparent; }
 .card.accent p { color: inherit; opacity: .85; }
 .card.accent .card-icon { background: var(--primary); color: var(--on-primary); }
@@ -707,7 +708,7 @@ section { scroll-margin-top: 80px; }
   .span-4 { grid-column: span 6; }
 }
 @media (max-width: 600px) {
-  .span-4 { grid-column: span 12; }
+  .span-4, .span-6 { grid-column: span 12; }
   .card { padding: 22px; border-radius: 24px; }
 }
 
@@ -905,8 +906,7 @@ footer nav a:hover { color: var(--on-surface); }
         <h1>Your phone and PC, <em>finally</em> working together.</h1>
         <p class="lede">
           Sidekick links your devices over your own Wi-Fi, or Bluetooth when there's none. Use your phone as a remote for your
-          computer, open your phone's files from your desktop, send anything in a tap, and
-          play, pause, or skip whatever is on either screen.
+          computer, open your phone's files from your desktop, and send anything in a tap.
         </p>
         <div class="cta-row">
           <a class="btn btn-filled" id="heroDownload" href="#download"><span class="icon" id="heroDownloadIcon">download</span><span id="heroDownloadLabel">Download Sidekick</span></a>
@@ -1030,7 +1030,7 @@ footer nav a:hover { color: var(--on-surface); }
       <div class="section-head reveal">
         <div class="kicker">Features</div>
         <h2>One app for all of it.</h2>
-        <p>Sidekick does four things: remote control, file browsing, file sharing, and media control. It runs the same way on every device.</p>
+        <p>Sidekick does three things: remote control, file browsing and file sharing. It runs the same way on every device.</p>
       </div>
 
       <div class="bento">
@@ -1066,20 +1066,14 @@ footer nav a:hover { color: var(--on-surface); }
           </div>
         </article>
 
-        <article class="card span-4 reveal">
+        <article class="card span-6 reveal">
           <div class="card-icon s"><span class="icon">send</span></div>
           <h3>Send anything, with a yes first</h3>
           <p>Drag and drop or pick photos and files. The other device asks before accepting, then both show the progress. Nothing goes through the internet.</p>
         </article>
 
-        <article class="card span-4 accent reveal">
-          <div class="card-icon"><span class="icon">play_circle</span></div>
-          <h3>Media controller</h3>
-          <p>Play, pause, seek, skip and change the volume of whatever is playing on your computer: YouTube, Spotify, VLC, Netflix and more. On iPhone: the volume and Apple Music.</p>
-        </article>
-
-        <article class="card span-4 reveal">
-          <div class="card-icon t"><span class="icon">lock</span></div>
+        <article class="card span-6 accent reveal">
+          <div class="card-icon"><span class="icon">lock</span></div>
           <h3>Private by design</h3>
           <p>Pair once with a 6-digit code. Everything between your devices is encrypted, over Wi-Fi and over Bluetooth when there's no Wi-Fi at all. No accounts, no servers.</p>
         </article>
@@ -1105,7 +1099,6 @@ footer nav a:hover { color: var(--on-surface); }
               <div class="on"><span class="pill"><span class="icon fill">devices</span></span>Devices</div>
               <div><span class="pill"><span class="icon">folder</span></span>Files</div>
               <div><span class="pill"><span class="icon">mouse</span></span>Remote</div>
-              <div><span class="pill"><span class="icon">play_circle</span></span>Media</div>
               <div><span class="pill"><span class="icon">settings</span></span>Settings</div>
             </nav>
             <div class="win-main">
@@ -1138,7 +1131,6 @@ footer nav a:hover { color: var(--on-surface); }
                     <button class="btn btn-filled" type="button" id="demoSend"><span class="icon">send</span>Send files</button>
                     <span class="ibtn" title="Browse files"><span class="icon">folder_open</span></span>
                     <span class="ibtn" title="Remote control"><span class="icon">mouse</span></span>
-                    <span class="ibtn" title="Media"><span class="icon">play_circle</span></span>
                   </div>
                 </div>
                 <div class="pcard">
@@ -1150,7 +1142,6 @@ footer nav a:hover { color: var(--on-surface); }
                   <div class="pcard-actions">
                     <button class="btn btn-filled" type="button" disabled><span class="icon">send</span>Send files</button>
                     <span class="ibtn" title="Browse files"><span class="icon">folder_open</span></span>
-                    <span class="ibtn" title="Media"><span class="icon">play_circle</span></span>
                   </div>
                 </div>
               </div>
@@ -1188,7 +1179,6 @@ footer nav a:hover { color: var(--on-surface); }
               <div><span class="pill"><span class="icon">devices</span></span>Devices</div>
               <div class="on"><span class="pill"><span class="icon fill">folder</span></span>Files</div>
               <div><span class="pill"><span class="icon">mouse</span></span>Remote</div>
-              <div><span class="pill"><span class="icon">play_circle</span></span>Media</div>
               <div><span class="pill"><span class="icon">settings</span></span>Settings</div>
             </div>
             <div class="scrim"></div>
@@ -1224,7 +1214,6 @@ footer nav a:hover { color: var(--on-surface); }
             <li><span class="icon">check_circle</span>Control your PC</li>
             <li><span class="icon">check_circle</span>Be controlled from your PC</li>
             <li><span class="icon">check_circle</span>Browse and share files</li>
-            <li><span class="icon">check_circle</span>Media controller</li>
           </ul>
         </div>
         <div class="platform reveal">
@@ -1232,7 +1221,6 @@ footer nav a:hover { color: var(--on-surface); }
           <ul class="caps">
             <li><span class="icon">check_circle</span>Control your PC</li>
             <li><span class="icon">check_circle</span>Browse and share files</li>
-            <li><span class="icon">check_circle</span>Media controller</li>
           </ul>
         </div>
         <div class="platform reveal">
@@ -1241,7 +1229,6 @@ footer nav a:hover { color: var(--on-surface); }
             <li><span class="icon">check_circle</span>Control your phone</li>
             <li><span class="icon">check_circle</span>Be controlled from your phone</li>
             <li><span class="icon">check_circle</span>Browse and share files</li>
-            <li><span class="icon">check_circle</span>Media controller</li>
           </ul>
         </div>
         <div class="platform reveal">
@@ -1250,7 +1237,6 @@ footer nav a:hover { color: var(--on-surface); }
             <li><span class="icon">check_circle</span>Control your phone</li>
             <li><span class="icon">check_circle</span>Be controlled from your phone</li>
             <li><span class="icon">check_circle</span>Browse and share files</li>
-            <li><span class="icon">check_circle</span>Media controller</li>
           </ul>
         </div>
       </div>

@@ -14,7 +14,6 @@ import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/hotspot.dart';
 import 'package:sidekick/platform/input.dart';
-import 'package:sidekick/platform/media.dart';
 
 /// Wires a [BleRpcClient] to a server's [BleRequestDispatcher] through an
 /// in-memory "radio" with tiny packets, like the smallest Bluetooth MTU.
@@ -173,7 +172,6 @@ void main() {
         self: () => DeviceInfo(id: pcId, name: 'PC', platform: DevicePlatform.windows, port: sidekickPort),
         trust: trust,
         files: FileService(home: home.path),
-        media: UnsupportedMediaController(),
         input: UnsupportedInputInjector(),
         receiveDir: () async => p.join(home.path, 'Received'),
       );
@@ -235,7 +233,7 @@ void main() {
       final progress = <int>[];
       final upload = client.upload(local, ticket: ticket, onProgress: (d, _) => progress.add(d));
       // Other requests at the same time.
-      final others = [for (var i = 0; i < 5; i++) client.mediaStatus()];
+      final others = [for (var i = 0; i < 5; i++) client.roots()];
       final saved = await upload;
       await Future.wait(others);
       expect(File(saved).readAsBytesSync(), local.readAsBytesSync());
@@ -250,7 +248,7 @@ void main() {
       );
     });
 
-    test('pair, browse, upload, download and media', () async {
+    test('pair, browse, upload and download', () async {
       final anon = bluetoothClient(pc);
       expect((await anon.info()).id, pcId);
       expect(() => anon.roots(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 401)));
@@ -277,7 +275,11 @@ void main() {
         token: paired.device.token,
         seal: BleSeal(senderId: phone.id, key: randomBytes(32)),
       );
-      await expectLater(forged.roots(), throwsA(isA<SidekickException>()));
+      // The receiver can tell it's the key (pair again), not a damaged packet.
+      await expectLater(
+        forged.roots(),
+        throwsA(isA<SidekickException>().having((e) => e.identityChanged, 'says to pair again', isTrue)),
+      );
 
       final seal = BleSeal(senderId: phone.id, key: base64.decode(paired.key));
       final client = bluetoothClient(pc, token: paired.device.token, seal: seal, mtu: 185);
@@ -308,7 +310,6 @@ void main() {
       await client.download(p.join(home.path, 'hello.txt'), dest);
       expect(dest.readAsStringSync(), 'hi over bluetooth');
 
-      expect((await client.mediaStatus()).available, isFalse);
       expect(() => client.openInput(), throwsA(isA<SidekickException>()));
     });
 
@@ -319,7 +320,6 @@ void main() {
         self: () => DeviceInfo(id: pcId, name: 'Phone', platform: DevicePlatform.android, port: sidekickPort),
         trust: trust,
         files: FileService(home: home.path),
-        media: UnsupportedMediaController(),
         input: UnsupportedInputInjector(),
         receiveDir: () async => home.path,
         link: link,
