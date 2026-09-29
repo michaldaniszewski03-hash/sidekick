@@ -150,9 +150,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             Align(
                               alignment: Alignment.centerLeft,
                               child: FilledButton.tonalIcon(
-                                onPressed: bt.scanning || bt.status != BluetoothStatus.on
-                                    ? null
-                                    : state.scanBluetoothNow,
+                                onPressed: bt.scanning || !bt.canScan ? null : state.scanBluetoothNow,
                                 icon: const Icon(Icons.bluetooth_searching),
                                 label: Text(bt.scanning ? 'Scanning…' : 'Scan now'),
                               ),
@@ -170,6 +168,25 @@ class _SettingsPageState extends State<SettingsPage> {
                               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                             ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (hostIsIOS) ...[
+                    const SectionLabel('iPhone'),
+                    _Group(
+                      children: [
+                        SwitchListTile(
+                          secondary: const Icon(Icons.bolt_outlined),
+                          title: const Text('Keep running in the background'),
+                          subtitle: const Text(
+                            'iOS pauses apps you\'re not using, so your computer couldn\'t change the volume, control '
+                            'Apple Music or send files while you\'re in another app. This keeps Sidekick awake with '
+                            'a silent sound that never interrupts your music. Uses a little more battery.',
+                          ),
+                          isThreeLine: true,
+                          value: state.keepRunning,
+                          onChanged: state.setKeepRunning,
                         ),
                       ],
                     ),

@@ -20,6 +20,7 @@ import 'core/trust.dart';
 import 'platform/android.dart';
 import 'platform/device_name.dart';
 import 'platform/files.dart';
+import 'platform/ios.dart';
 import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
@@ -104,6 +105,10 @@ class AppState extends ChangeNotifier {
 
   /// True-black backgrounds in dark mode (saves battery on OLED screens).
   bool pureBlack = false;
+
+  /// iPhone: keep running while other apps are open, so computers can still
+  /// reach it (volume, Apple Music, files).
+  bool keepRunning = true;
 
   /// This build's version, e.g. "0.4.0" (shown in Settings → About).
   String appVersion = '';
@@ -191,6 +196,7 @@ class AppState extends ChangeNotifier {
     themeColor = _prefs.getString('themeColor') ?? (Platform.isIOS ? 'purple' : 'system');
     if (themeColor != 'system' && !themeColors.containsKey(themeColor)) themeColor = 'system';
     pureBlack = _prefs.getBool('pureBlack') ?? false;
+    keepRunning = _prefs.getBool('keepRunning') ?? true;
     permissions = Permissions(
       files: _prefs.getBool('allowFiles') ?? true,
       media: _prefs.getBool('allowMedia') ?? true,
@@ -285,6 +291,7 @@ class AppState extends ChangeNotifier {
         await MacBridge.refresh();
       } catch (_) {}
     }
+    if (Platform.isIOS) unawaited(setIosKeepAlive(keepRunning));
     // iOS apps can only share their own Documents folder.
     files = Platform.isIOS ? FileService(home: (await getApplicationDocumentsDirectory()).path) : FileService();
     server = SidekickServer(
@@ -333,7 +340,7 @@ class AppState extends ChangeNotifier {
       bt.found.listen(_onBluetoothSighting);
       bt.statusChanges.listen((_) => notifyListeners());
       unawaited(bt.start().then((_) => _maybeScanBluetooth()).catchError((_) {}));
-      _bleTimer = Timer.periodic(const Duration(seconds: 20), (_) => _maybeScanBluetooth());
+      _bleTimer = Timer.periodic(const Duration(seconds: 10), (_) => _maybeScanBluetooth());
     }
 
     if (Platform.isMacOS) {
@@ -669,12 +676,20 @@ class AppState extends ChangeNotifier {
   /// network, a paired device isn't reachable over it, or nothing's nearby.
   Future<void> _maybeScanBluetooth() async {
     final bt = bluetooth;
-    if (bt == null || bt.status != BluetoothStatus.on) return;
+    if (bt == null) return;
+    await bt.refresh();
+    if (!bt.canScan) return;
     addresses = await localAddresses();
-    final needed =
-        addresses.isEmpty || _paired.keys.any((id) => !reachableViaWifi(id)) || (_paired.isEmpty && nearby.isEmpty);
+    // No Wi-Fi at all (a field, a train): Bluetooth is the only way, so look
+    // every 10 s. On Wi-Fi, only every 20 s and only for devices it can't reach.
+    final offline = addresses.isEmpty;
+    _bleTick++;
+    if (!offline && _bleTick.isOdd) return;
+    final needed = offline || _paired.keys.any((id) => !reachableViaWifi(id)) || (_paired.isEmpty && nearby.isEmpty);
     if (needed) await bt.scan();
   }
+
+  int _bleTick = 0;
 
   void _onFound(DeviceInfo info) {
     final existing = _nearby[info.id];
@@ -943,6 +958,13 @@ class AppState extends ChangeNotifier {
   void setThemeColor(String color) {
     themeColor = color;
     _prefs.setString('themeColor', color);
+    notifyListeners();
+  }
+
+  void setKeepRunning(bool value) {
+    keepRunning = value;
+    _prefs.setBool('keepRunning', value);
+    if (Platform.isIOS) unawaited(setIosKeepAlive(value));
     notifyListeners();
   }
 

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../app_state.dart';
+import '../core/bluetooth.dart';
 import '../core/models.dart';
 import 'widgets.dart';
 
@@ -29,8 +30,8 @@ class DevicesPage extends StatelessWidget {
               onPressed: state.scanning ? null : state.scanNetwork,
               icon: state.scanning
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.wifi_find_outlined),
-              label: const Text('Scan network'),
+                  : const Icon(Icons.radar),
+              label: const Text('Search'),
             ),
             TextButton.icon(
               onPressed: () => _addByIp(context),
@@ -61,7 +62,7 @@ class DevicesPage extends StatelessWidget {
               ],
               const SectionLabel('Nearby'),
               if (nearby.isEmpty)
-                const _Searching()
+                _Searching(state: state)
               else
                 Card.filled(
                   clipBehavior: Clip.antiAlias,
@@ -257,8 +258,11 @@ class _ThisDeviceCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     error ??
-                        'Visible to Sidekick devices on your network'
-                            '${state.addresses.isEmpty ? '' : ' · ${state.addresses.join(', ')}'}',
+                        (state.addresses.isEmpty
+                            ? (state.bluetooth?.advertising ?? false)
+                                  ? 'No Wi-Fi · nearby devices can find this one over Bluetooth'
+                                  : 'No Wi-Fi · turn on Bluetooth so nearby devices can find this one'
+                            : 'Visible to Sidekick devices on your network · ${state.addresses.join(', ')}'),
                     style: TextStyle(color: error == null ? scheme.onPrimaryContainer : scheme.onErrorContainer),
                   ),
                 ],
@@ -411,11 +415,15 @@ class _PairedCardState extends State<_PairedCard> {
 }
 
 class _Searching extends StatelessWidget {
-  const _Searching();
+  const _Searching({required this.state});
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final offline = state.addresses.isEmpty;
+    final bt = state.bluetooth;
+    final bluetoothOff = bt == null || bt.status != BluetoothStatus.on;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(28)),
@@ -427,11 +435,21 @@ class _Searching extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Looking for devices…', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  bluetoothOff && offline ? 'Turn on Bluetooth to find devices' : 'Looking for devices…',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 4),
                 Text(
-                  'Open Sidekick on your other device and connect it to the same Wi-Fi.'
-                  '${Platform.isWindows ? ' If Windows asks, allow Sidekick on private networks.' : ''}',
+                  offline
+                      ? bluetoothOff
+                            ? "There's no Wi-Fi here, so Sidekick finds nearby devices over Bluetooth. Turn it on, "
+                                  'and open Sidekick on the other device too.'
+                            : 'No Wi-Fi here: searching over Bluetooth. Open Sidekick on the other device and keep '
+                                  'it on screen; it shows up here within a few seconds.'
+                      : 'Open Sidekick on your other device. On the same Wi-Fi it appears right away; elsewhere, '
+                            'with Bluetooth on, it appears when it\'s close by.'
+                            '${Platform.isWindows ? ' If Windows asks, allow Sidekick on private networks.' : ''}',
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
               ],

@@ -3,6 +3,14 @@ import 'package:flutter/services.dart';
 import '../core/models.dart';
 import 'media.dart';
 
+/// Keeps Sidekick running while other apps are open (silent, mixed audio),
+/// so a paired computer can still reach the iPhone.
+Future<void> setIosKeepAlive(bool on) async {
+  try {
+    await IosMediaController._channel.invokeMethod('setKeepAlive', {'on': on});
+  } catch (_) {}
+}
+
 /// Media control of *this* iPhone for a paired computer, via
 /// ios/Runner/AppDelegate.swift. iOS only allows the system volume and Apple
 /// Music; the status carries a note explaining that.

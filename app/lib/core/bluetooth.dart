@@ -40,7 +40,25 @@ class BluetoothService {
   /// Sidekick devices seen over Bluetooth (repeats included).
   Stream<BleSighting> get found => _found.stream;
   Stream<BluetoothStatus> get statusChanges => _status.stream;
-  BluetoothStatus status = BluetoothStatus.starting;
+
+  // Finding others (central) and being found (peripheral) are separate:
+  // some computers can scan but not advertise, and one mustn't block the
+  // other.
+  BluetoothLowEnergyState _centralState = BluetoothLowEnergyState.unknown;
+  BluetoothLowEnergyState _peripheralState = BluetoothLowEnergyState.unknown;
+
+  /// Can look for other devices.
+  bool get canScan => _centralState == BluetoothLowEnergyState.poweredOn;
+
+  /// Overall state for Settings: on if this device can find or be found.
+  BluetoothStatus get status {
+    final states = [_centralState, _peripheralState];
+    if (states.contains(BluetoothLowEnergyState.poweredOn)) return BluetoothStatus.on;
+    if (states.contains(BluetoothLowEnergyState.poweredOff)) return BluetoothStatus.off;
+    if (states.contains(BluetoothLowEnergyState.unauthorized)) return BluetoothStatus.unauthorized;
+    if (states.every((s) => s == BluetoothLowEnergyState.unsupported)) return BluetoothStatus.unsupported;
+    return BluetoothStatus.starting;
+  }
 
   late final GATTCharacteristic _info = GATTCharacteristic.mutable(
     uuid: bleInfoUuid,
@@ -102,7 +120,8 @@ class BluetoothService {
       }
     }
     _subscriptions
-      ..add(_peripheralManager.stateChanged.listen((e) => _onState(e.state)))
+      ..add(_peripheralManager.stateChanged.listen((e) => _onPeripheralState(e.state)))
+      ..add(_centralManager.stateChanged.listen((e) => _onCentralState(e.state)))
       ..add(_peripheralManager.characteristicReadRequested.listen(_onRead))
       ..add(_peripheralManager.characteristicWriteRequested.listen(_onWrite))
       ..add(
@@ -117,20 +136,36 @@ class BluetoothService {
           if (e.state == ConnectionState.disconnected) _links.remove('${e.peripheral.uuid}')?.close();
         }),
       );
-    await _onState(_peripheralManager.state);
+    await refresh();
   }
 
-  Future<void> _onState(BluetoothLowEnergyState state) async {
-    status = switch (state) {
-      BluetoothLowEnergyState.poweredOn => BluetoothStatus.on,
-      BluetoothLowEnergyState.poweredOff => BluetoothStatus.off,
-      BluetoothLowEnergyState.unauthorized => BluetoothStatus.unauthorized,
-      BluetoothLowEnergyState.unsupported => BluetoothStatus.unsupported,
-      BluetoothLowEnergyState.unknown => BluetoothStatus.starting,
-    };
+  /// Re-reads both states. Called regularly too, since some platforms only
+  /// report a change once and a missed event would leave Bluetooth "starting"
+  /// forever.
+  Future<void> refresh() async {
+    try {
+      await _onCentralState(_centralManager.state);
+    } catch (_) {}
+    try {
+      await _onPeripheralState(_peripheralManager.state);
+    } catch (_) {}
+    // Advertising can stop on its own (another app, the OS); try again.
+    if (_peripheralState == BluetoothLowEnergyState.poweredOn && !_advertising) await _startAdvertising();
+  }
+
+  Future<void> _onCentralState(BluetoothLowEnergyState state) async {
+    if (state == _centralState) return;
+    _centralState = state;
+    _log('Finding devices: ${state.name}');
     _status.add(status);
-    _log('Bluetooth is ${status.name}');
-    if (status == BluetoothStatus.on) {
+  }
+
+  Future<void> _onPeripheralState(BluetoothLowEnergyState state) async {
+    if (state == _peripheralState) return;
+    _peripheralState = state;
+    _log('Being found: ${state.name}');
+    _status.add(status);
+    if (state == BluetoothLowEnergyState.poweredOn) {
       await _startAdvertising();
     } else {
       _advertising = false;
@@ -234,8 +269,8 @@ class BluetoothService {
 
   /// Scans for Sidekick devices for [duration].
   Future<void> scan({Duration duration = const Duration(seconds: 8)}) async {
-    if (status != BluetoothStatus.on) {
-      _log("Can't scan: Bluetooth is ${status.name}");
+    if (!canScan) {
+      _log("Can't look for devices: Bluetooth is ${_centralState.name}");
       return;
     }
     if (_scanning) return;
@@ -260,9 +295,12 @@ class BluetoothService {
 
   int _seenThisScan = 0;
 
+  final Set<String> _everSeen = {};
+
   void _onDiscovered(DiscoveredEventArgs e) {
     final key = '${e.peripheral.uuid}';
     _seenThisScan++;
+    if (_everSeen.add(key)) _log('In range: a Sidekick device (signal ${e.rssi} dBm), asking its name…');
     final known = _identified[key];
     if (known != null) {
       if (known.id != self().id) _found.add(BleSighting(known, e.peripheral));
@@ -271,12 +309,27 @@ class BluetoothService {
     if (_identifying.add(key)) unawaited(_identify(e.peripheral).whenComplete(() => _identifying.remove(key)));
   }
 
-  /// Connects briefly to read who a newly seen peripheral is.
+  /// Connects briefly to read who a newly seen peripheral is. Only the
+  /// minimum (connect, find the service, read one value) so that as few
+  /// things as possible can go wrong; request links set up the rest later.
   Future<void> _identify(Peripheral peripheral) async {
     final key = '${peripheral.uuid}';
+    // An open request link already knows the way.
+    final open = _links[key];
     try {
-      final link = await _link(peripheral);
-      final info = DeviceInfo.fromJson(jsonDecode(utf8.decode(await link.readInfo())) as Map<String, dynamic>);
+      final Uint8List raw;
+      if (open != null) {
+        raw = await open.readInfo();
+      } else {
+        await _centralManager.connect(peripheral).timeout(const Duration(seconds: 15));
+        final services = await _centralManager.discoverGATT(peripheral).timeout(const Duration(seconds: 15));
+        final service = services.where((s) => s.uuid == bleServiceUuid).firstOrNull;
+        if (service == null) throw StateError('it has no Sidekick service');
+        final info = service.characteristics.where((c) => c.uuid == bleInfoUuid).firstOrNull;
+        if (info == null) throw StateError('it has no info characteristic');
+        raw = await _centralManager.readCharacteristic(peripheral, info).timeout(const Duration(seconds: 10));
+      }
+      final info = DeviceInfo.fromJson(jsonDecode(utf8.decode(raw)) as Map<String, dynamic>);
       _identified[key] = info;
       if (info.id != self().id) {
         _log('Found ${info.name} (${info.platform.name})');
@@ -284,10 +337,14 @@ class BluetoothService {
       }
     } catch (e) {
       // Not reachable right now; we'll try again when it shows up again.
-      _log("Saw a Sidekick device but couldn't connect to read its name: $e");
+      _log("A Sidekick device is in range but reading its name failed: $e");
     } finally {
       // Don't hold the connection just for a name; phones allow only a few.
-      await _links.remove(key)?.close();
+      if (open == null) {
+        try {
+          await _centralManager.disconnect(peripheral);
+        } catch (_) {}
+      }
     }
   }
 
