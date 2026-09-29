@@ -167,11 +167,7 @@ class _WelcomeFlowState extends State<WelcomeFlow> {
           maxLength: 40,
           textInputAction: TextInputAction.next,
           onSubmitted: (_) => _go(1),
-          decoration: InputDecoration(
-            labelText: 'Device name',
-            prefixIcon: Icon(platformIcon(state.me.platform)),
-            border: const OutlineInputBorder(),
-          ),
+          decoration: InputDecoration(labelText: 'Device name', prefixIcon: Icon(platformIcon(state.me.platform))),
         ),
       ],
     ),

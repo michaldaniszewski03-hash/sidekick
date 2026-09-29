@@ -53,11 +53,24 @@ String get hostOS => debugHostPlatform?.name ?? Platform.operatingSystem;
 /// Screens narrower than this get the compact phone layout.
 const compactWidth = 600.0;
 
+/// Content never gets wider than this, so big windows stay readable.
+const maxContentWidth = 1080.0;
+
 /// Page scaffold with a large title, used by every tab.
 class PageFrame extends StatelessWidget {
-  const PageFrame({super.key, required this.title, this.actions = const [], required this.child, this.scroll = true});
+  const PageFrame({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.actions = const [],
+    required this.child,
+    this.scroll = true,
+  });
 
   final String title;
+
+  /// A short line under the title (what this page is about right now).
+  final String? subtitle;
   final List<Widget> actions;
   final Widget child;
   final bool scroll;
@@ -65,9 +78,26 @@ class PageFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final compact = MediaQuery.sizeOf(context).width < compactWidth;
     final side = compact ? 16.0 : 28.0;
-    final titleText = Text(title, style: text.headlineMedium?.copyWith(fontWeight: FontWeight.w600));
+    final titleText = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: compact ? text.headlineMedium : text.headlineLarge),
+        if (subtitle != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+      ],
+    );
     // On phones the actions go under the title so they never overflow.
     final header = Padding(
       padding: EdgeInsets.fromLTRB(side, compact ? 16 : 24, compact ? 16 : 20, 12),
@@ -89,12 +119,21 @@ class PageFrame extends StatelessWidget {
               ],
             ),
     );
-    final body = Padding(padding: EdgeInsets.fromLTRB(side, 4, side, side), child: child);
+    final body = Padding(padding: EdgeInsets.fromLTRB(side, 8, side, side), child: child);
+    // Full width up to [maxContentWidth], centered; full height too when
+    // the page doesn't scroll (Files, Remote fill the window).
+    Widget centered(Widget w, {bool fillHeight = false}) => Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: maxContentWidth),
+        child: SizedBox(width: double.infinity, height: fillHeight ? double.infinity : null, child: w),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        header,
-        Expanded(child: scroll ? SingleChildScrollView(child: body) : body),
+        centered(header),
+        Expanded(child: scroll ? SingleChildScrollView(child: centered(body)) : centered(body, fillHeight: true)),
       ],
     );
   }
@@ -106,10 +145,11 @@ class SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 20, bottom: 10, left: 4),
+    padding: const EdgeInsets.only(top: 24, bottom: 10, left: 4),
     child: Text(
       text,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.primary),
+      style: Theme.of(context).textTheme.titleSmall
+          ?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700),
     ),
   );
 }
@@ -133,14 +173,9 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(24)),
-                child: Icon(icon, size: 34, color: scheme.onSecondaryContainer),
-              ),
-              const SizedBox(height: 20),
-              Text(title, style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
+              GradientBadge(icon: icon, size: 88),
+              const SizedBox(height: 24),
+              Text(title, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text(
                 message,
@@ -151,6 +186,78 @@ class EmptyState extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A rounded square in the theme's primary → tertiary gradient with an icon:
+/// Sidekick's signature shape (welcome screen, empty states, hero cards).
+class GradientBadge extends StatelessWidget {
+  const GradientBadge({super.key, required this.icon, this.size = 56});
+  final IconData icon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primary, scheme.tertiary],
+        ),
+        borderRadius: BorderRadius.circular(size * 0.32),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.25),
+            blurRadius: size * 0.3,
+            offset: Offset(0, size * 0.08),
+          ),
+        ],
+      ),
+      child: Icon(icon, size: size * 0.48, color: scheme.onPrimary),
+    );
+  }
+}
+
+/// A small rounded label with a colored dot, for statuses.
+class StatusPill extends StatelessWidget {
+  const StatusPill({super.key, required this.label, required this.color, this.background});
+  final String label;
+  final Color color;
+  final Color? background;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: background ?? scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ],
       ),
     );
   }

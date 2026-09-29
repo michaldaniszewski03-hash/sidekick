@@ -107,6 +107,7 @@ class _BrowserState extends State<_Browser> {
     final visible = _showHidden ? _entries : _entries.where((e) => !e.name.startsWith('.')).toList();
     return PageFrame(
       title: 'Files',
+      subtitle: 'On ${widget.device.name}. Drop files here to send them.',
       scroll: false,
       actions: [
         DevicePicker(state: widget.state),

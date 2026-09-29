@@ -24,8 +24,13 @@ class DevicesPage extends StatelessWidget {
       builder: (context, _) {
         final paired = state.paired;
         final nearby = state.nearby;
+        final online = paired.where((d) => state.isOnline(d.id)).length;
         return PageFrame(
           title: 'Devices',
+          subtitle: paired.isEmpty
+              ? 'Pair your phone or computer to get started'
+              : '${paired.length} paired · $online connected'
+                    '${nearby.isEmpty ? '' : ' · ${nearby.length} nearby'}',
           actions: [
             TextButton.icon(
               onPressed: state.scanning ? null : state.scanNetwork,
@@ -78,7 +83,7 @@ class DevicesPage extends StatelessWidget {
                       for (final d in nearby)
                         ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                          leading: CircleAvatar(child: Icon(platformIcon(d.platform))),
+                          leading: CircleAvatar(radius: 22, child: Icon(platformIcon(d.platform))),
                           title: Text(d.name),
                           subtitle: Text('${d.platform.name} · ${d.address ?? 'nearby over Bluetooth'}'),
                           trailing: FilledButton(
@@ -121,11 +126,7 @@ class DevicesPage extends StatelessWidget {
             TextField(
               controller: controller,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'IP address',
-                hintText: '192.168.1.23',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'IP address', hintText: '192.168.1.23'),
               onSubmitted: (v) => Navigator.pop(context, v),
             ),
           ],
@@ -218,12 +219,7 @@ class _EnterPinDialogState extends State<_EnterPinDialog> {
               maxLength: 6,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(letterSpacing: 8),
-              decoration: InputDecoration(
-                counterText: '',
-                border: const OutlineInputBorder(),
-                errorText: _error,
-                errorMaxLines: 3,
-              ),
+              decoration: InputDecoration(counterText: '', errorText: _error, errorMaxLines: 3),
               onChanged: (v) {
                 if (v.length == 6) _submit();
               },
@@ -250,43 +246,61 @@ class _ThisDeviceCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final error = state.networkError;
-    return Card(
-      color: error == null ? scheme.primaryContainer : scheme.errorContainer,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Row(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(18)),
-              child: Icon(platformIcon(state.me.platform), color: scheme.onPrimary, size: 28),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    state.name,
-                    style: text.titleLarge?.copyWith(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600),
+    final bt = state.bluetooth;
+    final onCard = error == null ? scheme.onPrimaryContainer : scheme.onErrorContainer;
+    final wifi = state.addresses.isNotEmpty;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(32),
+        gradient: error == null
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [scheme.primaryContainer, scheme.tertiaryContainer],
+              )
+            : null,
+        color: error == null ? null : scheme.errorContainer,
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        children: [
+          GradientBadge(icon: platformIcon(state.me.platform), size: 64),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('This device', style: text.labelLarge?.copyWith(color: onCard.withValues(alpha: 0.75))),
+                Text(state.name, style: text.headlineSmall?.copyWith(color: onCard)),
+                const SizedBox(height: 10),
+                if (error != null)
+                  Text(error, style: TextStyle(color: onCard))
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      StatusPill(
+                        label: wifi ? 'Wi-Fi · ${state.addresses.join(', ')}' : 'No Wi-Fi',
+                        color: wifi ? Colors.green : scheme.outline,
+                        background: scheme.surface.withValues(alpha: 0.7),
+                      ),
+                      if (bt != null)
+                        StatusPill(
+                          label: bt.advertising
+                              ? 'Bluetooth · findable'
+                              : bt.status == BluetoothStatus.on
+                              ? 'Bluetooth · can search'
+                              : 'Bluetooth off',
+                          color: bt.status == BluetoothStatus.on ? scheme.primary : scheme.outline,
+                          background: scheme.surface.withValues(alpha: 0.7),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    error ??
-                        (state.addresses.isEmpty
-                            ? (state.bluetooth?.advertising ?? false)
-                                  ? 'No Wi-Fi · nearby devices can find this one over Bluetooth'
-                                  : 'No Wi-Fi · turn on Bluetooth so nearby devices can find this one'
-                            : 'Visible to Sidekick devices on your network · ${state.addresses.join(', ')}'),
-                    style: TextStyle(color: error == null ? scheme.onPrimaryContainer : scheme.onErrorContainer),
-                  ),
-                ],
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -340,12 +354,23 @@ class _PairedCardState extends State<_PairedCard> {
     final caps = state.capabilitiesOf(device.id);
     final reset = state.needsRepair(device) != null;
 
+    final status = _dragging
+        ? 'Drop to send'
+        : reset
+        ? 'Was reset: pair again'
+        : state.connectingDirect.contains(device.id)
+        ? 'Setting up direct Wi-Fi…'
+        : state.viaBluetooth(device.id)
+        ? 'Connected via Bluetooth'
+        : (online ? 'Connected' : 'Offline');
+
     return MaybeDropTarget(
       onHover: (hovering) => setState(() => _dragging = hovering),
       onFiles: (files) => state.sendFiles(device, files),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(20),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.fromLTRB(20, 18, 12, 20),
         decoration: BoxDecoration(
           color: _dragging ? scheme.secondaryContainer : scheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(_dragging ? 36 : 28),
@@ -356,10 +381,11 @@ class _PairedCardState extends State<_PairedCard> {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: scheme.secondaryContainer,
-                  child: Icon(platformIcon(device.platform), color: scheme.onSecondaryContainer),
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(18)),
+                  child: Icon(platformIcon(device.platform), color: scheme.onSecondaryContainer, size: 26),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -368,72 +394,79 @@ class _PairedCardState extends State<_PairedCard> {
                     children: [
                       Text(
                         device.name,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      Row(
-                        children: [
-                          Icon(Icons.circle, size: 8, color: online ? Colors.green : scheme.outline),
-                          const SizedBox(width: 6),
-                          Text(
-                            _dragging
-                                ? 'Drop to send'
-                                : reset
-                                ? 'Was reset: pair again to reconnect'
-                                : state.connectingDirect.contains(device.id)
-                                ? 'Setting up direct Wi-Fi…'
-                                : state.viaBluetooth(device.id)
-                                ? 'Connected via Bluetooth'
-                                : (online ? 'Connected' : 'Offline'),
-                            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
-                          ),
-                        ],
+                      const SizedBox(height: 4),
+                      StatusPill(
+                        label: status,
+                        color: reset ? scheme.error : (online ? Colors.green : scheme.outline),
+                        background: _dragging ? scheme.surface : null,
                       ),
                     ],
                   ),
                 ),
                 PopupMenuButton<String>(
+                  tooltip: 'More',
                   onSelected: (v) => v == 'unpair' ? _confirmUnpair() : null,
-                  itemBuilder: (_) => const [PopupMenuItem(value: 'unpair', child: Text('Unpair'))],
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'unpair',
+                      child: ListTile(leading: Icon(Icons.link_off), title: Text('Unpair')),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            if (reset)
-              FilledButton.icon(
-                onPressed: () => pairWith(context, state, state.forgetForRepair(device)),
-                icon: const Icon(Icons.link, size: 18),
-                label: const Text('Pair again'),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: online ? _pickAndSend : null,
-                    icon: const Icon(Icons.send_outlined, size: 18),
-                    label: const Text('Send'),
-                  ),
-                  if (caps?.files ?? true)
-                    OutlinedButton.icon(
-                      onPressed: () => _open(1),
-                      icon: const Icon(Icons.folder_open_outlined, size: 18),
-                      label: const Text('Files'),
+            const SizedBox(height: 18),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: reset
+                  ? SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => pairWith(context, state, state.forgetForRepair(device)),
+                        icon: const Icon(Icons.link, size: 18),
+                        label: const Text('Pair again'),
+                      ),
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: online ? _pickAndSend : null,
+                            icon: const Icon(Icons.send_rounded, size: 18),
+                            label: const Text('Send files'),
+                          ),
+                        ),
+                        if (caps?.files ?? true) ...[
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            tooltip: 'Browse files',
+                            onPressed: () => _open(1),
+                            icon: const Icon(Icons.folder_open_outlined),
+                          ),
+                        ],
+                        if (caps?.input ?? true) ...[
+                          const SizedBox(width: 4),
+                          IconButton.filledTonal(
+                            tooltip: 'Remote control',
+                            onPressed: () => _open(2),
+                            icon: const Icon(Icons.mouse_outlined),
+                          ),
+                        ],
+                        if (caps?.media ?? true) ...[
+                          const SizedBox(width: 4),
+                          IconButton.filledTonal(
+                            tooltip: 'Media',
+                            onPressed: () => _open(3),
+                            icon: const Icon(Icons.play_circle_outline),
+                          ),
+                        ],
+                      ],
                     ),
-                  if (caps?.input ?? true)
-                    OutlinedButton.icon(
-                      onPressed: () => _open(2),
-                      icon: const Icon(Icons.mouse_outlined, size: 18),
-                      label: const Text('Remote'),
-                    ),
-                  if (caps?.media ?? true)
-                    OutlinedButton.icon(
-                      onPressed: () => _open(3),
-                      icon: const Icon(Icons.play_circle_outline, size: 18),
-                      label: const Text('Media'),
-                    ),
-                ],
-              ),
+            ),
           ],
         ),
       ),
@@ -456,7 +489,13 @@ class _Searching extends StatelessWidget {
       decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(28)),
       child: Row(
         children: [
-          const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3)),
+          Container(
+            width: 56,
+            height: 56,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: scheme.secondaryContainer, shape: BoxShape.circle),
+            child: CircularProgressIndicator(strokeWidth: 3, color: scheme.onSecondaryContainer),
+          ),
           const SizedBox(width: 20),
           Expanded(
             child: Column(

@@ -171,6 +171,7 @@ class _RemoteState extends State<_Remote> {
 
     return PageFrame(
       title: 'Remote',
+      subtitle: 'Use ${widget.device.name} from here',
       actions: [
         _StatusChip(conn: _conn, onRetry: _connect),
         const SizedBox(width: 8),
@@ -310,7 +311,6 @@ class _RemoteState extends State<_Remote> {
       enabled: _s != null,
       decoration: InputDecoration(
         hintText: 'Or write text here and press Enter to send it all at once',
-        border: const OutlineInputBorder(),
         suffixIcon: IconButton(
           icon: const Icon(Icons.send),
           onPressed: () {
@@ -337,7 +337,6 @@ class _RemoteState extends State<_Remote> {
     decoration: InputDecoration(
       hintText: 'Type here to type on ${widget.device.name}',
       prefixIcon: const Icon(Icons.keyboard_outlined),
-      border: const OutlineInputBorder(),
     ),
     onChanged: _onLiveChanged,
     // Keep the keyboard open after Enter.

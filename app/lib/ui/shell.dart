@@ -126,9 +126,16 @@ class _ShellState extends State<Shell> {
               ],
             ),
           Expanded(
+            // Material "fade through": the old tab fades out, the new one
+            // fades in while rising slightly.
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
+              duration: const Duration(milliseconds: 300),
               switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(scale: Tween(begin: 0.98, end: 1.0).animate(animation), child: child),
+              ),
               child: KeyedSubtree(key: ValueKey(_index), child: pages[_index]),
             ),
           ),

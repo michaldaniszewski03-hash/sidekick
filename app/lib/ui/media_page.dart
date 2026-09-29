@@ -140,6 +140,9 @@ class _MediaState extends State<_Media> {
     final s = _status;
     return PageFrame(
       title: 'Media',
+      subtitle: s != null && s.available && s.app.isNotEmpty
+          ? 'Playing in ${s.app} on ${widget.device.name}'
+          : "What's playing on ${widget.device.name}",
       actions: [DevicePicker(state: widget.state)],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

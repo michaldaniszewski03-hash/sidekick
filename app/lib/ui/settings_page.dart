@@ -51,6 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final perms = state.permissions;
         return PageFrame(
           title: 'Settings',
+          subtitle: state.appVersion.isEmpty ? null : 'Sidekick ${state.appVersion}',
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
@@ -68,7 +69,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           decoration: const InputDecoration(
                             labelText: 'Device name',
                             helperText: 'How this device appears to your other devices',
-                            border: OutlineInputBorder(),
                           ),
                           onSubmitted: state.setName,
                           onTapOutside: (_) => state.setName(_name.text),

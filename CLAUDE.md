@@ -80,6 +80,24 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.0.0
+- **New logo:** the wide SIDEKICK wordmark (`website/2.png`) on every app
+  icon, in the app and on the website. Icons 64 px and smaller use the "sk"
+  monogram.
+- **Redesign, still Material You** (wallpaper/theme colors unchanged):
+  - One app-wide theme (`main.dart`): bold headlines, soft 16–28 px shapes,
+    44 px buttons, rounded outlined fields, check icons on switches, the
+    current Material 3 progress bars and sliders, floating rounded
+    snackbars, restyled navigation rail/bar, fade-forward page transitions
+    on Android/Windows, and a fade-through between tabs.
+  - Pages (`PageFrame`) get a subtitle line (e.g. "1 paired · 1 connected")
+    and never stretch wider than 1080 px on big screens.
+  - Devices: a gradient "This device" hero card with Wi-Fi and Bluetooth
+    status pills; paired cards with a status pill, one "Send files" button
+    and icon shortcuts to Files, Remote and Media.
+  - Shared pieces: `GradientBadge` (the signature icon tile) and
+    `StatusPill`. Empty states use the gradient tile.
+
 ### 1.1.3
 - **Styled Mac installer:** the .dmg opens on the purple background with an
   arrow; drag Sidekick (right) into Applications (left).
