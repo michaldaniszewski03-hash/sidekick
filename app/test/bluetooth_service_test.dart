@@ -96,6 +96,9 @@ class FakeBackend implements BleBackend {
       if (!_scanning) return;
       // Some other gadget that isn't Sidekick.
       if (!filtered) _discovered.add(const BleDiscovery(id: 'headphones', rssi: -70, sidekick: false));
+      // An Apple Watch whose background bitmask happens to match Sidekick's
+      // bit, louder than the real thing.
+      _discovered.add(const BleDiscovery(id: 'watch', rssi: -30, sidekick: true, strong: false));
       for (final other in air.advertising.where((a) => a != id)) {
         _discovered.add(BleDiscovery(id: other, rssi: -50, sidekick: true, name: filtered ? null : 'Sidekick'));
       }
@@ -115,6 +118,7 @@ class FakeBackend implements BleBackend {
     calls.add('identify $other');
     // Connecting takes a moment.
     await Future<void>.delayed(const Duration(milliseconds: 5));
+    if (other == 'watch') throw StateError('It has no Sidekick service');
     return _peer(other)._info();
   }
 
@@ -156,6 +160,9 @@ class FakeBackend implements BleBackend {
 
   @override
   Future<void> requestPermission() async {}
+
+  @override
+  Future<void> openBluetoothSettings() async {}
 
   @override
   Future<void> stop() async => air.advertising.remove(id);
@@ -201,12 +208,19 @@ void main() {
     expect(sighting.info.name, 'MacBook');
     expect(sighting.bleId, 'mac-radio');
     expect(phone.candidates['mac-radio']?.info?.id, macId);
+    // The look-alike was checked quietly and isn't listed.
+    expect(phone.candidates['watch']?.error, isNotNull);
+    expect(phone.visibleCandidates.map((c) => c.bleId), ['mac-radio']);
 
     // Both kinds of scan find it; an unfiltered one also counts other gadgets.
     await phone.scan(duration: const Duration(milliseconds: 50));
     expect(phoneRadio.calls.where((c) => c.startsWith('scan')), ['scan all', 'scan filtered']);
-    expect(phone.lastDevicesAround, 2);
-    expect(phoneRadio.calls.where((c) => c.startsWith('identify')), ['identify mac-radio'], reason: 'asked once');
+    expect(phone.lastDevicesAround, 3);
+    expect(phoneRadio.calls.where((c) => c.startsWith('identify')).toSet(), {
+      'identify mac-radio',
+      'identify watch',
+    }, reason: 'each asked once');
+    expect(phoneRadio.calls.where((c) => c == 'identify mac-radio'), hasLength(1));
 
     // Requests and responses over 20-byte packets, several at once.
     final client = PeerClient.bluetooth(phone.clientFor(sighting.bleId));

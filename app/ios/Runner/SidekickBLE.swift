@@ -191,6 +191,13 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
         }
       #endif
       result(nil)
+    case "openBluetoothSettings":
+      #if os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
+          NSWorkspace.shared.open(url)
+        }
+      #endif
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -343,14 +350,17 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
   ) {
     let id = peripheral.identifier.uuidString
     peripherals[id] = peripheral
-    let ids =
-      (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
-      + (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? [])
+    let primary = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
+    let overflow = advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? []
     let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String
-    // A filtered scan only reports devices with the Sidekick service.
-    let sidekick = scanFiltered || ids.contains(SidekickBLE.serviceID) || name == SidekickBLE.advertisedName
+    // "strong": it really advertises Sidekick. Apps in the background put
+    // their service ids into a shared bitmask ("overflow") instead, where
+    // any Apple device with an overlapping bit matches too, and a filtered
+    // scan reports those as well. They're only worth a quiet look.
+    let strong = primary.contains(SidekickBLE.serviceID) || name == SidekickBLE.advertisedName
+    let sidekick = strong || overflow.contains(SidekickBLE.serviceID) || scanFiltered
     emit([
-      "type": "discovered", "id": id, "rssi": RSSI.intValue, "sidekick": sidekick,
+      "type": "discovered", "id": id, "rssi": RSSI.intValue, "sidekick": sidekick, "strong": strong,
       "name": name ?? peripheral.name ?? "",
     ])
   }
@@ -392,13 +402,33 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
     }
   }
 
+  static func short(_ id: String) -> String { String(id.prefix(4)) }
+
+  /// A Bluetooth error for Dart. An old system-level Bluetooth pairing that
+  /// only one side still remembers gets its own code, since the fix is in
+  /// Bluetooth settings.
+  private func failure(_ error: Error?, _ fallback: String) -> FlutterError {
+    if let cb = error as? CBError, cb.code == .peerRemovedPairingInformation {
+      return FlutterError(code: "stalePairing", message: cb.localizedDescription, details: nil)
+    }
+    if let att = error as? CBATTError,
+      att.code == .insufficientEncryption || att.code == .insufficientAuthentication
+    {
+      return FlutterError(code: "stalePairing", message: att.localizedDescription, details: nil)
+    }
+    return self.error(error?.localizedDescription ?? fallback)
+  }
+
   func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
     peripheral.delegate = self
+    log("Connected to \(SidekickBLE.short(peripheral.identifier.uuidString)), looking for Sidekick on it")
     peripheral.discoverServices([SidekickBLE.serviceID])
   }
 
   func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-    fail(peripheral.identifier.uuidString, error?.localizedDescription ?? "Couldn't connect")
+    let id = peripheral.identifier.uuidString
+    log("Couldn't connect to \(SidekickBLE.short(id)): \(error?.localizedDescription ?? "no reason given")")
+    fail(id, failure(error, "Couldn't connect"))
   }
 
   func centralManager(
@@ -406,12 +436,14 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
   ) {
     let id = peripheral.identifier.uuidString
     characteristics.removeValue(forKey: id)
-    fail(id, "Disconnected")
+    if let error = error { log("\(SidekickBLE.short(id)) disconnected: \(error.localizedDescription)") }
+    fail(id, failure(error, "Disconnected"))
     if openLinks.remove(id) != nil { emit(["type": "disconnected", "id": id]) }
   }
 
-  private func fail(_ id: String, _ message: String) {
-    let failure = error(message)
+  private func fail(_ id: String, _ message: String) { fail(id, error(message)) }
+
+  private func fail(_ id: String, _ failure: FlutterError) {
     identifyResults.removeValue(forKey: id)?(failure)
     openResults.removeValue(forKey: id)?(failure)
     for r in readResults.removeValue(forKey: id) ?? [] { r(failure) }
@@ -421,7 +453,8 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
   func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
     let id = peripheral.identifier.uuidString
     guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == SidekickBLE.serviceID }) else {
-      fail(id, error?.localizedDescription ?? "It has no Sidekick service")
+      if error == nil { log("\(SidekickBLE.short(id)) isn't running Sidekick") }
+      fail(id, failure(error, "It has no Sidekick service"))
       return
     }
     peripheral.discoverCharacteristics(
@@ -431,7 +464,7 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
   func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
     let id = peripheral.identifier.uuidString
     guard error == nil else {
-      fail(id, error!.localizedDescription)
+      fail(id, failure(error, "Couldn't read its services"))
       return
     }
     var found: [CBUUID: CBCharacteristic] = [:]
@@ -471,7 +504,7 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
     let id = peripheral.identifier.uuidString
     guard characteristic.uuid == SidekickBLE.txID, let result = openResults.removeValue(forKey: id) else { return }
     if let error = error {
-      result(self.error(error.localizedDescription))
+      result(failure(error, "Couldn't listen for answers"))
     } else {
       result(SidekickBLE.packetLength(peripheral))
     }
@@ -487,7 +520,7 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
     guard characteristic.uuid == SidekickBLE.infoID else { return }
     let value: Any
     if let error = error {
-      value = self.error(error.localizedDescription)
+      value = failure(error, "Couldn't read its name")
     } else {
       value = FlutterStandardTypedData(bytes: data)
     }
@@ -508,7 +541,7 @@ final class SidekickBLE: NSObject, FlutterStreamHandler, CBCentralManagerDelegat
     let result = waiting.removeFirst()
     writeResults[id] = waiting
     if let error = error {
-      result(self.error(error.localizedDescription))
+      result(failure(error, "Couldn't send"))
     } else {
       result(nil)
     }

@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:flutter/services.dart' show PlatformException;
 
 import 'ble_backend.dart';
 import 'ble_protocol.dart';
@@ -24,6 +27,10 @@ enum BluetoothStatus { starting, on, off, unauthorized, unsupported }
 class BleCandidate {
   BleCandidate(this.bleId);
   final String bleId;
+
+  /// It really advertises Sidekick (not just a bit in Apple's shared
+  /// background bitmask that other devices can match too).
+  bool strong = false;
   int rssi = 0;
   DateTime seen = DateTime.now();
 
@@ -69,6 +76,17 @@ class BluetoothService {
   /// Can look for other devices.
   bool get canScan => _centralState == BleRadio.on;
 
+  /// This device's Bluetooth can't advertise at all (many PC adapters).
+  bool get cannotBeFound => _peripheralState == BleRadio.unsupported;
+
+  bool get canOpenBluetoothSettings => Platform.isMacOS || Platform.isWindows;
+
+  Future<void> openBluetoothSettings() async {
+    try {
+      await _ble.openBluetoothSettings();
+    } catch (_) {}
+  }
+
   /// Overall state for Settings: on if this device can find or be found.
   BluetoothStatus get status {
     final states = [_centralState, _peripheralState];
@@ -95,10 +113,23 @@ class BluetoothService {
   /// Called when [log], [advertising] or [scanning] change.
   void Function()? onChanged;
 
+  String? _lastMessage;
+  int _repeats = 0;
+
   void _log(String message) {
     final t = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
-    log.add('${two(t.hour)}:${two(t.minute)}:${two(t.second)}  $message');
+    final time = '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
+    // The same thing again (a failing scan every second): one line, counted.
+    if (message == _lastMessage && log.isNotEmpty) {
+      _repeats++;
+      log.last = '$time  $message (×${_repeats + 1})';
+      onChanged?.call();
+      return;
+    }
+    _lastMessage = message;
+    _repeats = 0;
+    log.add('$time  $message');
     if (log.length > 60) log.removeRange(0, log.length - 60);
     onChanged?.call();
   }
@@ -179,6 +210,7 @@ class BluetoothService {
     } catch (e) {
       // Some adapters can't act as a peripheral; we can still scan.
       _lastAdvertiseFailure = DateTime.now();
+      _noteProblem(e);
       _log("Can't advertise, so other devices won't find this one (it can still find them): ${_describe(e)}");
     } finally {
       _advertiseRunning = false;
@@ -212,8 +244,32 @@ class BluetoothService {
   static String _describe(Object e) => switch (e) {
     TimeoutException() => 'it took too long to answer',
     StateError(:final message) => message,
-    _ => '$e'.replaceFirst(RegExp(r'^PlatformException\(\w+, '), '').replaceFirst(RegExp(r', null, null\)$'), ''),
+    PlatformException(code: 'stalePairing') => stalePairingHelp,
+    PlatformException(:final message?) when _windowsServiceOff(message) => windowsServiceHelp,
+    PlatformException(:final message?) => message,
+    _ => '$e',
   };
+
+  static const stalePairingHelp =
+      'This device remembers an old Bluetooth pairing with that one, which the other side forgot. In Bluetooth '
+      'settings on this device, remove (forget) the other device, then tap Retry.';
+
+  static const windowsServiceHelp =
+      "Windows' Bluetooth LE service isn't running. Check: Settings → Bluetooth & devices → Bluetooth is on; "
+      "Device Manager → Bluetooth → \"Microsoft Bluetooth LE Enumerator\" is enabled; Services → \"Bluetooth "
+      "Support Service\" is running. Then restart Sidekick. (Very old adapters, before Bluetooth 4.0, have no LE.)";
+
+  /// 0x80070422: the service is disabled or has no enabled devices.
+  static bool _windowsServiceOff(String message) =>
+      message.contains('service cannot be started') || message.toLowerCase().contains('80070422');
+
+  /// Something about this device that stops Bluetooth working, for the
+  /// pairing screen (null when fine).
+  String? problem;
+
+  void _noteProblem(Object e) {
+    if (e is PlatformException && _windowsServiceOff(e.message ?? '')) problem = windowsServiceHelp;
+  }
 
   // ------------------------------------------------------------ peripheral role
 
@@ -247,7 +303,7 @@ class BluetoothService {
     }
     if (_scanning) return;
     _scanning = true;
-    _seenThisScan = 0;
+    _seenSidekick.clear();
     _seenAny.clear();
     // Every other scan listens to *all* devices and picks out Sidekick
     // ones itself (by service id or name): it works even where filtered
@@ -257,14 +313,19 @@ class BluetoothService {
     onChanged?.call();
     try {
       await _ble.startScan(filtered: !_unfiltered);
+      problem = null;
       await Future<void>.delayed(duration);
+      final strong = _seenSidekick.where((k) => candidates[k]?.strong ?? false).length;
+      final maybe = _seenSidekick.length - strong;
+      final summary = '$strong advertising Sidekick${maybe > 0 ? ', $maybe more that might be' : ''}';
       if (_unfiltered) {
         lastDevicesAround = _seenAny.length;
-        _log('Listened to everything: ${_seenAny.length} Bluetooth device(s) around, $_seenThisScan from Sidekick');
+        _log('Listened to everything: ${_seenAny.length} Bluetooth device(s) around, $summary');
       } else {
-        _log('Looked for Sidekick: $_seenThisScan found');
+        _log('Looked for Sidekick: $summary');
       }
     } catch (e) {
+      _noteProblem(e);
       _log('Scan failed: ${_describe(e)}');
     } finally {
       try {
@@ -276,7 +337,7 @@ class BluetoothService {
     }
   }
 
-  int _seenThisScan = 0;
+  final Set<String> _seenSidekick = {};
   bool _unfiltered = false;
   final Set<String> _seenAny = {};
 
@@ -305,6 +366,8 @@ class BluetoothService {
       } else {
         await refresh();
       }
+      // Broken until the user fixes something; don't retry every second.
+      if (problem != null) await Future<void>.delayed(const Duration(seconds: 5));
       // Never spin: scan() returns at once when another scan is already
       // running (or fails right away), and a loop of instantly completed
       // awaits starves the UI, freezing the app.
@@ -328,27 +391,80 @@ class BluetoothService {
     if (c == null || c.identifying) return;
     c.error = null;
     _identified.remove(key);
-    if (_identifying.add(key)) unawaited(_identify(key).whenComplete(() => _identifying.remove(key)));
+    _enqueue(key);
+  }
+
+  /// What the pairing screen lists: devices that said who they are (each
+  /// once, the latest sighting), and ones that really advertise Sidekick
+  /// while their name is read or if that failed. Devices that only matched
+  /// Apple's shared bitmask stay hidden unless they turn out to be Sidekick.
+  List<BleCandidate> get visibleCandidates {
+    final byDevice = <String, BleCandidate>{};
+    final rest = <BleCandidate>[];
+    for (final c in candidates.values) {
+      final info = c.info;
+      if (info != null) {
+        if (info.id == self().id) continue;
+        final other = byDevice[info.id];
+        if (other == null || c.seen.isAfter(other.seen)) byDevice[info.id] = c;
+      } else if (c.strong) {
+        rest.add(c);
+      }
+    }
+    return [...byDevice.values, ...rest]..sort((a, b) => b.rssi.compareTo(a.rssi));
   }
 
   void _onDiscovered(BleDiscovery d) {
     final key = d.id;
     _seenAny.add(key);
     if (!d.sidekick) return;
-    _seenThisScan++;
+    _seenSidekick.add(key);
     final candidate = candidates.putIfAbsent(key, () => BleCandidate(key))
       ..rssi = d.rssi
       ..seen = DateTime.now();
+    if (d.strong) candidate.strong = true;
     onChanged?.call();
     // A failed device isn't retried on every advertisement; Retry does it.
     if (candidate.error != null && _identified[key] == null) return;
-    if (_everSeen.add(key)) _log('In range: a Sidekick device (signal ${d.rssi} dBm), asking its name…');
+    if (_everSeen.add(key) && d.strong) {
+      _log('In range: a Sidekick device (signal ${d.rssi} dBm), asking its name…');
+    }
     final known = _identified[key];
     if (known != null) {
       if (known.id != self().id) _found.add(BleSighting(known, key));
       return;
     }
-    if (_identifying.add(key)) unawaited(_identify(key).whenComplete(() => _identifying.remove(key)));
+    _enqueue(key);
+  }
+
+  final List<String> _queue = [];
+
+  /// Reads names two at a time, real Sidekick advertisers and the closest
+  /// first: a crowd of connection attempts to look-alikes would otherwise
+  /// hold up the one device that matters.
+  void _enqueue(String key) {
+    if (_identifying.contains(key) || _queue.contains(key)) return;
+    _queue.add(key);
+    _pump();
+  }
+
+  void _pump() {
+    while (_identifying.length < 2 && _queue.isNotEmpty) {
+      int rank(String k) {
+        final c = candidates[k];
+        return (c?.strong ?? false ? 1000 : 0) + (c?.rssi ?? -127);
+      }
+
+      _queue.sort((a, b) => rank(b).compareTo(rank(a)));
+      final key = _queue.removeAt(0);
+      _identifying.add(key);
+      unawaited(
+        _identify(key).whenComplete(() {
+          _identifying.remove(key);
+          _pump();
+        }),
+      );
+    }
   }
 
   /// Connects briefly to read who a newly seen device is. Only the minimum
@@ -371,8 +487,13 @@ class BluetoothService {
     } catch (e) {
       // A connection that never happens would otherwise stay pending.
       if (e is TimeoutException && !_links.containsKey(key)) unawaited(_ble.close(key).catchError((_) {}));
-      _log('A Sidekick device is in range but reading its name failed: ${_describe(e)}');
-      candidate?.error = e is FormatException ? 'It runs an older Sidekick' : _describe(e);
+      final reason = e is FormatException ? 'It runs an older Sidekick' : _describe(e);
+      if (candidate?.strong ?? false) {
+        _log('A Sidekick device is in range but reading its name failed: $reason');
+      } else {
+        _log('A device that looked like Sidekick isn\'t (${key.substring(0, key.length.clamp(0, 4))}): $reason');
+      }
+      candidate?.error = reason;
     } finally {
       candidate?.identifying = false;
       onChanged?.call();

@@ -59,9 +59,7 @@ class _BluetoothPairingState extends State<_BluetoothPairing> {
       listenable: state,
       builder: (context, _) {
         final bt = state.bluetooth;
-        final candidates = bt == null
-            ? <MapEntry<String, BleCandidate>>[]
-            : (bt.candidates.entries.toList()..sort((a, b) => b.value.rssi.compareTo(a.value.rssi)));
+        final candidates = bt?.visibleCandidates ?? const <BleCandidate>[];
         return Padding(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
           child: Column(
@@ -118,7 +116,7 @@ class _BluetoothPairingState extends State<_BluetoothPairing> {
                       )
                     : ListView(
                         children: [
-                          for (final MapEntry(:key, value: c) in candidates) _row(context, key, c),
+                          for (final c in candidates) _row(context, c.bleId, c),
                           if (bt?.searching ?? false)
                             const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
                         ],
@@ -154,13 +152,25 @@ class _BluetoothPairingState extends State<_BluetoothPairing> {
               : c.error != null
               ? '${c.error}$signal'
               : 'Reading its name…$signal',
-          maxLines: 2,
+          maxLines: c.error != null && info == null ? 5 : 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(color: c.error != null && info == null ? scheme.error : null),
         ),
+        isThreeLine: info == null && c.error != null && c.error!.length > 60,
         trailing: info == null
             ? (c.error != null
-                  ? TextButton(onPressed: () => state.bluetooth?.retry(key), child: const Text('Retry'))
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton(onPressed: () => state.bluetooth?.retry(key), child: const Text('Retry')),
+                        if (c.error == BluetoothService.stalePairingHelp &&
+                            (state.bluetooth?.canOpenBluetoothSettings ?? false))
+                          TextButton(
+                            onPressed: () => state.bluetooth?.openBluetoothSettings(),
+                            child: const Text('Settings'),
+                          ),
+                      ],
+                    )
                   : null)
             : paired != null && state.needsRepair(paired) == null
             ? const Chip(avatar: Icon(Icons.check, size: 16), label: Text('Paired'))
@@ -190,7 +200,15 @@ class _Status extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final bt = state.bluetooth;
+    final problem = bt?.problem;
     final (icon, message, action) = switch (bt?.status) {
+      _ when problem != null => (
+        Icons.bluetooth_disabled,
+        problem,
+        bt!.canOpenBluetoothSettings
+            ? TextButton(onPressed: bt.openBluetoothSettings, child: const Text('Settings'))
+            : null,
+      ),
       null || BluetoothStatus.unsupported => (Icons.bluetooth_disabled, 'This device has no Bluetooth LE.', null),
       BluetoothStatus.off => (Icons.bluetooth_disabled, 'Bluetooth is off. Turn it on to pair.', null),
       BluetoothStatus.unauthorized => (
@@ -203,6 +221,9 @@ class _Status extends StatelessWidget {
         Icons.bluetooth_connected,
         bt!.advertising
             ? 'Other devices can find this one as "${state.name}".'
+            : bt.cannotBeFound
+            ? "This device's Bluetooth can't be found by others (its adapter can't advertise), but it can find "
+                  'them: search from here, with Sidekick open on the other device.'
             : 'This device can search, but can\'t be found. Search from here.',
         null,
       ),

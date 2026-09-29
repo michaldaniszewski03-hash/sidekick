@@ -11,12 +11,18 @@ enum BleRadio { unknown, on, off, unauthorized, unsupported }
 
 /// A device heard while scanning.
 class BleDiscovery {
-  const BleDiscovery({required this.id, required this.rssi, required this.sidekick, this.name});
+  const BleDiscovery({required this.id, required this.rssi, required this.sidekick, bool? strong, this.name})
+    : strong = strong ?? sidekick;
   final String id;
   final int rssi;
 
-  /// Advertises the Sidekick service (or name), so it's worth asking who it is.
+  /// Might be Sidekick, so it's worth asking who it is.
   final bool sidekick;
+
+  /// Really advertises the Sidekick service or name. On Apple devices a
+  /// background app's services only show in a shared bitmask that other
+  /// devices can match by accident; those are [sidekick] but not [strong].
+  final bool strong;
   final String? name;
 }
 
@@ -82,6 +88,10 @@ abstract class BleBackend {
   Future<void> notify(String central, Uint8List chunk);
   Future<int> maxNotify(String central);
   Future<void> requestPermission();
+
+  /// The system's Bluetooth settings (Mac and Windows; phones can't be
+  /// sent there directly).
+  Future<void> openBluetoothSettings();
   Future<void> stop();
 }
 
@@ -138,6 +148,7 @@ class AppleBleBackend implements BleBackend {
             id: e['id'] as String,
             rssi: (e['rssi'] as num?)?.toInt() ?? 0,
             sidekick: e['sidekick'] == true,
+            strong: e['strong'] as bool?,
             name: name == null || name.isEmpty ? null : name,
           ),
         );
@@ -231,6 +242,9 @@ class AppleBleBackend implements BleBackend {
 
   @override
   Future<void> requestPermission() => _methods.invokeMethod<void>('openSettings');
+
+  @override
+  Future<void> openBluetoothSettings() => _methods.invokeMethod<void>('openBluetoothSettings');
 
   @override
   Future<void> stop() async {
@@ -557,6 +571,11 @@ class PluginBleBackend implements BleBackend {
         await _centralManager.showAppSettings();
       } catch (_) {}
     } catch (_) {}
+  }
+
+  @override
+  Future<void> openBluetoothSettings() async {
+    if (Platform.isWindows) await Process.start('explorer.exe', ['ms-settings:bluetooth']);
   }
 
   @override

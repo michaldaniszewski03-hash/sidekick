@@ -105,6 +105,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           leading: const Icon(Icons.bluetooth),
                           title: const Text('Connect without Wi-Fi'),
                           subtitle: Text(switch (bt.status) {
+                            _ when bt.problem != null => bt.problem!,
                             BluetoothStatus.on =>
                               "On. When your devices aren't on the same Wi-Fi, Sidekick connects over Bluetooth "
                                   'for pairing, files and media.',
@@ -115,6 +116,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           }),
                           isThreeLine: true,
                           trailing: switch (bt.status) {
+                            _ when bt.problem != null => const Icon(Icons.error_outline, color: Colors.orange),
                             BluetoothStatus.on => const Icon(Icons.check_circle, color: Colors.green),
                             BluetoothStatus.unauthorized => FilledButton.tonal(
                               onPressed: bt.requestPermission,
