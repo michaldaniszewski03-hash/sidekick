@@ -101,34 +101,38 @@ void main() {
     expect(await store.read('paired'), '[]');
   });
 
-  test('Mac: moves keys from the keychain into a private file once, then never asks again', () async {
-    SharedPreferences.setMockInitialValues({});
+  test('Mac: keys live in a private file and the keychain is never touched', () async {
+    SharedPreferences.setMockInitialValues({'identity': 'from-0.4'});
     final prefs = await SharedPreferences.getInstance();
     final dir = await Directory.systemTemp.createTemp('sidekick_secrets');
     addTearDown(() => dir.delete(recursive: true));
     final file = File('${dir.path}/secrets.json');
-    final keychain = CountingStorage({'sidekick.identity': 'key-from-1.0', 'sidekick.paired': '[]'});
+    // 1.0 left keys in the keychain; reading them would prompt for a password.
+    final keychain = CountingStorage({'sidekick.identity': 'key-from-1.0'});
 
-    // First start after updating from 1.0.
     final first = SecretStore(prefs, storage: keychain, file: file);
-    expect(await first.read('identity'), 'key-from-1.0');
-    expect(await first.read('paired'), '[]');
+    // Old app-settings secrets still move over (no prompt involved).
+    expect(
+      await first.read(
+        'identity',
+        legacy: () => prefs.getString('identity'),
+        removeLegacy: () => prefs.remove('identity'),
+      ),
+      'from-0.4',
+    );
     expect(await first.read('trusted'), isNull);
-    await first.finishedMoving();
-    expect(keychain.reads, 3);
-    expect(await file.exists(), isTrue);
+    await first.write('trusted', '["x"]');
+    await first.flush();
+    expect(prefs.containsKey('identity'), isFalse);
     // Unix permissions (the file store is for Macs; Windows has no chmod).
     if (!Platform.isWindows) {
       expect((await file.stat()).modeString(), 'rw-------', reason: 'only this user may read it');
     }
 
-    // Every later start: straight from the file, keychain untouched.
     final later = SecretStore(prefs, storage: keychain, file: file);
-    expect(await later.read('identity'), 'key-from-1.0');
-    expect(await later.read('trusted'), isNull);
-    await later.write('trusted', '["x"]');
-    await later.flush();
-    expect(await SecretStore(prefs, storage: keychain, file: file).read('trusted'), '["x"]');
-    expect(keychain.reads, 3);
+    expect(await later.read('identity'), 'from-0.4');
+    expect(await later.read('trusted'), '["x"]');
+    expect(await later.read('paired'), isNull);
+    expect(keychain.reads, 0, reason: 'never a keychain prompt');
   });
 }

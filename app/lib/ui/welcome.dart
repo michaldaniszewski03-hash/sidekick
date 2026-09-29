@@ -246,7 +246,7 @@ class _WelcomeFlowState extends State<WelcomeFlow> {
         _Feature(
           Icons.looks_two_outlined,
           'Tap Pair next to the other device',
-          'It shows up under Nearby on the Devices tab.',
+          'It shows up under Nearby on the Devices tab. No Wi-Fi? Tap Bluetooth there.',
         ),
         _Feature(
           Icons.looks_3_outlined,

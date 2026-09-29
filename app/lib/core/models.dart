@@ -48,7 +48,13 @@ class DeviceInfo {
     this.capabilities = const Capabilities(),
     this.address,
     this.version = protocolVersion,
+    this.fingerprint,
   });
+
+  /// SHA-256 of the device's certificate, as it announces it. Only a hint
+  /// for the UI ("this device was reset, pair again"): trust comes from the
+  /// certificate checked on every connection, never from this field.
+  final String? fingerprint;
 
   /// Protocol version the device speaks (see [protocolVersion]).
   final int version;
@@ -75,6 +81,7 @@ class DeviceInfo {
     capabilities: capabilities ?? this.capabilities,
     address: address ?? this.address,
     version: version,
+    fingerprint: fingerprint,
   );
 
   Map<String, dynamic> toJson() => {
@@ -84,6 +91,7 @@ class DeviceInfo {
     'platform': platform.name,
     'port': port,
     'caps': capabilities.toJson(),
+    'fp': ?fingerprint,
   };
 
   factory DeviceInfo.fromJson(Map<String, dynamic> json, {String? address}) => DeviceInfo(
@@ -94,6 +102,7 @@ class DeviceInfo {
     capabilities: Capabilities.fromJson(json['caps'] as Map<String, dynamic>?),
     address: address,
     version: (json['v'] as num?)?.toInt() ?? 1,
+    fingerprint: json['fp'] as String?,
   );
 }
 

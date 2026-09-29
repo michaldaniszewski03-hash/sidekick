@@ -12,8 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///   app isn't signed with a paid Apple account, so the Keychain would ask
 ///   for your password again and again; [file] avoids that.
 ///
-/// Secrets saved by older versions (app settings, or the Mac keychain in
-/// 1.0) are moved over once. If secure storage doesn't work on this device,
+/// Secrets saved by older versions in app settings are moved over once. If secure storage doesn't work on this device,
 /// secrets stay in app settings so Sidekick keeps working, and [secure]
 /// says so (Settings shows it).
 class SecretStore {
@@ -22,7 +21,7 @@ class SecretStore {
           storage ??
           const FlutterSecureStorage(
             iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
-            // Only read once on a Mac, to move keys from 1.0 into [file].
+            // Unused on a Mac (see [file]).
             mOptions: MacOsOptions(
               usesDataProtectionKeychain: false,
               accessibility: KeychainAccessibility.first_unlock_this_device,
@@ -42,10 +41,6 @@ class SecretStore {
 
   static String _key(String name) => 'sidekick.$name';
   static String _fallbackKey(String name) => 'secret.$name';
-
-  /// Marks a secrets file whose keychain copies were already moved over,
-  /// so the keychain is never touched again.
-  static const _movedFromKeychain = '_movedFromKeychain';
 
   /// Reads a secret. [legacy] reads where older versions kept it; a value
   /// found there is moved into secure storage.
@@ -102,15 +97,10 @@ class SecretStore {
     final secrets = await _loadFile();
     final value = secrets[name];
     if (value != null) return value;
-    String? old;
-    // Only on the first start after updating from 1.0: macOS may ask once
-    // for each item. Never again afterwards.
-    if (secrets[_movedFromKeychain] == null) {
-      try {
-        old = await _storage.read(key: _key(name));
-      } catch (_) {}
-    }
-    old ??= _prefs.getString(_fallbackKey(name)) ?? legacy?.call();
+    // Never read the Mac keychain, not even to move keys from 1.0: every
+    // read shows a password prompt for this unsigned app. Keys from 1.0
+    // stay unused; the Mac makes a new identity and pairs again once.
+    final old = _prefs.getString(_fallbackKey(name)) ?? legacy?.call();
     if (old != null) {
       await write(name, old);
       await _writes;
@@ -120,16 +110,8 @@ class SecretStore {
     return old;
   }
 
-  /// Call once all secrets were read at startup: from then on the keychain
-  /// is never asked again.
-  Future<void> finishedMoving() async {
-    if (file == null) return;
-    final secrets = await _loadFile();
-    if (secrets[_movedFromKeychain] != null) return;
-    secrets[_movedFromKeychain] = '1';
-    _writes = _writes.then((_) => _saveFile());
-    await _writes;
-  }
+  /// Kept for callers; the Mac file store never reads the keychain.
+  Future<void> finishedMoving() async {}
 
   Future<Map<String, String>> _loadFile() async {
     final cached = _fileSecrets;

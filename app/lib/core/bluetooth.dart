@@ -18,6 +18,22 @@ class BleSighting {
 
 enum BluetoothStatus { starting, on, off, unauthorized, unsupported }
 
+/// A Sidekick device heard over Bluetooth, identified or not, for the
+/// Bluetooth pairing screen.
+class BleCandidate {
+  BleCandidate(this.peripheral);
+  Peripheral peripheral;
+  int rssi = 0;
+  DateTime seen = DateTime.now();
+
+  /// Who it is, once its name was read.
+  DeviceInfo? info;
+
+  /// Why reading its name failed, if it did.
+  String? error;
+  bool identifying = false;
+}
+
 /// Sidekick over Bluetooth LE, used when devices don't share a Wi-Fi network.
 ///
 /// *Peripheral role:* advertises the Sidekick service and answers requests
@@ -297,9 +313,52 @@ class BluetoothService {
 
   final Set<String> _everSeen = {};
 
+  /// Every Sidekick device heard, by Bluetooth id.
+  final Map<String, BleCandidate> candidates = {};
+
+  bool _searching = false;
+  bool get searching => _searching;
+
+  /// Keeps scanning until [stopSearch] (the Bluetooth pairing screen is
+  /// open), instead of the short periodic scans.
+  Future<void> startSearch() async {
+    if (_searching) return;
+    _searching = true;
+    onChanged?.call();
+    while (_searching) {
+      if (canScan) {
+        await scan(duration: const Duration(seconds: 10));
+      } else {
+        await refresh();
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
+  }
+
+  void stopSearch() {
+    _searching = false;
+    onChanged?.call();
+  }
+
+  /// Tries reading a device's name again after it failed.
+  void retry(String key) {
+    final c = candidates[key];
+    if (c == null || c.identifying) return;
+    c.error = null;
+    _identified.remove(key);
+    if (_identifying.add(key)) unawaited(_identify(c.peripheral).whenComplete(() => _identifying.remove(key)));
+  }
+
   void _onDiscovered(DiscoveredEventArgs e) {
     final key = '${e.peripheral.uuid}';
     _seenThisScan++;
+    final candidate = candidates.putIfAbsent(key, () => BleCandidate(e.peripheral))
+      ..peripheral = e.peripheral
+      ..rssi = e.rssi
+      ..seen = DateTime.now();
+    onChanged?.call();
+    // A failed device isn't retried on every advertisement; Retry does it.
+    if (candidate.error != null && _identified[key] == null) return;
     if (_everSeen.add(key)) _log('In range: a Sidekick device (signal ${e.rssi} dBm), asking its name…');
     final known = _identified[key];
     if (known != null) {
@@ -316,6 +375,10 @@ class BluetoothService {
     final key = '${peripheral.uuid}';
     // An open request link already knows the way.
     final open = _links[key];
+    final candidate = candidates[key]
+      ?..identifying = true
+      ..error = null;
+    onChanged?.call();
     try {
       final Uint8List raw;
       if (open != null) {
@@ -331,6 +394,7 @@ class BluetoothService {
       }
       final info = DeviceInfo.fromJson(jsonDecode(utf8.decode(raw)) as Map<String, dynamic>);
       _identified[key] = info;
+      candidate?.info = info;
       if (info.id != self().id) {
         _log('Found ${info.name} (${info.platform.name})');
         _found.add(BleSighting(info, peripheral));
@@ -338,7 +402,10 @@ class BluetoothService {
     } catch (e) {
       // Not reachable right now; we'll try again when it shows up again.
       _log("A Sidekick device is in range but reading its name failed: $e");
+      candidate?.error = e is TimeoutException ? 'It took too long to answer' : '$e';
     } finally {
+      candidate?.identifying = false;
+      onChanged?.call();
       // Don't hold the connection just for a name; phones allow only a few.
       if (open == null) {
         try {

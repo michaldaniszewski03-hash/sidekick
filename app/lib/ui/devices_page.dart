@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
+import 'bluetooth_pairing.dart';
 import 'widgets.dart';
 
 class DevicesPage extends StatelessWidget {
@@ -33,6 +34,12 @@ class DevicesPage extends StatelessWidget {
                   : const Icon(Icons.radar),
               label: const Text('Search'),
             ),
+            if (state.bluetooth != null)
+              TextButton.icon(
+                onPressed: () => showBluetoothPairing(context, state),
+                icon: const Icon(Icons.bluetooth_searching),
+                label: const Text('Bluetooth'),
+              ),
             TextButton.icon(
               onPressed: () => _addByIp(context),
               icon: const Icon(Icons.add_link),
@@ -321,6 +328,7 @@ class _PairedCardState extends State<_PairedCard> {
     final scheme = Theme.of(context).colorScheme;
     final online = state.isOnline(device.id);
     final caps = state.capabilitiesOf(device.id);
+    final reset = state.needsRepair(device) != null;
 
     return MaybeDropTarget(
       onHover: (hovering) => setState(() => _dragging = hovering),
@@ -359,6 +367,8 @@ class _PairedCardState extends State<_PairedCard> {
                           Text(
                             _dragging
                                 ? 'Drop to send'
+                                : reset
+                                ? 'Was reset: pair again to reconnect'
                                 : state.connectingDirect.contains(device.id)
                                 ? 'Setting up direct Wi-Fi…'
                                 : state.viaBluetooth(device.id)
@@ -378,35 +388,42 @@ class _PairedCardState extends State<_PairedCard> {
               ],
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: online ? _pickAndSend : null,
-                  icon: const Icon(Icons.send_outlined, size: 18),
-                  label: const Text('Send'),
-                ),
-                if (caps?.files ?? true)
-                  OutlinedButton.icon(
-                    onPressed: () => _open(1),
-                    icon: const Icon(Icons.folder_open_outlined, size: 18),
-                    label: const Text('Files'),
+            if (reset)
+              FilledButton.icon(
+                onPressed: () => pairWith(context, state, state.forgetForRepair(device)),
+                icon: const Icon(Icons.link, size: 18),
+                label: const Text('Pair again'),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: online ? _pickAndSend : null,
+                    icon: const Icon(Icons.send_outlined, size: 18),
+                    label: const Text('Send'),
                   ),
-                if (caps?.input ?? true)
-                  OutlinedButton.icon(
-                    onPressed: () => _open(2),
-                    icon: const Icon(Icons.mouse_outlined, size: 18),
-                    label: const Text('Remote'),
-                  ),
-                if (caps?.media ?? true)
-                  OutlinedButton.icon(
-                    onPressed: () => _open(3),
-                    icon: const Icon(Icons.play_circle_outline, size: 18),
-                    label: const Text('Media'),
-                  ),
-              ],
-            ),
+                  if (caps?.files ?? true)
+                    OutlinedButton.icon(
+                      onPressed: () => _open(1),
+                      icon: const Icon(Icons.folder_open_outlined, size: 18),
+                      label: const Text('Files'),
+                    ),
+                  if (caps?.input ?? true)
+                    OutlinedButton.icon(
+                      onPressed: () => _open(2),
+                      icon: const Icon(Icons.mouse_outlined, size: 18),
+                      label: const Text('Remote'),
+                    ),
+                  if (caps?.media ?? true)
+                    OutlinedButton.icon(
+                      onPressed: () => _open(3),
+                      icon: const Icon(Icons.play_circle_outline, size: 18),
+                      label: const Text('Media'),
+                    ),
+                ],
+              ),
           ],
         ),
       ),
@@ -452,6 +469,14 @@ class _Searching extends StatelessWidget {
                             '${Platform.isWindows ? ' If Windows asks, allow Sidekick on private networks.' : ''}',
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
+                if (bt != null) ...[
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: () => showBluetoothPairing(context, state),
+                    icon: const Icon(Icons.bluetooth_searching),
+                    label: const Text('Pair over Bluetooth'),
+                  ),
+                ],
               ],
             ),
           ),

@@ -278,6 +278,7 @@ class AppState extends ChangeNotifier {
     name: name,
     platform: currentPlatform,
     port: server.port == 0 ? sidekickPort : server.port,
+    fingerprint: identity.fingerprint,
     capabilities: Capabilities(
       files: permissions.files && (!Platform.isAndroid || AndroidBridge.permissions.allFiles),
       media: permissions.media && media.supported,
@@ -504,6 +505,25 @@ class AppState extends ChangeNotifier {
   }
 
   PairedDevice? pairedById(String? id) => id == null ? null : _paired[id];
+
+  /// [d] now presents a different certificate than it paired with (it was
+  /// reset or reinstalled), so it has to be paired again.
+  DeviceInfo? needsRepair(PairedDevice d) {
+    final seen = _nearby[d.id]?.info ?? _bleSeen[d.id]?.info;
+    final fp = seen?.fingerprint;
+    return fp != null && fp != d.fingerprint ? seen : null;
+  }
+
+  /// Forgets [d] here (it no longer knows us anyway) so it can be paired
+  /// again; returns how to reach it.
+  DeviceInfo forgetForRepair(PairedDevice d) {
+    final seen = needsRepair(d)!;
+    _paired.remove(d.id);
+    trust.remove(d.id);
+    _savePaired();
+    notifyListeners();
+    return seen;
+  }
 
   /// The code to compare with the one [d] shows for us (Settings → Paired
   /// devices), proving the connection is between these two devices only.
