@@ -234,10 +234,26 @@ jobs:
           cp -R build/ios/iphoneos/Runner.app build/ipa/Payload/
           cd build/ipa && zip -qry "../dist/Sidekick-${{ steps.version.outputs.version }}.ipa" Payload
 
+      # An AltStore/SideStore source, so the iPhone app installs and updates
+      # with one tap. Its URL never changes:
+      # https://github.com/<repo>/releases/latest/download/altstore.json
+      - name: Write the AltStore source
+        run: |
+          python3 tool/altstore_source.py \
+            --app build/ios/iphoneos/Runner.app \
+            --ipa "build/dist/Sidekick-${{ steps.version.outputs.version }}.ipa" \
+            --tag "v${{ steps.version.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --out build/dist/altstore.json
+          cp ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png build/dist/sidekick-icon.png
+
       - uses: actions/upload-artifact@v4
         with:
           name: sidekick-ios
-          path: app/build/dist/*.ipa
+          path: |
+            app/build/dist/*.ipa
+            app/build/dist/altstore.json
+            app/build/dist/sidekick-icon.png
           if-no-files-found: error
 
   release:
@@ -268,6 +284,6 @@ jobs:
 
             **macOS 12+:** open the **Sidekick** `.dmg` and drag Sidekick into Applications. The first time, right-click Sidekick → **Open** → **Open** (it isn't notarized yet). On macOS 15 and newer: try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
-            **iPhone/iPad (iOS 15+):** the **Sidekick** `.ipa` is unsigned, so install it with [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io), which sign it with your Apple ID. On iPhone, Sidekick controls your computer and sends and receives files.
+            **iPhone/iPad (iOS 15+):** install [AltStore](https://altstore.io) or [SideStore](https://sidestore.io) once, then add this source in it: `https://github.com/${{ github.repository }}/releases/latest/download/altstore.json` and tap **Sidekick → Install**. New versions then show up as updates. (Or install the `.ipa` below with [Sideloadly](https://sideloadly.io).)
 
             Windows may show "Windows protected your PC" because the installer isn't code-signed yet. Click **More info → Run anyway**.
