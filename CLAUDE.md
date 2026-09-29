@@ -43,6 +43,9 @@ its biggest features and fixes, and bumps the website links (see
     the channels.
   - The Windows runner compiles C++ with `/W4 /WX`.
 - `app/macos/packaging/`: the .dmg background (1x and 2x).
+- Logos (`website/`): `2.png` is the wide wordmark (website, in-app logo);
+  `3.png` is the "sk" monogram (every app icon). `app/tool/make_icons.py`
+  regenerates all icons; re-run it after changing either.
 - `.github/workflows/build.yml`: CI and releases.
 
 ## Conventions
