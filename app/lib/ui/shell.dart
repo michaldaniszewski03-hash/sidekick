@@ -165,7 +165,7 @@ class _ShellState extends State<Shell> {
               // The wordmark is white-on-transparent; tint it to the theme.
               child: Image.asset(
                 'assets/logo/wordmark.png',
-                width: 64,
+                width: 76,
                 color: scheme.onSurface,
                 semanticLabel: 'Sidekick',
               ),

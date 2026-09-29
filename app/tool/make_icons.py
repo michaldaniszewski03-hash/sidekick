@@ -4,9 +4,9 @@
     python app/tool/make_icons.py        # from the repo root
 
 Sources:
-  website/1.png  the SIDEKICK wordmark (also used in the website header)
+  website/2.png  the SIDEKICK wordmark (also used in the website header)
   website/3.png  the "sk" monogram, used where the wordmark would be too
-                 small to read (48 px and below)
+                 small to read (64 px and below)
 
 Writes the Windows .ico, Android launcher icons, macOS and iOS app icon sets,
 and the in-app logo. Re-run it whenever the artwork changes.
@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "app"
 BG = (204, 197, 255)  # lavender background of the artwork
 INK = (42, 28, 86)  # dark purple lettering
-SMALL = 48  # at or below this many pixels, use the monogram
+SMALL = 64  # at or below this many pixels, use the monogram (the wide wordmark is unreadable there)
 
 
 def load_mask(path: Path) -> Image.Image:
@@ -37,7 +37,7 @@ def load_mask(path: Path) -> Image.Image:
     return Image.fromarray(alpha, "L").crop((xs.min(), ys.min(), xs.max() + 1, ys.max() + 1))
 
 
-WORDMARK = load_mask(ROOT / "website" / "1.png")
+WORDMARK = load_mask(ROOT / "website" / "2.png")
 MONOGRAM = load_mask(ROOT / "website" / "3.png")
 
 
