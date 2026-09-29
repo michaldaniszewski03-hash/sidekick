@@ -4,9 +4,6 @@ import 'package:material_ui/material_ui.dart';
 import 'app_state.dart';
 import 'ui/shell.dart';
 
-/// Used when the OS doesn't give us an accent color. Matches the website.
-const _fallbackSeed = Color(0xFF6750A4);
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final state = await AppState.load();
@@ -27,9 +24,31 @@ class SidekickApp extends StatelessWidget {
     snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
   );
 
-  static ColorScheme _scheme(ColorScheme? dynamic, Brightness brightness) {
-    if (dynamic != null) return dynamic;
-    return ColorScheme.fromSeed(seedColor: _fallbackSeed, brightness: brightness);
+  ColorScheme _scheme(ColorScheme? dynamic, Brightness brightness) {
+    final choice = state.themeColor;
+    ColorScheme scheme;
+    if (choice == 'system' && dynamic != null) {
+      scheme = dynamic;
+    } else {
+      // No OS colors (iOS, older Android): Sidekick purple, like the website.
+      final (_, seed) = themeColors[choice] ?? themeColors['purple']!;
+      scheme = ColorScheme.fromSeed(
+        seedColor: seed,
+        brightness: brightness,
+        dynamicSchemeVariant: choice == 'mono' ? DynamicSchemeVariant.monochrome : DynamicSchemeVariant.tonalSpot,
+      );
+    }
+    if (brightness == Brightness.dark && state.pureBlack) {
+      scheme = scheme.copyWith(
+        surface: Colors.black,
+        surfaceContainerLowest: Colors.black,
+        surfaceContainerLow: const Color(0xFF0B0B0B),
+        surfaceContainer: const Color(0xFF121212),
+        surfaceContainerHigh: const Color(0xFF1A1A1A),
+        surfaceContainerHighest: const Color(0xFF232323),
+      );
+    }
+    return scheme;
   }
 
   @override

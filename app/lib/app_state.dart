@@ -5,6 +5,7 @@ import 'dart:isolate';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,11 +18,24 @@ import 'core/models.dart';
 import 'core/server.dart';
 import 'core/trust.dart';
 import 'platform/android.dart';
+import 'platform/device_name.dart';
 import 'platform/files.dart';
 import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
 import 'platform/media.dart';
+
+/// The color themes in Settings → Theme: name and seed color.
+const themeColors = <String, (String, Color)>{
+  'purple': ('Sidekick purple', Color(0xFF6750A4)),
+  'blue': ('Ocean', Color(0xFF1B6EF3)),
+  'teal': ('Teal', Color(0xFF00897B)),
+  'green': ('Forest', Color(0xFF2E7D32)),
+  'orange': ('Sunset', Color(0xFFF57C00)),
+  'red': ('Cherry', Color(0xFFD32F2F)),
+  'pink': ('Blossom', Color(0xFFD81B60)),
+  'mono': ('Monochrome', Color(0xFF757575)),
+};
 
 enum TransferState { running, done, failed }
 
@@ -73,6 +87,16 @@ class AppState extends ChangeNotifier {
   late String id;
   late String name;
   ThemeMode themeMode = ThemeMode.system;
+
+  /// Color theme: a [themeColors] key, or 'system' to follow the OS accent
+  /// or wallpaper colors where there are any.
+  String themeColor = 'system';
+
+  /// True-black backgrounds in dark mode (saves battery on OLED screens).
+  bool pureBlack = false;
+
+  /// This build's version, e.g. "0.4.0" (shown in Settings → About).
+  String appVersion = '';
   Permissions permissions = const Permissions();
   String? _receiveDir;
 
@@ -133,6 +157,13 @@ class AppState extends ChangeNotifier {
   static Future<AppState> load() async {
     final state = AppState._(await SharedPreferences.getInstance());
     state._restore();
+    // Use the device's real name unless the user picked one (older versions
+    // saved made-up names like "My ios"; replace those too).
+    final saved = state._prefs.getString('name');
+    if (saved == null || isLegacyDefaultName(saved)) {
+      state.name = await detectDeviceName();
+      await state._prefs.setString('name', state.name);
+    }
     return state;
   }
 
@@ -143,6 +174,9 @@ class AppState extends ChangeNotifier {
     _prefs.setString('id', id);
     name = _prefs.getString('name') ?? _defaultName();
     themeMode = ThemeMode.values.byName(_prefs.getString('themeMode') ?? 'system');
+    themeColor = _prefs.getString('themeColor') ?? (Platform.isIOS ? 'purple' : 'system');
+    if (themeColor != 'system' && !themeColors.containsKey(themeColor)) themeColor = 'system';
+    pureBlack = _prefs.getBool('pureBlack') ?? false;
     permissions = Permissions(
       files: _prefs.getBool('allowFiles') ?? true,
       media: _prefs.getBool('allowMedia') ?? true,
@@ -197,6 +231,9 @@ class AppState extends ChangeNotifier {
   );
 
   Future<void> start() async {
+    try {
+      appVersion = (await PackageInfo.fromPlatform()).version;
+    } catch (_) {}
     if (Platform.isAndroid) {
       try {
         await AndroidBridge.acquireMulticastLock();
@@ -839,6 +876,18 @@ class AppState extends ChangeNotifier {
     name = trimmed.length > 40 ? trimmed.substring(0, 40) : trimmed;
     _prefs.setString('name', name);
     discovery.announce();
+    notifyListeners();
+  }
+
+  void setThemeColor(String color) {
+    themeColor = color;
+    _prefs.setString('themeColor', color);
+    notifyListeners();
+  }
+
+  void setPureBlack(bool value) {
+    pureBlack = value;
+    _prefs.setBool('pureBlack', value);
     notifyListeners();
   }
 

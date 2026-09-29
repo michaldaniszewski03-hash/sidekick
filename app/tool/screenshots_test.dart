@@ -149,8 +149,10 @@ void main() {
     await shot('1-devices');
     await tester.tap(find.text('Files').last);
     await shot('2-files');
-    await tester.tap(find.text('Home'));
-    await shot('2b-files-folder');
+    if (find.text('Home').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Home'));
+      await shot('2b-files-folder');
+    }
     await tester.tap(find.text('Remote').last);
     await shot('3-remote');
     await tester.tap(find.text('Media').last);
@@ -169,6 +171,22 @@ void main() {
       await tester.tap(find.text(tab).last);
       await shot('phone-$name');
     }
+
+    // iPhone Settings: iOS never allows remote control, so no such switch.
+    debugHostPlatform = DevicePlatform.ios;
+    await tester.tap(find.text('Settings').last);
+    await settle();
+    final list = find.byType(Scrollable).first;
+    await tester.dragUntilVisible(find.text('What paired devices can do here'), list, const Offset(0, -200));
+    await shot('iphone-settings-permissions');
+    expect(find.text('Control mouse and keyboard'), findsNothing);
+    await tester.dragUntilVisible(find.text('Pure black in dark mode'), list, const Offset(0, -200));
+    await shot('iphone-settings-theme');
+    state.setThemeColor('teal');
+    state.setThemeMode(ThemeMode.dark);
+    state.setPureBlack(true);
+    await shot('iphone-settings-theme-teal-dark');
+    debugHostPlatform = null;
 
     await tester.runAsync(() async {
       await phone.stop();

@@ -40,6 +40,16 @@ bool debugForceMobile = false;
 /// Running on a phone or tablet (touch-first, soft keyboard).
 bool get isMobile => debugForceMobile || Platform.isAndroid || Platform.isIOS;
 
+/// Lets the screenshot tool render the UI as another platform would.
+DevicePlatform? debugHostPlatform;
+
+bool get hostIsIOS => debugHostPlatform == null ? Platform.isIOS : debugHostPlatform == DevicePlatform.ios;
+bool get hostIsAndroid => debugHostPlatform == null ? Platform.isAndroid : debugHostPlatform == DevicePlatform.android;
+bool get hostIsMacOS => debugHostPlatform == null ? Platform.isMacOS : debugHostPlatform == DevicePlatform.macos;
+
+/// `Platform.operatingSystem`, or the overridden platform's name.
+String get hostOS => debugHostPlatform?.name ?? Platform.operatingSystem;
+
 /// Screens narrower than this get the compact phone layout.
 const compactWidth = 600.0;
 

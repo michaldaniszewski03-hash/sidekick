@@ -9,6 +9,7 @@ import 'package:sidekick/core/crypto.dart';
 import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
+import 'package:sidekick/platform/device_name.dart';
 import 'package:sidekick/platform/files.dart';
 import 'package:sidekick/platform/input.dart';
 import 'package:sidekick/platform/media.dart';
@@ -405,6 +406,22 @@ void main() {
       expect(virtualKeyFor('7'), 0x37);
       expect(virtualKeyFor('enter'), 0x0D);
       expect(virtualKeyFor('nope'), isNull);
+    });
+
+    test('device names', () {
+      // iOS 16+ only says "iPhone": use the model.
+      expect(iosName(name: 'iPhone', modelName: 'iPhone 12'), 'iPhone 12');
+      expect(iosName(name: "Michał's iPhone", modelName: 'iPhone 12'), "Michał's iPhone");
+      expect(iosName(name: 'iPhone', modelName: 'Unknown device'), 'Unknown iPhone');
+      expect(iosName(name: 'iPad', modelName: '', kind: 'iPad'), 'Unknown iPad');
+      expect(androidName(name: 'Galaxy S23', manufacturer: 'samsung', model: 'SM-S911B'), 'Galaxy S23');
+      expect(androidName(name: '', manufacturer: 'Google', model: 'Pixel 8'), 'Google Pixel 8');
+      expect(androidName(name: '', manufacturer: 'samsung', model: 'SM-S911B'), 'Samsung SM-S911B');
+      expect(androidName(name: '', manufacturer: 'OnePlus', model: 'OnePlus 12'), 'OnePlus 12');
+      expect(androidName(name: '', manufacturer: '', model: ''), 'Unknown Android');
+      expect(isLegacyDefaultName('My ios'), isTrue);
+      expect(isLegacyDefaultName('My android'), isTrue);
+      expect(isLegacyDefaultName('ambiaPC'), isFalse);
     });
 
     test('media status round-trips through JSON', () {

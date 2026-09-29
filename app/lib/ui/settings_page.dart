@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -83,11 +81,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ],
                   ),
-                  if (Platform.isAndroid) ...[
+                  if (hostIsAndroid) ...[
                     const SectionLabel('Android permissions'),
                     _Group(children: _androidPermissions()),
                   ],
-                  if (Platform.isMacOS) ...[
+                  if (hostIsMacOS) ...[
                     const SectionLabel('Mac permissions'),
                     _Group(
                       children: [
@@ -182,7 +180,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         secondary: const Icon(Icons.folder_open_outlined),
                         title: const Text('Browse and download files'),
                         subtitle: Text(
-                          Platform.isIOS
+                          hostIsIOS
                               ? "Paired devices can open Sidekick's folder in the Files app"
                               : 'Paired devices can open any folder on this device',
                         ),
@@ -194,7 +192,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           secondary: const Icon(Icons.play_circle_outline),
                           title: const Text('Control media'),
                           subtitle: Text(
-                            Platform.isIOS
+                            hostIsIOS
                                 ? 'Change the volume and control Apple Music (iOS doesn\'t let apps control others)'
                                 : 'Play, pause, seek and change volume',
                           ),
@@ -203,7 +201,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       // iOS never lets another device control an iPhone, so the
                       // switch only exists elsewhere.
-                      if (!Platform.isIOS) ...[
+                      if (!hostIsIOS) ...[
                         SwitchListTile(
                           secondary: const Icon(Icons.mouse_outlined),
                           title: const Text('Control mouse and keyboard'),
@@ -227,11 +225,11 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                     ],
                   ),
-                  const SectionLabel('Appearance'),
+                  const SectionLabel('Theme'),
                   _Group(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                         child: SegmentedButton<ThemeMode>(
                           segments: const [
                             ButtonSegment(
@@ -254,20 +252,58 @@ class _SettingsPageState extends State<SettingsPage> {
                           onSelectionChanged: (s) => state.setThemeMode(s.first),
                         ),
                       ),
-                      if (!Platform.isIOS)
-                        ListTile(
-                          leading: const Icon(Icons.palette_outlined),
-                          title: Text(switch (Platform.operatingSystem) {
-                            'android' => 'Colors follow your wallpaper (Android 12 and newer)',
-                            'macos' => "Colors follow your Mac's accent color",
-                            _ => 'Colors follow your Windows accent color',
-                          }),
-                          subtitle: switch (Platform.operatingSystem) {
-                            'macos' => const Text('System Settings → Appearance'),
-                            'windows' => const Text('Settings → Personalization → Colors'),
-                            _ => null,
-                          },
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Color', style: Theme.of(context).textTheme.titleSmall),
                         ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                        child: Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: [
+                            if (!hostIsIOS)
+                              _ColorChoice(
+                                label: switch (hostOS) {
+                                  'android' => 'Wallpaper',
+                                  _ => 'System accent',
+                                },
+                                selected: state.themeColor == 'system',
+                                onTap: () => state.setThemeColor('system'),
+                              ),
+                            for (final MapEntry(:key, value: (label, color)) in themeColors.entries)
+                              _ColorChoice(
+                                label: label,
+                                color: color,
+                                mono: key == 'mono',
+                                // iOS has no system colors; its default is purple.
+                                selected:
+                                    state.themeColor == key ||
+                                    (hostIsIOS && state.themeColor == 'system' && key == 'purple'),
+                                onTap: () => state.setThemeColor(key),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (state.themeColor == 'system' && !hostIsIOS)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: Text(switch (hostOS) {
+                            'android' => 'Follows your wallpaper colors (Android 12 and newer).',
+                            'macos' => "Follows your Mac's accent color (System Settings → Appearance).",
+                            _ => 'Follows your Windows accent color (Settings → Personalization → Colors).',
+                          }, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+                        ),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.contrast),
+                        title: const Text('Pure black in dark mode'),
+                        subtitle: const Text('Darker backgrounds; saves battery on OLED screens'),
+                        value: state.pureBlack,
+                        onChanged: state.setPureBlack,
+                      ),
                     ],
                   ),
                   const SectionLabel('About'),
@@ -275,7 +311,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       ListTile(
                         leading: const Icon(Icons.info_outline),
-                        title: const Text('Sidekick 0.1.0'),
+                        title: Text(state.appVersion.isEmpty ? 'Sidekick' : 'Sidekick ${state.appVersion}'),
                         subtitle: Text('Device ID ${state.id.substring(0, 8)} · port ${state.me.port}'),
                       ),
                     ],
@@ -362,4 +398,66 @@ String _ago(DateTime t) {
   if (d.inSeconds < 60) return '${d.inSeconds} s ago';
   if (d.inMinutes < 60) return '${d.inMinutes} min ago';
   return '${d.inHours} h ago';
+}
+
+/// A round color swatch with its name, for Settings → Theme.
+class _ColorChoice extends StatelessWidget {
+  const _ColorChoice({required this.label, required this.selected, required this.onTap, this.color, this.mono = false});
+
+  final String label;
+
+  /// Null for "follow the system".
+  final Color? color;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool mono;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final swatch = color == null
+        ? null
+        : ColorScheme.fromSeed(
+            seedColor: color!,
+            brightness: Theme.of(context).brightness,
+            dynamicSchemeVariant: mono ? DynamicSchemeVariant.monochrome : DynamicSchemeVariant.tonalSpot,
+          );
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: SizedBox(
+          width: 76,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: swatch == null
+                        ? SweepGradient(colors: [scheme.primary, scheme.tertiary, scheme.secondary, scheme.primary])
+                        : LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [swatch.primary, swatch.primary, swatch.primaryContainer, swatch.primaryContainer],
+                            stops: const [0, 0.62, 0.62, 1],
+                          ),
+                    border: Border.all(color: selected ? scheme.onSurface : Colors.transparent, width: 3),
+                  ),
+                  child: selected ? Icon(Icons.check, color: swatch?.onPrimary ?? scheme.onPrimary) : null,
+                ),
+                const SizedBox(height: 6),
+                Text(label, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
