@@ -116,6 +116,15 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.3.1
+- **The startup chime plays:** from `main()`, no longer tied to the
+  animation (which "Reduce motion" skips); on the Mac through NSSound
+  (`sidekick/macos` → `playSound`), `afplay` only as a fallback.
+  Settings → Startup sound has a Play button to hear it any time.
+- **Visible icon on the receive card:** the device icon was fixed white on
+  the theme's gradient, invisible in dark mode with the black-and-white
+  theme; it now uses the theme's matching color.
+
 ### 2.3.0
 - **New startup chime, on every device:** a soft lift, two mallet notes and
   a warm chord that blooms with the animation (stereo, ~2 s). Mac: afplay;
