@@ -128,6 +128,14 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.4.1
+- **The owner's own sounds:** app startup, a new file request, request
+  accepted and request declined (`tool/sounds/`, prepared into WAV by
+  `tool/prepare_sounds.py`: trimmed, soft fades, equal loudness). Accept and
+  decline play on both devices. Replaces the synthesized chimes.
+- **One Sound switch** in Settings for all of them: "Sound enabled" /
+  "Sound disabled".
+
 ### 2.4.0
 - **Playful request chime:** a bouncy "ba-da-ding" when the Accept/Decline
   card appears, on all four platforms (Settings → Request sound, with a
