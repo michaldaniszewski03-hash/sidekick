@@ -5,7 +5,8 @@ from another (touchpad, keyboard, shortcuts), and connect over Bluetooth
 when there's no shared Wi-Fi. Everything is encrypted.
 
 One Flutter app for **Windows, macOS, Android and iOS** (`app/`), plus a
-download page (`website/index.html`, not hosted anywhere yet).
+download page (`index.html` at the top of the repo, not hosted anywhere
+yet; its images live in `website/` and it links them as `/website/…`).
 
 **Every change must work on all four platforms.**
 
@@ -122,7 +123,7 @@ its biggest features and fixes, and bumps the website links (see
    It builds everything and publishes the release: `SidekickSetup-X.Y.Z.exe`,
    `Sidekick-X.Y.Z.dmg`, `Sidekick-X.Y.Z.apk`, `Sidekick-X.Y.Z.ipa`,
    `altstore.json`.
-3. Update `website/index.html` (every `X.Y.Z` link, `version:` and "Version
+3. Update `index.html` (every `X.Y.Z` link, `version:` and "Version
    X.Y.Z").
 4. Add the version to [Versions](#versions) below.
 
