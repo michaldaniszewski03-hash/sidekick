@@ -118,8 +118,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       ListTile(
                         leading: const IconTile(Icons.notifications_active_outlined),
-                        title: const Text('Request sound'),
-                        subtitle: const Text('A playful chime when a device wants to send you files'),
+                        title: const Text('Transfer sounds'),
+                        subtitle: const Text(
+                          'When a device asks to send you files, and when a request is accepted or declined',
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

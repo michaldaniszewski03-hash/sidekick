@@ -43,9 +43,15 @@ its biggest features and fixes, and bumps the website links (see
   secret storage, hotspot, and the startup chime in `sound.dart`: afplay on
   Mac, PlaySound on Windows, `playSound` on the `sidekick/ios` and
   `sidekick/android` channels; the Mac uses NSSound on `sidekick/macos`).
-  Two sounds, both from `app/tool/make_sound.py`: `startup.wav` (launch) and
-  `request.wav` (a playful "ba-da-ding" when the Accept/Decline card
-  appears); each has a switch and a Play button in Settings.
+  The sounds are the owner's own recordings in `app/tool/sounds/` (MP3),
+  turned into `app/assets/sounds/*.wav` by `app/tool/prepare_sounds.py`
+  (WAV: Windows PlaySound and iPhone system sounds can't play MP3; silence
+  trimmed, soft fades, equal loudness). `appstartupchime` → startup.wav
+  (launch), `newfilesendrequest` → request.wav (Accept/Decline card
+  appears), `filerequest_accept` → accept.wav and `filerequest_deny` →
+  decline.wav (on both devices: the one tapping and the sender getting the
+  answer). Settings: Startup sound, and Transfer sounds for the other three;
+  each has a switch and a Play button. Don't synthesize replacements.
 - Native code:
   - `app/ios/Runner/SidekickBLE.swift` and `app/macos/Runner/SidekickBLE.swift`
     must stay **identical** (copy one to the other after any edit).

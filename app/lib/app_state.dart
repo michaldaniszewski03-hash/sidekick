@@ -25,6 +25,7 @@ import 'platform/hotspot.dart';
 import 'platform/macos.dart';
 import 'platform/input.dart';
 import 'platform/secret_store.dart';
+import 'platform/sound.dart';
 
 /// The color themes in Settings → Theme: name and seed color.
 const themeColors = <String, (String, Color)>{
@@ -218,7 +219,8 @@ class AppState extends ChangeNotifier {
   /// Play the startup chime when Sidekick opens.
   bool startupSound = true;
 
-  /// Play a chime when a device wants to send files here.
+  /// Transfer sounds: a request arriving here, and a request (either way)
+  /// being accepted or declined.
   bool requestSound = true;
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
@@ -1113,11 +1115,13 @@ class AppState extends ChangeNotifier {
         }
         if (!reply.accepted) {
           final declined = reply.answer == 'declined';
+          if (declined && requestSound) unawaited(playDeclineSound());
           send._set(declined ? SendPhase.declined : SendPhase.noAnswer);
           _notices.add(Notice(declined ? '${d.name} declined $what' : 'No answer from ${d.name}. Nothing was sent.'));
           return;
         }
         ticket = reply.ticket;
+        if (requestSound) unawaited(playAcceptSound());
         send._set(SendPhase.sending);
       }
     } catch (e) {

@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
 import '../core/server.dart';
+import '../platform/sound.dart';
 import 'widgets.dart';
 
 // ------------------------------------------------------------------ sender
@@ -471,37 +472,41 @@ class _Arc extends CustomPainter {
 /// Asks whether to accept [offer], with an animated card. Once accepted it
 /// shows the files coming in and closes when they're all here. Closes by
 /// itself if the sender gives up or time runs out.
-Future<void> showIncomingOffer(BuildContext context, TransferOffer offer) => showGeneralDialog<void>(
-  context: context,
-  barrierDismissible: false,
-  barrierLabel: 'Incoming files',
-  barrierColor: Colors.black38,
-  transitionDuration: const Duration(milliseconds: 600),
-  pageBuilder: (_, _, _) => _IncomingOffer(offer: offer),
-  // The app behind softly blurs while the card springs up from below.
-  transitionBuilder: (_, animation, _, child) {
-    final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
-    final spring = CurvedAnimation(parent: animation, curve: Curves.easeOutBack, reverseCurve: Curves.easeInCubic);
-    return AnimatedBuilder(
-      animation: fade,
-      builder: (_, card) => BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10 * fade.value, sigmaY: 10 * fade.value),
-        child: card,
-      ),
-      child: FadeTransition(
-        opacity: fade,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.14), end: Offset.zero).animate(spring),
-          child: ScaleTransition(scale: Tween(begin: 0.86, end: 1.0).animate(spring), child: child),
-        ),
-      ),
+Future<void> showIncomingOffer(BuildContext context, TransferOffer offer, {bool sounds = false}) =>
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'Incoming files',
+      barrierColor: Colors.black38,
+      transitionDuration: const Duration(milliseconds: 600),
+      pageBuilder: (_, _, _) => _IncomingOffer(offer: offer, sounds: sounds),
+      // The app behind softly blurs while the card springs up from below.
+      transitionBuilder: (_, animation, _, child) {
+        final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+        final spring = CurvedAnimation(parent: animation, curve: Curves.easeOutBack, reverseCurve: Curves.easeInCubic);
+        return AnimatedBuilder(
+          animation: fade,
+          builder: (_, card) => BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10 * fade.value, sigmaY: 10 * fade.value),
+            child: card,
+          ),
+          child: FadeTransition(
+            opacity: fade,
+            child: SlideTransition(
+              position: Tween(begin: const Offset(0, 0.14), end: Offset.zero).animate(spring),
+              child: ScaleTransition(scale: Tween(begin: 0.86, end: 1.0).animate(spring), child: child),
+            ),
+          ),
+        );
+      },
     );
-  },
-);
 
 class _IncomingOffer extends StatefulWidget {
-  const _IncomingOffer({required this.offer});
+  const _IncomingOffer({required this.offer, required this.sounds});
   final TransferOffer offer;
+
+  /// Play the accept/decline sounds (Settings → Transfer sounds).
+  final bool sounds;
 
   @override
   State<_IncomingOffer> createState() => _IncomingOfferState();
@@ -568,6 +573,7 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
 
   void _accept() {
     offer.accept();
+    if (widget.sounds) unawaited(playAcceptSound());
     _countdown.stop();
     _celebrate();
     setState(() => _stage = _Stage.receiving);
@@ -588,6 +594,7 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
 
   void _decline() {
     offer.decline();
+    if (widget.sounds) unawaited(playDeclineSound());
     _leave();
   }
 

@@ -8,9 +8,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// Plays Sidekick's sounds on every platform, with what the system already
-/// has: no audio plugin. The startup chime (Settings → Startup sound) and
-/// the "someone wants to send you something" chime (Settings → Request
-/// sound) both come from tool/make_sound.py.
+/// has: no audio plugin. The sounds come from tool/sounds/ (prepared by
+/// tool/prepare_sounds.py): startup (Settings → Startup sound), and the
+/// transfer sounds (Settings → Transfer sounds): a request arriving, and a
+/// request accepted or declined.
 ///
 /// * Mac: NSSound (falls back to `afplay`).
 /// * Windows: `PlaySound` from winmm.dll.
@@ -20,8 +21,14 @@ import 'package:path_provider/path_provider.dart';
 /// Never throws: a missing chime is not worth an error.
 Future<void> playStartupSound() => _play('startup');
 
-/// The playful chime when an Accept/Decline card appears.
+/// A device wants to send files here (the Accept/Decline card appears).
 Future<void> playRequestSound() => _play('request');
+
+/// A request was accepted (tapped here, or the other device's answer).
+Future<void> playAcceptSound() => _play('accept');
+
+/// A request was declined (tapped here, or the other device's answer).
+Future<void> playDeclineSound() => _play('decline');
 
 Future<void> _play(String name) async {
   try {
