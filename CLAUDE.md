@@ -121,6 +121,16 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.4.0
+- **Playful request chime:** a bouncy "ba-da-ding" when the Accept/Decline
+  card appears, on all four platforms (Settings → Request sound, with a
+  Play button).
+- **Livelier Accept/Decline card:** the app behind blurs and the card
+  springs up; its contents cascade in; the device circle breathes and
+  "knocks"; the file chip flies in; Accept glows; the countdown turns red
+  near the end; confetti on Accept and when everything has arrived.
+- **Website tab icon:** favicon and home-screen icon, the glass "sk".
+
 ### 2.3.1
 - **The startup chime plays:** from `main()`, no longer tied to the
   animation (which "Reduce motion" skips); on the Mac through NSSound
