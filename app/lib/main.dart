@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:dynamic_color/dynamic_color.dart';
@@ -17,6 +18,9 @@ Future<void> main() async {
     final state = await AppState.load();
     await state.start();
     runApp(SidekickApp(state: state, splash: true));
+    // Its own call, not part of the animation: with "Reduce motion" on
+    // there's no animation, but the chime still plays.
+    if (state.startupSound) unawaited(playStartupSound());
   } catch (error) {
     // Never a blank window: say what went wrong and offer to try again.
     runApp(_StartupFailed(error: error, retry: main));
@@ -241,6 +245,5 @@ class SidekickApp extends StatelessWidget {
     );
   }
 
-  Widget _maybeSplash(Widget app) =>
-      splash ? StartupSplash(onStart: state.startupSound ? playStartupSound : null, child: app) : app;
+  Widget _maybeSplash(Widget app) => splash ? StartupSplash(child: app) : app;
 }

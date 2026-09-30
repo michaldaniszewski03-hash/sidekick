@@ -100,15 +100,21 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: state.askBeforeReceiving,
                         onChanged: state.setAskBeforeReceiving,
                       ),
-                      SwitchListTile(
-                        secondary: const IconTile(Icons.music_note_rounded),
+                      ListTile(
+                        leading: const IconTile(Icons.music_note_rounded),
                         title: const Text('Startup sound'),
                         subtitle: const Text('A short chime when Sidekick opens'),
-                        value: state.startupSound,
-                        onChanged: (v) {
-                          state.setStartupSound(v);
-                          if (v) playStartupSound();
-                        },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Play it',
+                              onPressed: playStartupSound,
+                              icon: const Icon(Icons.play_circle_outline_rounded),
+                            ),
+                            Switch(value: state.startupSound, onChanged: state.setStartupSound),
+                          ],
+                        ),
                       ),
                     ],
                   ),

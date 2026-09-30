@@ -6,12 +6,9 @@ import 'package:material_ui/material_ui.dart';
 /// place, then the whole thing zooms away and the app settles in behind it.
 /// A tap skips it; with reduced motion it doesn't play at all.
 class StartupSplash extends StatefulWidget {
-  const StartupSplash({super.key, required this.child, this.onStart});
+  const StartupSplash({super.key, required this.child});
 
   final Widget child;
-
-  /// Called when the animation starts (the startup chime plays here).
-  final VoidCallback? onStart;
 
   @override
   State<StartupSplash> createState() => _StartupSplashState();
@@ -31,7 +28,6 @@ class _StartupSplashState extends State<StartupSplash> with SingleTickerProvider
       _done = true;
       return;
     }
-    widget.onStart?.call();
     _c.forward().whenComplete(() {
       if (mounted) setState(() => _done = true);
     });

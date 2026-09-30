@@ -79,42 +79,55 @@ void main() {
       await shot('send_${phase.name}');
     }
 
-    final offer = TransferOffer(
-      id: 'o',
-      from: TrustedPeer(
-        id: 'p',
-        name: "Ana's iPhone",
-        platform: DevicePlatform.ios,
-        token: 't',
-        fingerprint: 'f',
-        key: 'k',
+    // Also dark mode with the black-and-white theme: icons on the theme's
+    // gradient must stay visible there.
+    final monoDark = ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF757575),
+        brightness: Brightness.dark,
+        dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
       ),
-      files: const [
-        OfferedFile('IMG_2041.HEIC', 3200000),
-        OfferedFile('IMG_2042.HEIC', 2900000),
-        OfferedFile('Trip.mov', 41000000),
-      ],
+      fontFamily: 'Roboto',
     );
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: key,
-        child: MaterialApp(
-          theme: theme,
-          debugShowCheckedModeBanner: false,
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: FilledButton(onPressed: () => showIncomingOffer(context, offer), child: const Text('open')),
+    for (final (t, suffix) in [(theme, ''), (monoDark, '_mono_dark')]) {
+      final offer = TransferOffer(
+        id: 'o',
+        from: TrustedPeer(
+          id: 'p',
+          name: "Ana's iPhone",
+          platform: DevicePlatform.ios,
+          token: 't',
+          fingerprint: 'f',
+          key: 'k',
+        ),
+        files: const [
+          OfferedFile('IMG_2041.HEIC', 3200000),
+          OfferedFile('IMG_2042.HEIC', 2900000),
+          OfferedFile('Trip.mov', 41000000),
+        ],
+      );
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: MaterialApp(
+            theme: t,
+            debugShowCheckedModeBanner: false,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: FilledButton(onPressed: () => showIncomingOffer(context, offer), child: const Text('open')),
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.text('open'));
-    await shot('receive_asking');
-    await tester.tap(find.text('Accept'));
-    await shot('receive_receiving');
+      );
+      await tester.tap(find.text('open'));
+      await shot('receive_asking$suffix');
+      await tester.tap(find.text('Accept'));
+      await shot('receive_receiving$suffix');
+      await tester.pumpWidget(const SizedBox());
+    }
     await tester.pumpWidget(const SizedBox());
   });
 }

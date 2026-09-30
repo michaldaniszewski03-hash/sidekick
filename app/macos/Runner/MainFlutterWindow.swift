@@ -29,6 +29,8 @@ class MainFlutterWindow: NSWindow {
 /// (needs the Accessibility permission).
 final class SidekickNative {
   private let input = MacInput()
+  /// Held until it finishes, or NSSound stops playing it.
+  private var sound: NSSound?
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "permissions":
@@ -42,6 +44,16 @@ final class SidekickNative {
         NSWorkspace.shared.open(url)
       }
       result(nil)
+    case "playSound":
+      guard let path = (call.arguments as? [String: Any])?["path"] as? String,
+        let sound = NSSound(contentsOfFile: path, byReference: true)
+      else {
+        result(false)
+        return
+      }
+      self.sound?.stop()
+      self.sound = sound
+      result(sound.play())
     case "input":
       if let msg = call.arguments as? [String: Any] { input.handle(msg) }
       result(AXIsProcessTrusted())

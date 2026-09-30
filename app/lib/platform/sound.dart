@@ -2,6 +2,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -9,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 /// Plays Sidekick's startup chime (Settings → Startup sound), on every
 /// platform, with what the system already has: no audio plugin.
 ///
-/// * Mac: `afplay` (Sidekick isn't sandboxed, so it may run it).
+/// * Mac: NSSound (falls back to `afplay`).
 /// * Windows: `PlaySound` from winmm.dll.
 /// * iPhone: a system sound (follows the ringer volume and silent switch).
 /// * Android: a UI sound (follows silent mode).
@@ -19,7 +20,11 @@ Future<void> playStartupSound() async {
   try {
     final path = await _chimeFile();
     if (Platform.isMacOS) {
-      await Process.start('/usr/bin/afplay', ['-v', '0.6', path], mode: ProcessStartMode.detached);
+      var played = false;
+      try {
+        played = await const MethodChannel('sidekick/macos').invokeMethod<bool>('playSound', {'path': path}) ?? false;
+      } catch (_) {}
+      if (!played) await Process.start('/usr/bin/afplay', [path], mode: ProcessStartMode.detached);
     } else if (Platform.isWindows) {
       _playOnWindows(path);
     } else if (Platform.isIOS) {
@@ -27,8 +32,9 @@ Future<void> playStartupSound() async {
     } else if (Platform.isAndroid) {
       await const MethodChannel('sidekick/android').invokeMethod('playSound', {'path': path});
     }
-  } catch (_) {
-    // No sound, no problem.
+  } catch (e) {
+    // No sound, no problem; but say why in the log.
+    debugPrint('Sidekick: startup sound failed: $e');
   }
 }
 

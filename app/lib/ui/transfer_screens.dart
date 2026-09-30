@@ -315,7 +315,7 @@ class _SendGraphicState extends State<_SendGraphic> with SingleTickerProviderSta
                         : widget.icon,
                     key: ValueKey(phase),
                     size: ok || bad ? 72 : 52,
-                    color: bad ? scheme.onErrorContainer : scheme.onPrimary,
+                    color: bad ? scheme.onErrorContainer : (ok ? Colors.white : scheme.onPrimary),
                   ),
           ),
         ),
@@ -689,7 +689,13 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
                   : platformIcon(offer.from.platform),
               key: ValueKey(_stage),
               size: done ? 60 : 44,
-              color: gone ? scheme.onSurfaceVariant : Colors.white,
+              // On the theme's gradient the icon takes the matching "on" color:
+              // fixed white vanished on light gradients (dark mode, mono).
+              color: gone
+                  ? scheme.onSurfaceVariant
+                  : done
+                  ? Colors.white
+                  : scheme.onPrimary,
             ),
           ),
         ),
