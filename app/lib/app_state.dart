@@ -216,12 +216,9 @@ class AppState extends ChangeNotifier {
   /// Ask before accepting files sent to this device (Settings → Files).
   bool askBeforeReceiving = true;
 
-  /// Play the startup chime when Sidekick opens.
-  bool startupSound = true;
-
-  /// Transfer sounds: a request arriving here, and a request (either way)
-  /// being accepted or declined.
-  bool requestSound = true;
+  /// Sidekick's sounds, all of them (Settings → Sound): opening, a request
+  /// arriving, and a request being accepted or declined.
+  bool sound = true;
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
 
@@ -266,8 +263,10 @@ class AppState extends ChangeNotifier {
     pureBlack = _prefs.getBool('pureBlack') ?? false;
     keepRunning = _prefs.getBool('keepRunning') ?? true;
     askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
-    startupSound = _prefs.getBool('startupSound') ?? true;
-    requestSound = _prefs.getBool('requestSound') ?? true;
+    // One switch since 2.4.1; before, two (off if either was off).
+    sound =
+        _prefs.getBool('sound') ??
+        ((_prefs.getBool('startupSound') ?? true) && (_prefs.getBool('requestSound') ?? true));
     welcomed = _prefs.getBool('welcomed') ?? false;
     permissions = Permissions(files: _prefs.getBool('allowFiles') ?? true, input: _prefs.getBool('allowInput') ?? true);
     _receiveDir = _prefs.getString('receiveDir');
@@ -1115,13 +1114,13 @@ class AppState extends ChangeNotifier {
         }
         if (!reply.accepted) {
           final declined = reply.answer == 'declined';
-          if (declined && requestSound) unawaited(playDeclineSound());
+          if (declined && sound) unawaited(playDeclineSound());
           send._set(declined ? SendPhase.declined : SendPhase.noAnswer);
           _notices.add(Notice(declined ? '${d.name} declined $what' : 'No answer from ${d.name}. Nothing was sent.'));
           return;
         }
         ticket = reply.ticket;
-        if (requestSound) unawaited(playAcceptSound());
+        if (sound) unawaited(playAcceptSound());
         send._set(SendPhase.sending);
       }
     } catch (e) {
@@ -1243,15 +1242,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setStartupSound(bool value) {
-    startupSound = value;
-    _prefs.setBool('startupSound', value);
-    notifyListeners();
-  }
-
-  void setRequestSound(bool value) {
-    requestSound = value;
-    _prefs.setBool('requestSound', value);
+  void setSound(bool value) {
+    sound = value;
+    _prefs.setBool('sound', value);
     notifyListeners();
   }
 

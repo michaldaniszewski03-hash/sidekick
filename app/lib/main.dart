@@ -20,7 +20,7 @@ Future<void> main() async {
     runApp(SidekickApp(state: state, splash: true));
     // Its own call, not part of the animation: with "Reduce motion" on
     // there's no animation, but the chime still plays.
-    if (state.startupSound) unawaited(playStartupSound());
+    if (state.sound) unawaited(playStartupSound());
   } catch (error) {
     // Never a blank window: say what went wrong and offer to try again.
     runApp(_StartupFailed(error: error, retry: main));

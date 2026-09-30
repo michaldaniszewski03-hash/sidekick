@@ -60,8 +60,8 @@ class _ShellState extends State<Shell> {
 
   void _showOffer(TransferOffer offer) {
     if (!mounted) return;
-    if (state.requestSound) unawaited(playRequestSound());
-    showIncomingOffer(context, offer, sounds: state.requestSound);
+    if (state.sound) unawaited(playRequestSound());
+    showIncomingOffer(context, offer, sounds: state.sound);
   }
 
   void _showSend(OutgoingSend send) {

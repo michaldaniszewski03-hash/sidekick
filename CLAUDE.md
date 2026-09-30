@@ -50,8 +50,9 @@ its biggest features and fixes, and bumps the website links (see
   (launch), `newfilesendrequest` → request.wav (Accept/Decline card
   appears), `filerequest_accept` → accept.wav and `filerequest_deny` →
   decline.wav (on both devices: the one tapping and the sender getting the
-  answer). Settings: Startup sound, and Transfer sounds for the other three;
-  each has a switch and a Play button. Don't synthesize replacements.
+  answer). One switch for all of them: Settings → Sound ("Sound enabled" /
+  "Sound disabled"; `AppState.sound`, pref `sound`). Don't synthesize
+  replacements.
 - Native code:
   - `app/ios/Runner/SidekickBLE.swift` and `app/macos/Runner/SidekickBLE.swift`
     must stay **identical** (copy one to the other after any edit).

@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 import '../app_state.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
-import '../platform/sound.dart';
 import 'permissions.dart';
 import 'theme_chooser.dart';
 import 'widgets.dart';
@@ -100,39 +99,13 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: state.askBeforeReceiving,
                         onChanged: state.setAskBeforeReceiving,
                       ),
-                      ListTile(
-                        leading: const IconTile(Icons.music_note_rounded),
-                        title: const Text('Startup sound'),
-                        subtitle: const Text('A short chime when Sidekick opens'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Play it',
-                              onPressed: playStartupSound,
-                              icon: const Icon(Icons.play_circle_outline_rounded),
-                            ),
-                            Switch(value: state.startupSound, onChanged: state.setStartupSound),
-                          ],
-                        ),
-                      ),
-                      ListTile(
-                        leading: const IconTile(Icons.notifications_active_outlined),
-                        title: const Text('Transfer sounds'),
-                        subtitle: const Text(
-                          'When a device asks to send you files, and when a request is accepted or declined',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Play it',
-                              onPressed: playRequestSound,
-                              icon: const Icon(Icons.play_circle_outline_rounded),
-                            ),
-                            Switch(value: state.requestSound, onChanged: state.setRequestSound),
-                          ],
-                        ),
+                      // One switch for every sound Sidekick makes.
+                      SwitchListTile(
+                        secondary: IconTile(state.sound ? Icons.volume_up_rounded : Icons.volume_off_rounded),
+                        title: const Text('Sound'),
+                        subtitle: Text(state.sound ? 'Sound enabled' : 'Sound disabled'),
+                        value: state.sound,
+                        onChanged: state.setSound,
                       ),
                     ],
                   ),
