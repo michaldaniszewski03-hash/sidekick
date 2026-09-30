@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../app_state.dart';
 import '../core/server.dart';
 import '../core/trust.dart';
+import '../platform/sound.dart';
 import 'devices_page.dart';
 import 'files_page.dart';
 import 'remote_page.dart';
@@ -58,7 +59,9 @@ class _ShellState extends State<Shell> {
   void _go(int index) => setState(() => _index = index);
 
   void _showOffer(TransferOffer offer) {
-    if (mounted) showIncomingOffer(context, offer);
+    if (!mounted) return;
+    if (state.requestSound) unawaited(playRequestSound());
+    showIncomingOffer(context, offer);
   }
 
   void _showSend(OutgoingSend send) {

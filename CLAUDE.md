@@ -42,8 +42,10 @@ its biggest features and fixes, and bumps the website links (see
 - `app/lib/platform/`: per-OS glue (input, files, device names,
   secret storage, hotspot, and the startup chime in `sound.dart`: afplay on
   Mac, PlaySound on Windows, `playSound` on the `sidekick/ios` and
-  `sidekick/android` channels). The chime (`app/assets/sounds/startup.wav`)
-  comes from `app/tool/make_sound.py`.
+  `sidekick/android` channels; the Mac uses NSSound on `sidekick/macos`).
+  Two sounds, both from `app/tool/make_sound.py`: `startup.wav` (launch) and
+  `request.wav` (a playful "ba-da-ding" when the Accept/Decline card
+  appears); each has a switch and a Play button in Settings.
 - Native code:
   - `app/ios/Runner/SidekickBLE.swift` and `app/macos/Runner/SidekickBLE.swift`
     must stay **identical** (copy one to the other after any edit).
@@ -60,6 +62,9 @@ its biggest features and fixes, and bumps the website links (see
     26+ show, rendered live by the system (Dark, Clear, Tinted too). The
     `AppIcon.appiconset` PNGs are a pre-rendered glass look for older
     systems. Both come from `make_icons.py`; Xcode 26 (CI) builds the .icon.
+  - The website's tab icon (`website/favicon.png`) and home-screen icon
+    (`website/apple-touch-icon.png`) are the same glass "sk", also from
+    `make_icons.py`.
 - Mac: the file picker (`file_picker`) needs the
   `files.user-selected.read-write` entitlement and `prepareFilePicker()`
   (skips its sandbox check), or Send files silently does nothing.

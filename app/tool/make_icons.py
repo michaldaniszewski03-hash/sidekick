@@ -262,6 +262,13 @@ def ios() -> None:
     )
 
 
+def website() -> None:
+    """The browser-tab icon (favicon) and the home-screen icon for the site."""
+    web = ROOT / "website"
+    glass_tile(64, radius_frac=0.24).save(web / "favicon.png", optimize=True)
+    glass_tile(180, full_bleed=True).convert("RGB").save(web / "apple-touch-icon.png", optimize=True)
+
+
 def in_app() -> None:
     """White-on-transparent "sk"; the app tints it with the theme colour."""
     out = APP / "assets/logo"
@@ -280,5 +287,6 @@ if __name__ == "__main__":
     macos()
     ios()
     icon_composer()
+    website()
     in_app()
     print("Icons written.")

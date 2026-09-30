@@ -41,6 +41,15 @@ void main() {
     final key = GlobalKey();
     final theme = ThemeData(colorSchemeSeed: const Color(0xFF6750A4), fontFamily: 'Roboto');
 
+    Future<void> frame(String name) async {
+      final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 0.75);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        File(p.join(out.path, '$name.png')).writeAsBytesSync(bytes!.buffer.asUint8List());
+      });
+    }
+
     Future<void> shot(String name) async {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 700));
@@ -123,8 +132,21 @@ void main() {
         ),
       );
       await tester.tap(find.text('open'));
+      if (suffix.isEmpty) {
+        // The card arriving, frame by frame (receive-anim-NN.png, 60 ms apart).
+        for (var f = 0; f < 30; f++) {
+          await tester.pump(Duration(milliseconds: f == 0 ? 0 : 60));
+          await frame('receive-anim-${f.toString().padLeft(2, '0')}');
+        }
+      }
       await shot('receive_asking$suffix');
       await tester.tap(find.text('Accept'));
+      if (suffix.isEmpty) {
+        for (var f = 0; f < 12; f++) {
+          await tester.pump(Duration(milliseconds: f == 0 ? 0 : 80));
+          await frame('receive-accept-${f.toString().padLeft(2, '0')}');
+        }
+      }
       await shot('receive_receiving$suffix');
       await tester.pumpWidget(const SizedBox());
     }

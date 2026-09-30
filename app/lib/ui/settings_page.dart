@@ -116,6 +116,22 @@ class _SettingsPageState extends State<SettingsPage> {
                           ],
                         ),
                       ),
+                      ListTile(
+                        leading: const IconTile(Icons.notifications_active_outlined),
+                        title: const Text('Request sound'),
+                        subtitle: const Text('A playful chime when a device wants to send you files'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Play it',
+                              onPressed: playRequestSound,
+                              icon: const Icon(Icons.play_circle_outline_rounded),
+                            ),
+                            Switch(value: state.requestSound, onChanged: state.setRequestSound),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   if (hostIsAndroid) ...[

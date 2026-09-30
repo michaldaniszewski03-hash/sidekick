@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-/// Plays Sidekick's startup chime (Settings → Startup sound), on every
-/// platform, with what the system already has: no audio plugin.
+/// Plays Sidekick's sounds on every platform, with what the system already
+/// has: no audio plugin. The startup chime (Settings → Startup sound) and
+/// the "someone wants to send you something" chime (Settings → Request
+/// sound) both come from tool/make_sound.py.
 ///
 /// * Mac: NSSound (falls back to `afplay`).
 /// * Windows: `PlaySound` from winmm.dll.
@@ -16,9 +18,14 @@ import 'package:path_provider/path_provider.dart';
 /// * Android: a UI sound (follows silent mode).
 ///
 /// Never throws: a missing chime is not worth an error.
-Future<void> playStartupSound() async {
+Future<void> playStartupSound() => _play('startup');
+
+/// The playful chime when an Accept/Decline card appears.
+Future<void> playRequestSound() => _play('request');
+
+Future<void> _play(String name) async {
   try {
-    final path = await _chimeFile();
+    final path = await _soundFile(name);
     if (Platform.isMacOS) {
       var played = false;
       try {
@@ -34,14 +41,14 @@ Future<void> playStartupSound() async {
     }
   } catch (e) {
     // No sound, no problem; but say why in the log.
-    debugPrint('Sidekick: startup sound failed: $e');
+    debugPrint('Sidekick: $name sound failed: $e');
   }
 }
 
-/// The chime as a file the system players can open (written once).
-Future<String> _chimeFile() async {
-  final data = await rootBundle.load('assets/sounds/startup.wav');
-  final file = File(p.join((await getTemporaryDirectory()).path, 'sidekick-startup.wav'));
+/// The sound as a file the system players can open (written once).
+Future<String> _soundFile(String name) async {
+  final data = await rootBundle.load('assets/sounds/$name.wav');
+  final file = File(p.join((await getTemporaryDirectory()).path, 'sidekick-$name.wav'));
   if (!file.existsSync() || file.lengthSync() != data.lengthInBytes) {
     await file.writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
   }
@@ -53,11 +60,11 @@ typedef _PlaySoundDart = int Function(Pointer<Utf16> sound, int module, int flag
 
 /// Kept for the life of the app: an asynchronous PlaySound may still be
 /// reading the name after the call returns.
-Pointer<Utf16>? _windowsPath;
+final Map<String, Pointer<Utf16>> _windowsPaths = {};
 
 void _playOnWindows(String path) {
   const sndAsync = 0x0001, sndNoDefault = 0x0002, sndFilename = 0x00020000;
   final playSound = DynamicLibrary.open('winmm.dll').lookupFunction<_PlaySoundNative, _PlaySoundDart>('PlaySoundW');
-  final name = _windowsPath ??= path.toNativeUtf16();
+  final name = _windowsPaths[path] ??= path.toNativeUtf16();
   playSound(name, 0, sndFilename | sndAsync | sndNoDefault);
 }

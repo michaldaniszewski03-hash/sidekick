@@ -217,6 +217,9 @@ class AppState extends ChangeNotifier {
 
   /// Play the startup chime when Sidekick opens.
   bool startupSound = true;
+
+  /// Play a chime when a device wants to send files here.
+  bool requestSound = true;
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
 
@@ -262,6 +265,7 @@ class AppState extends ChangeNotifier {
     keepRunning = _prefs.getBool('keepRunning') ?? true;
     askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
     startupSound = _prefs.getBool('startupSound') ?? true;
+    requestSound = _prefs.getBool('requestSound') ?? true;
     welcomed = _prefs.getBool('welcomed') ?? false;
     permissions = Permissions(files: _prefs.getBool('allowFiles') ?? true, input: _prefs.getBool('allowInput') ?? true);
     _receiveDir = _prefs.getString('receiveDir');
@@ -1238,6 +1242,12 @@ class AppState extends ChangeNotifier {
   void setStartupSound(bool value) {
     startupSound = value;
     _prefs.setBool('startupSound', value);
+    notifyListeners();
+  }
+
+  void setRequestSound(bool value) {
+    requestSound = value;
+    _prefs.setBool('requestSound', value);
     notifyListeners();
   }
 

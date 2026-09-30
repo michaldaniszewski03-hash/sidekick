@@ -1,4 +1,5 @@
-"""Synthesizes Sidekick's startup chime (assets/sounds/startup.wav).
+"""Synthesizes Sidekick's sounds: the startup chime (assets/sounds/startup.wav)
+and the "someone wants to send you something" chime (assets/sounds/request.wav).
 
     pip install numpy
     python app/tool/make_sound.py        # from the repo root
@@ -9,6 +10,10 @@ Timed to the startup animation (lib/ui/startup.dart):
   0.24 s  a quiet high sparkle on top
 Stereo, with a small room reverb, about 2 seconds. Played on every platform
 (Settings → Startup sound).
+
+The request chime is short and playful: a bouncy "ba-da-ding" (three quick
+rising mallet notes) and a little sparkle, about a second; it plays when
+the Accept/Decline card appears (Settings → Request sound).
 """
 
 import wave
@@ -18,7 +23,8 @@ import numpy as np
 
 RATE = 44100
 LENGTH = 2.1
-OUT = Path(__file__).resolve().parents[1] / "assets/sounds/startup.wav"
+SOUNDS = Path(__file__).resolve().parents[1] / "assets/sounds"
+OUT = SOUNDS / "startup.wav"
 N = int(RATE * LENGTH)
 T = np.arange(N) / RATE
 
@@ -91,7 +97,46 @@ def reverb(x: np.ndarray, mix: float) -> np.ndarray:
     return (1 - mix) * x + mix * wet
 
 
+def write(path: Path, left: np.ndarray, right: np.ndarray, length: float, fade_s: float = 0.3) -> None:
+    t = np.arange(len(left)) / RATE
+    fade = np.clip((length - t) / fade_s, 0, 1) ** 2
+    stereo = np.stack([left * fade, right * fade], axis=1)
+    stereo *= 0.7 / np.abs(stereo).max()  # about -3 dBFS
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes((stereo * 32767).astype("<i2").tobytes())
+    print(f"Wrote {path}")
+
+
+def request() -> None:
+    """The playful "ba-da-ding" for an incoming offer (first 1.1 s of the timeline)."""
+    length = 1.1
+    n = int(RATE * length)
+    left = np.zeros(N)
+    right = np.zeros(N)
+
+    def add(sig: np.ndarray, pan: float) -> None:
+        a = (pan + 1) * np.pi / 4
+        left[:] += sig * np.cos(a)
+        right[:] += sig * np.sin(a)
+
+    # Three bouncy rising notes (G5, C6, E6), the last one held a bit.
+    add(mallet(783.99, 0.00, 0.45), -0.35)
+    add(mallet(1046.50, 0.075, 0.5), 0.0)
+    add(mallet(1318.51, 0.15, 0.6), 0.35)
+    # A soft octave under the last note for body, and a quick sparkle.
+    add(pad(659.26, 0.15, 0.10, 4) * np.exp(-np.maximum(T - 0.15, 0) * 3), 0.0)
+    add(sparkle(2637.02, 0.19, 0.05), -0.6)
+    add(sparkle(3951.07, 0.24, 0.03), 0.6)
+    left, right = reverb(left[:n], 0.18), reverb(right[:n], 0.18)
+    write(SOUNDS / "request.wav", left, right, length)
+
+
 def main() -> None:
+    request()
     left = np.zeros(N)
     right = np.zeros(N)
 
@@ -118,16 +163,7 @@ def main() -> None:
     add(sparkle(3322.44, 0.38, 0.025), 0.2)  # G#7
 
     left, right = reverb(left, 0.28), reverb(right, 0.28)
-    fade = np.clip((LENGTH - T) / 0.45, 0, 1) ** 2
-    stereo = np.stack([left * fade, right * fade], axis=1)
-    stereo *= 0.7 / np.abs(stereo).max()  # about -3 dBFS
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(OUT), "wb") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(RATE)
-        w.writeframes((stereo * 32767).astype("<i2").tobytes())
-    print(f"Wrote {OUT}")
+    write(OUT, left, right, LENGTH, fade_s=0.45)
 
 
 if __name__ == "__main__":

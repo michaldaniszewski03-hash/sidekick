@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:material_ui/material_ui.dart';
 
@@ -364,6 +365,58 @@ class _FileChip extends StatelessWidget {
 }
 
 /// Three rings spreading out and fading, like a radar ping.
+/// A small burst of confetti: bits fly out from the centre, tumble, fall
+/// and fade. [t] runs 0 → 1.
+class _Confetti extends CustomPainter {
+  _Confetti({required this.t, required this.colors});
+  final double t;
+  final List<Color> colors;
+
+  static final _bits = () {
+    final rng = math.Random(7);
+    return [
+      for (var i = 0; i < 26; i++)
+        (
+          angle: i / 26 * 2 * math.pi + rng.nextDouble() * 0.4,
+          speed: 70 + rng.nextDouble() * 70,
+          spin: (rng.nextDouble() - 0.5) * 12,
+          size: 4 + rng.nextDouble() * 4,
+          round: rng.nextBool(),
+        ),
+    ];
+  }();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t <= 0 || t >= 1) return;
+    final center = size.center(Offset.zero);
+    final ease = Curves.easeOutCubic.transform(t);
+    for (final (i, b) in _bits.indexed) {
+      final pos =
+          center + Offset(math.cos(b.angle), math.sin(b.angle)) * (b.speed * ease) + Offset(0, 90 * t * t); // gravity
+      final paint = Paint()..color = colors[i % colors.length].withValues(alpha: (1 - t).clamp(0.0, 1.0));
+      canvas.save();
+      canvas.translate(pos.dx, pos.dy);
+      canvas.rotate(b.spin * t);
+      if (b.round) {
+        canvas.drawCircle(Offset.zero, b.size / 2, paint);
+      } else {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset.zero, width: b.size * 1.6, height: b.size * 0.7),
+            const Radius.circular(1.5),
+          ),
+          paint,
+        );
+      }
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Confetti old) => old.t != t;
+}
+
 class _Rings extends CustomPainter {
   _Rings({required this.progress, required this.color});
   final double progress;
@@ -422,16 +475,28 @@ Future<void> showIncomingOffer(BuildContext context, TransferOffer offer) => sho
   context: context,
   barrierDismissible: false,
   barrierLabel: 'Incoming files',
-  barrierColor: Colors.black54,
-  transitionDuration: const Duration(milliseconds: 550),
+  barrierColor: Colors.black38,
+  transitionDuration: const Duration(milliseconds: 600),
   pageBuilder: (_, _, _) => _IncomingOffer(offer: offer),
-  transitionBuilder: (_, animation, _, child) => FadeTransition(
-    opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
-    child: ScaleTransition(
-      scale: Tween(begin: 0.7, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
-      child: child,
-    ),
-  ),
+  // The app behind softly blurs while the card springs up from below.
+  transitionBuilder: (_, animation, _, child) {
+    final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+    final spring = CurvedAnimation(parent: animation, curve: Curves.easeOutBack, reverseCurve: Curves.easeInCubic);
+    return AnimatedBuilder(
+      animation: fade,
+      builder: (_, card) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10 * fade.value, sigmaY: 10 * fade.value),
+        child: card,
+      ),
+      child: FadeTransition(
+        opacity: fade,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, 0.14), end: Offset.zero).animate(spring),
+          child: ScaleTransition(scale: Tween(begin: 0.86, end: 1.0).animate(spring), child: child),
+        ),
+      ),
+    );
+  },
 );
 
 class _IncomingOffer extends StatefulWidget {
@@ -452,6 +517,20 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
   /// Time left to answer, running down.
   late final AnimationController _countdown = AnimationController(vsync: this, duration: SidekickServer.offerTimeout)
     ..reverse(from: 1);
+
+  /// A playful "knock" on the device circle every couple of seconds.
+  late final AnimationController _knock = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))
+    ..repeat();
+
+  /// The file chip flying in when the card appears.
+  late final AnimationController _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+    ..forward();
+
+  /// Confetti, on Accept and when everything's in.
+  late final AnimationController _burst = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
   _Stage _stage = _Stage.asking;
   int _received = 0;
   StreamSubscription<int>? _progress;
@@ -474,6 +553,9 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
   void dispose() {
     _loop.dispose();
     _countdown.dispose();
+    _knock.dispose();
+    _intro.dispose();
+    _burst.dispose();
     _progress?.cancel();
     super.dispose();
   }
@@ -487,15 +569,21 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
   void _accept() {
     offer.accept();
     _countdown.stop();
+    _celebrate();
     setState(() => _stage = _Stage.receiving);
     _progress = offer.progress.listen(
       (bytes) => setState(() => _received = bytes),
       onDone: () {
         if (!mounted) return;
         setState(() => _stage = _Stage.done);
-        Timer(const Duration(milliseconds: 1300), _leave);
+        _celebrate();
+        Timer(const Duration(milliseconds: 1500), _leave);
       },
     );
+  }
+
+  void _celebrate() {
+    if (!MediaQuery.of(context).disableAnimations) _burst.forward(from: 0);
   }
 
   void _decline() {
@@ -526,40 +614,49 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
                 children: [
                   SizedBox(height: 150, width: 200, child: _graphic(scheme)),
                   const SizedBox(height: 16),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: Text(
-                      switch (_stage) {
-                        _Stage.asking => '${offer.from.name} wants to send you',
-                        _Stage.receiving => 'Receiving from ${offer.from.name}…',
-                        _Stage.done => 'All here!',
-                        _Stage.gone => '${offer.from.name} stopped sending',
-                      },
-                      key: ValueKey(_stage),
-                      textAlign: TextAlign.center,
-                      style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  Entrance(
+                    index: 1,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      child: Text(
+                        switch (_stage) {
+                          _Stage.asking => '${offer.from.name} wants to send you',
+                          _Stage.receiving => 'Receiving from ${offer.from.name}…',
+                          _Stage.done => 'All here!',
+                          _Stage.gone => '${offer.from.name} stopped sending',
+                        },
+                        key: ValueKey(_stage),
+                        textAlign: TextAlign.center,
+                        style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    total > 0 ? '$what · ${formatBytes(total)}' : what,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                  Entrance(
+                    index: 2,
+                    child: Text(
+                      total > 0 ? '$what · ${formatBytes(total)}' : what,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
                   ),
                   if (_stage == _Stage.asking && files.length > 1) ...[
                     const SizedBox(height: 12),
-                    for (final f in files.take(3))
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            Icon(Icons.insert_drive_file_outlined, size: 18, color: scheme.onSurfaceVariant),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                            Text(formatBytes(f.size), style: TextStyle(color: scheme.onSurfaceVariant)),
-                          ],
+                    for (final (i, f) in files.take(3).indexed)
+                      Entrance(
+                        index: 3 + i,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(Icons.insert_drive_file_outlined, size: 18, color: scheme.onSurfaceVariant),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                              Text(formatBytes(f.size), style: TextStyle(color: scheme.onSurfaceVariant)),
+                            ],
+                          ),
                         ),
                       ),
                     if (files.length > 3)
@@ -573,41 +670,69 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOutCubic,
                     child: switch (_stage) {
-                      _Stage.asking => Column(
-                        children: [
-                          AnimatedBuilder(
-                            animation: _countdown,
-                            builder: (_, _) => ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: _countdown.value,
-                                minHeight: 4,
-                                backgroundColor: scheme.surfaceContainerHighest,
+                      _Stage.asking => Entrance(
+                        index: 4 + math.min(files.length, 3),
+                        child: Column(
+                          children: [
+                            AnimatedBuilder(
+                              animation: _countdown,
+                              builder: (_, _) => ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: _countdown.value,
+                                  minHeight: 4,
+                                  backgroundColor: scheme.surfaceContainerHighest,
+                                  // Warms up to red in the last quarter.
+                                  color: Color.lerp(
+                                    scheme.error,
+                                    scheme.primary,
+                                    (_countdown.value / 0.25).clamp(0.0, 1.0),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: _decline,
-                                  style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52)),
-                                  child: const Text('Decline'),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: _decline,
+                                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 52)),
+                                    child: const Text('Decline'),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _accept,
-                                  icon: const Icon(Icons.download_rounded),
-                                  label: const Text('Accept'),
-                                  style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  // A soft glow that breathes, inviting a tap.
+                                  child: AnimatedBuilder(
+                                    animation: _loop,
+                                    builder: (_, button) => DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(26),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: scheme.primary.withValues(
+                                              alpha: 0.18 + 0.17 * math.sin(_loop.value * 2 * math.pi).abs(),
+                                            ),
+                                            blurRadius: 18,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: button,
+                                    ),
+                                    child: FilledButton.icon(
+                                      onPressed: _accept,
+                                      icon: const Icon(Icons.download_rounded),
+                                      label: const Text('Accept'),
+                                      style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                       _Stage.receiving => Column(
                         children: [
@@ -658,56 +783,94 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
               painter: _Rings(progress: 1 - _loop.value, color: scheme.primary),
             ),
           ),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutBack,
-          width: done ? 104 : 88,
-          height: done ? 104 : 88,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: done
-                  ? [Colors.green.shade400, Colors.green.shade700]
-                  : gone
-                  ? [scheme.surfaceContainerHighest, scheme.surfaceContainerHighest]
-                  : [scheme.primary, scheme.tertiary],
+        // Confetti from behind the circle, on Accept and when all's in.
+        IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _burst,
+            builder: (_, _) => CustomPaint(
+              size: const Size(200, 150),
+              painter: _Confetti(
+                t: _burst.value,
+                colors: [scheme.primary, scheme.tertiary, scheme.secondary, Colors.green.shade400],
+              ),
             ),
           ),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 450),
-            transitionBuilder: (child, a) => ScaleTransition(
-              scale: CurvedAnimation(parent: a, curve: Curves.elasticOut),
-              child: child,
+        ),
+        AnimatedBuilder(
+          animation: _knock,
+          builder: (_, circle) {
+            if (_stage != _Stage.asking) return circle!;
+            // A quick double nudge at the start of each cycle ("knock knock"),
+            // and a slow breath in between.
+            final t = _knock.value;
+            final k = (t / 0.22).clamp(0.0, 1.0);
+            final nudge = t < 0.22 ? 0.13 * math.sin(k * 4 * math.pi) * (1 - k) : 0.0;
+            final breath = 1 + 0.035 * math.sin(t * 2 * math.pi);
+            return Transform.rotate(
+              angle: nudge,
+              child: Transform.scale(scale: breath, child: circle),
+            );
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutBack,
+            width: done ? 104 : 88,
+            height: done ? 104 : 88,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: done
+                    ? [Colors.green.shade400, Colors.green.shade700]
+                    : gone
+                    ? [scheme.surfaceContainerHighest, scheme.surfaceContainerHighest]
+                    : [scheme.primary, scheme.tertiary],
+              ),
             ),
-            child: Icon(
-              done
-                  ? Icons.check_rounded
-                  : gone
-                  ? Icons.close_rounded
-                  : platformIcon(offer.from.platform),
-              key: ValueKey(_stage),
-              size: done ? 60 : 44,
-              // On the theme's gradient the icon takes the matching "on" color:
-              // fixed white vanished on light gradients (dark mode, mono).
-              color: gone
-                  ? scheme.onSurfaceVariant
-                  : done
-                  ? Colors.white
-                  : scheme.onPrimary,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 450),
+              transitionBuilder: (child, a) => ScaleTransition(
+                scale: CurvedAnimation(parent: a, curve: Curves.elasticOut),
+                child: child,
+              ),
+              child: Icon(
+                done
+                    ? Icons.check_rounded
+                    : gone
+                    ? Icons.close_rounded
+                    : platformIcon(offer.from.platform),
+                key: ValueKey(_stage),
+                size: done ? 60 : 44,
+                // On the theme's gradient the icon takes the matching "on" color:
+                // fixed white vanished on light gradients (dark mode, mono).
+                color: gone
+                    ? scheme.onSurfaceVariant
+                    : done
+                    ? Colors.white
+                    : scheme.onPrimary,
+              ),
             ),
           ),
         ),
         // Files dropping in toward this device.
         if (_stage == _Stage.asking || _stage == _Stage.receiving)
           AnimatedBuilder(
-            animation: _loop,
+            animation: Listenable.merge([_loop, _intro]),
             builder: (_, child) {
               final t = _loop.value;
-              return Transform.translate(
-                offset: Offset(52, -50 + 10 * math.sin(t * 2 * math.pi)),
-                child: Transform.rotate(angle: 0.12 * math.sin(t * 2 * math.pi), child: child),
+              // Flies in on an arc from the top right, then bobs.
+              final i = Curves.easeOutBack.transform(_intro.value);
+              final arc = math.sin(_intro.value * math.pi) * -24;
+              return Opacity(
+                opacity: _intro.value.clamp(0.0, 1.0),
+                child: Transform.translate(
+                  offset: Offset(150 + (52 - 150) * i, -140 + (-50 + 140) * i + arc + 10 * math.sin(t * 2 * math.pi)),
+                  child: Transform.rotate(
+                    angle: 0.12 * math.sin(t * 2 * math.pi) + (1 - i) * 0.8,
+                    child: Transform.scale(scale: 0.4 + 0.6 * i, child: child),
+                  ),
+                ),
               );
             },
             child: _FileChip(count: offer.files.length),
