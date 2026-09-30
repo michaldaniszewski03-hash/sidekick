@@ -40,7 +40,7 @@ class _WelcomeFlowState extends State<WelcomeFlow> {
   void initState() {
     super.initState();
     // Coming back from system settings after granting something.
-    _lifecycle = AppLifecycleListener(onResume: () => state.refreshPlatform());
+    _lifecycle = AppLifecycleListener(onResume: state.resumed);
   }
 
   @override

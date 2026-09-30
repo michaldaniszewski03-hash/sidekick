@@ -10,7 +10,7 @@ class StartupSplash extends StatefulWidget {
 
   final Widget child;
 
-  /// Called when the animation starts (the Mac plays its chime here).
+  /// Called when the animation starts (the startup chime plays here).
   final VoidCallback? onStart;
 
   @override

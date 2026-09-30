@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -92,14 +93,16 @@ class _RemoteState extends State<_Remote> {
         _session = session;
         _conn = _Conn.connected;
       });
-      session.closed.then((_) {
-        if (mounted && _session == session) {
-          setState(() {
-            _conn = _Conn.failed;
-            _error = 'Disconnected';
-          });
-        }
-      });
+      unawaited(
+        session.closed.then((_) {
+          if (mounted && _session == session) {
+            setState(() {
+              _conn = _Conn.failed;
+              _error = 'Disconnected';
+            });
+          }
+        }),
+      );
     } catch (e) {
       if (mounted) {
         setState(() {

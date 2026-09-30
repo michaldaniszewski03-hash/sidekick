@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sidekick/core/client.dart';
 import 'package:sidekick/core/crypto.dart';
+import 'package:sidekick/core/discovery.dart';
 import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
@@ -407,6 +408,18 @@ void main() {
     handleInputMessage(input, {'t': 'text', 's': 'x' * 5000});
     handleInputMessage(input, {'t': 'rm -rf'});
     expect(input.log, ['move 0 100000', 'click left 3']);
+  });
+
+  test('discovery restarts cleanly (Wi-Fi switch, waking from sleep)', () async {
+    final d = Discovery(
+      self: () => const DeviceInfo(id: 'me', name: 'Me', platform: DevicePlatform.macos, port: 1),
+      port: 53399,
+    );
+    await d.start();
+    await d.start(); // rejoin: must not fail with "address in use"
+    await d.stop();
+    await d.stop(); // twice is fine too
+    expect(await localAddresses(), isA<List<String>>());
   });
 
   group('helpers', () {

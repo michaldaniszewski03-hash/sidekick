@@ -215,7 +215,7 @@ class AppState extends ChangeNotifier {
   /// Ask before accepting files sent to this device (Settings → Files).
   bool askBeforeReceiving = true;
 
-  /// Play the startup chime when Sidekick opens (Mac only).
+  /// Play the startup chime when Sidekick opens.
   bool startupSound = true;
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
@@ -239,7 +239,11 @@ class AppState extends ChangeNotifier {
     // saved made-up names like "My ios"; replace those too).
     final saved = state._prefs.getString('name');
     if (saved == null || isLegacyDefaultName(saved)) {
-      state.name = await detectDeviceName();
+      try {
+        state.name = await detectDeviceName();
+      } catch (_) {
+        state.name = _defaultName();
+      }
       await state._prefs.setString('name', state.name);
     }
     return state;
@@ -251,7 +255,7 @@ class AppState extends ChangeNotifier {
     id = _prefs.getString('id') ?? newDeviceId();
     _prefs.setString('id', id);
     name = _prefs.getString('name') ?? _defaultName();
-    themeMode = ThemeMode.values.byName(_prefs.getString('themeMode') ?? 'system');
+    themeMode = ThemeMode.values.asNameMap()[_prefs.getString('themeMode')] ?? ThemeMode.system;
     themeColor = _prefs.getString('themeColor') ?? (Platform.isIOS ? 'purple' : 'system');
     if (themeColor != 'system' && !themeColors.containsKey(themeColor)) themeColor = 'system';
     pureBlack = _prefs.getBool('pureBlack') ?? false;
@@ -373,17 +377,7 @@ class AppState extends ChangeNotifier {
       askBeforeReceiving: () => askBeforeReceiving,
     );
     server.events.listen(_onServerEvent);
-    try {
-      await server.start();
-    } on SocketException {
-      // Port taken (another copy running?). Use any free port; discovery
-      // announces the real one.
-      try {
-        await server.start(port: 0);
-      } on SocketException catch (e) {
-        networkError = "Couldn't start the Sidekick server: ${e.message}";
-      }
-    }
+    await _startServer();
 
     discovery = Discovery(self: () => me);
     discovery.found.listen(_onFound);
@@ -809,7 +803,6 @@ class AppState extends ChangeNotifier {
     if (bt == null) return;
     await bt.refresh();
     if (!bt.canScan) return;
-    addresses = await localAddresses();
     // No Wi-Fi at all (a field, a train): Bluetooth is the only way, so look
     // every 10 s. On Wi-Fi, only every 20 s and only for devices it can't reach.
     final offline = addresses.isEmpty;
@@ -848,7 +841,68 @@ class AppState extends ChangeNotifier {
 
   /// Pings paired devices we haven't heard from over multicast, in case the
   /// network blocks it.
+  /// Starts the server on Sidekick's port, or any free one if it's taken
+  /// (another copy running?); discovery announces the real one.
+  Future<void> _startServer({int port = sidekickPort}) async {
+    try {
+      await server.start(port: port);
+    } catch (_) {
+      try {
+        await server.start(port: 0);
+      } catch (e) {
+        networkError = "Couldn't start the Sidekick server: $e";
+      }
+    }
+  }
+
+  bool _healing = false;
+
+  /// Back in the foreground. Phones may have closed a backgrounded app's
+  /// sockets, so check the server still answers (restart it if not) and
+  /// rejoin the network; everywhere, pick up permission changes.
+  Future<void> resumed() async {
+    if ((Platform.isIOS || Platform.isAndroid) && !_healing) {
+      _healing = true;
+      try {
+        final port = server.port;
+        var alive = port != 0;
+        if (alive) {
+          try {
+            final probe = await Socket.connect(InternetAddress.loopbackIPv4, port, timeout: const Duration(seconds: 1));
+            probe.destroy();
+          } catch (_) {
+            alive = false;
+          }
+        }
+        if (!alive) {
+          await server.stop();
+          await _startServer(port: port == 0 ? sidekickPort : port);
+        }
+        await _restartDiscovery();
+        unawaited(_checkPresence());
+      } finally {
+        _healing = false;
+      }
+    }
+    await refreshPlatform();
+  }
+
+  Future<void> _restartDiscovery() async {
+    try {
+      await discovery.start();
+    } catch (_) {
+      // No network right now; the next address change tries again.
+    }
+  }
+
   Future<void> _checkPresence() async {
+    // A new network (Wi-Fi switch, wake from sleep): rejoin discovery on it
+    // and show the new address.
+    final now = await localAddresses();
+    if (now.join(',') != addresses.join(',')) {
+      addresses = now;
+      unawaited(_restartDiscovery());
+    }
     await Future.wait([
       for (final d in _paired.values)
         if (!reachableViaWifi(d.id) && d.lastAddress != null)

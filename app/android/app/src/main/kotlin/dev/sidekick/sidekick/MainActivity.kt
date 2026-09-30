@@ -5,6 +5,8 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -53,6 +55,10 @@ class MainActivity : FlutterActivity() {
                         }
                         "requestAllFilesAccess" -> {
                             requestAllFilesAccess()
+                            result.success(null)
+                        }
+                        "playSound" -> {
+                            call.argument<String>("path")?.let { playSound(it) }
                             result.success(null)
                         }
                         "input" -> {
@@ -160,6 +166,29 @@ class MainActivity : FlutterActivity() {
             "passphrase" to config?.preSharedKey?.trim('"'),
             "security" to "wpa2",
         )
+    }
+
+    /** The startup chime, as a UI sound: it follows silent mode. */
+    private fun playSound(path: String) {
+        val player = MediaPlayer()
+        try {
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            player.setDataSource(path)
+            player.setOnCompletionListener { it.release() }
+            player.setOnErrorListener { mp, _, _ ->
+                mp.release()
+                true
+            }
+            player.prepare()
+            player.start()
+        } catch (e: Exception) {
+            player.release()
+        }
     }
 
     private fun permissions(): Map<String, Boolean> = mapOf(

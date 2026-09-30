@@ -100,17 +100,16 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: state.askBeforeReceiving,
                         onChanged: state.setAskBeforeReceiving,
                       ),
-                      if (hostIsMacOS)
-                        SwitchListTile(
-                          secondary: const IconTile(Icons.music_note_rounded),
-                          title: const Text('Startup sound'),
-                          subtitle: const Text('A short chime when Sidekick opens'),
-                          value: state.startupSound,
-                          onChanged: (v) {
-                            state.setStartupSound(v);
-                            if (v) playStartupSound();
-                          },
-                        ),
+                      SwitchListTile(
+                        secondary: const IconTile(Icons.music_note_rounded),
+                        title: const Text('Startup sound'),
+                        subtitle: const Text('A short chime when Sidekick opens'),
+                        value: state.startupSound,
+                        onChanged: (v) {
+                          state.setStartupSound(v);
+                          if (v) playStartupSound();
+                        },
+                      ),
                     ],
                   ),
                   if (hostIsAndroid) ...[
@@ -278,7 +277,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       ListTile(
                         leading: const IconTile(Icons.info_outline_rounded),
                         title: Text(state.appVersion.isEmpty ? 'Sidekick' : 'Sidekick ${state.appVersion}'),
-                        subtitle: Text('Device ID ${state.id.substring(0, 8)} · port ${state.me.port}'),
+                        subtitle: Text(
+                          'Device ID ${state.id.substring(0, state.id.length.clamp(0, 8))} · port ${state.me.port}',
+                        ),
                       ),
                     ],
                   ),

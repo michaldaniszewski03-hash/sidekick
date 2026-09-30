@@ -43,7 +43,7 @@ class _ShellState extends State<Shell> {
       state.transferOffers.listen(_showOffer),
       state.sends.listen(_showSend),
     ];
-    _lifecycle = AppLifecycleListener(onResume: state.refreshPlatform);
+    _lifecycle = AppLifecycleListener(onResume: state.resumed);
   }
 
   @override

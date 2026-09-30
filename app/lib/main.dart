@@ -1,4 +1,7 @@
+import 'dart:ui';
+
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
@@ -9,9 +12,77 @@ import 'ui/welcome.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final state = await AppState.load();
-  await state.start();
-  runApp(SidekickApp(state: state, splash: true));
+  _catchErrors();
+  try {
+    final state = await AppState.load();
+    await state.start();
+    runApp(SidekickApp(state: state, splash: true));
+  } catch (error) {
+    // Never a blank window: say what went wrong and offer to try again.
+    runApp(_StartupFailed(error: error, retry: main));
+  }
+}
+
+/// Errors nothing else caught are logged instead of taking the app down,
+/// and a widget that fails to build shows a quiet note, not a red screen.
+void _catchErrors() {
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Sidekick: unexpected error: $error\n$stack');
+    return true;
+  };
+  if (kReleaseMode) {
+    ErrorWidget.builder = (details) => const Center(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Something went wrong showing this part. Switch tabs and back to retry.',
+          textAlign: TextAlign.center,
+          textDirection: TextDirection.ltr,
+          style: TextStyle(color: Color(0xFF888888), fontSize: 13),
+        ),
+      ),
+    );
+  }
+}
+
+class _StartupFailed extends StatelessWidget {
+  const _StartupFailed({required this.error, required this.retry});
+  final Object error;
+  final Future<void> Function() retry;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'Sidekick',
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(colorSchemeSeed: const Color(0xFF6750A4), useMaterial3: true),
+    darkTheme: ThemeData(colorSchemeSeed: const Color(0xFF6750A4), brightness: Brightness.dark, useMaterial3: true),
+    home: Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 48),
+                const SizedBox(height: 16),
+                const Text("Sidekick couldn't start", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text('$error', textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: retry,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Try again'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class SidekickApp extends StatelessWidget {

@@ -40,9 +40,10 @@ its biggest features and fixes, and bumps the website links (see
     an icon), `IconTile` (tinted icon square for rows), `StatusPill`,
     `Entrance` (fade/slide-in cascade), `Radar` (searching), `GradientBadge`.
 - `app/lib/platform/`: per-OS glue (input, files, device names,
-  secret storage, hotspot, the Mac startup chime in `sound.dart`, played
-  with `afplay`). The chime (`app/assets/sounds/startup.wav`) comes from
-  `app/tool/make_sound.py`.
+  secret storage, hotspot, and the startup chime in `sound.dart`: afplay on
+  Mac, PlaySound on Windows, `playSound` on the `sidekick/ios` and
+  `sidekick/android` channels). The chime (`app/assets/sounds/startup.wav`)
+  comes from `app/tool/make_sound.py`.
 - Native code:
   - `app/ios/Runner/SidekickBLE.swift` and `app/macos/Runner/SidekickBLE.swift`
     must stay **identical** (copy one to the other after any edit).
@@ -114,6 +115,25 @@ its biggest features and fixes, and bumps the website links (see
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.3.0
+- **New startup chime, on every device:** a soft lift, two mallet notes and
+  a warm chord that blooms with the animation (stereo, ~2 s). Mac: afplay;
+  Windows: PlaySound; iPhone: a system sound (follows the silent switch);
+  Android: a UI sound (follows silent mode). Settings → Startup sound on
+  all four.
+- **Stability:**
+  - Startup never ends on a blank window: a failure shows "Sidekick
+    couldn't start" with Try again; bad saved settings, a failing device
+    name lookup or any server start error no longer stop the app.
+  - Unexpected errors are logged instead of crashing; a part that fails to
+    draw shows a short note instead of a red screen.
+  - Discovery rejoins the network when it changes (Wi-Fi switch, waking
+    from sleep), so devices stop vanishing until a restart; the shown IP
+    address updates too.
+  - Phones coming back from the background check the server still
+    answers and restart it (and discovery) if the system closed them.
+  - Stricter checks (`unawaited_futures`, `use_build_context_synchronously`).
 
 ### 2.2.0
 - **Liquid Glass app icon on Mac and iPhone:** an Icon Composer icon

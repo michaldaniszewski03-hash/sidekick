@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
@@ -94,7 +95,7 @@ class _BrowserState extends State<_Browser> {
   Future<void> _send(List<File> files) async {
     if (files.isEmpty) return;
     await widget.state.sendFiles(widget.device, files, remoteDir: _current);
-    if (mounted) _load();
+    if (mounted) unawaited(_load());
   }
 
   Future<void> _pickAndUpload() async {

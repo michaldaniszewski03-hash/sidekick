@@ -1,23 +1,57 @@
+import 'dart:ffi';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
-/// Plays Sidekick's startup chime on a Mac (Settings → Startup sound).
+/// Plays Sidekick's startup chime (Settings → Startup sound), on every
+/// platform, with what the system already has: no audio plugin.
 ///
-/// Uses the system's `afplay`, so there's no audio plugin and nothing native
-/// to maintain; Sidekick isn't sandboxed, so it may run it. Never throws: a
-/// missing chime is not worth an error.
+/// * Mac: `afplay` (Sidekick isn't sandboxed, so it may run it).
+/// * Windows: `PlaySound` from winmm.dll.
+/// * iPhone: a system sound (follows the ringer volume and silent switch).
+/// * Android: a UI sound (follows silent mode).
+///
+/// Never throws: a missing chime is not worth an error.
 Future<void> playStartupSound() async {
-  if (!Platform.isMacOS) return;
   try {
-    final data = await rootBundle.load('assets/sounds/startup.wav');
-    final file = File(p.join(Directory.systemTemp.path, 'sidekick-startup.wav'));
-    if (!file.existsSync() || file.lengthSync() != data.lengthInBytes) {
-      await file.writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
+    final path = await _chimeFile();
+    if (Platform.isMacOS) {
+      await Process.start('/usr/bin/afplay', ['-v', '0.6', path], mode: ProcessStartMode.detached);
+    } else if (Platform.isWindows) {
+      _playOnWindows(path);
+    } else if (Platform.isIOS) {
+      await const MethodChannel('sidekick/ios').invokeMethod('playSound', {'path': path});
+    } else if (Platform.isAndroid) {
+      await const MethodChannel('sidekick/android').invokeMethod('playSound', {'path': path});
     }
-    await Process.start('/usr/bin/afplay', ['-v', '0.6', file.path], mode: ProcessStartMode.detached);
   } catch (_) {
     // No sound, no problem.
   }
+}
+
+/// The chime as a file the system players can open (written once).
+Future<String> _chimeFile() async {
+  final data = await rootBundle.load('assets/sounds/startup.wav');
+  final file = File(p.join((await getTemporaryDirectory()).path, 'sidekick-startup.wav'));
+  if (!file.existsSync() || file.lengthSync() != data.lengthInBytes) {
+    await file.writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
+  }
+  return file.path;
+}
+
+typedef _PlaySoundNative = Int32 Function(Pointer<Utf16> sound, IntPtr module, Uint32 flags);
+typedef _PlaySoundDart = int Function(Pointer<Utf16> sound, int module, int flags);
+
+/// Kept for the life of the app: an asynchronous PlaySound may still be
+/// reading the name after the call returns.
+Pointer<Utf16>? _windowsPath;
+
+void _playOnWindows(String path) {
+  const sndAsync = 0x0001, sndNoDefault = 0x0002, sndFilename = 0x00020000;
+  final playSound = DynamicLibrary.open('winmm.dll').lookupFunction<_PlaySoundNative, _PlaySoundDart>('PlaySoundW');
+  final name = _windowsPath ??= path.toNativeUtf16();
+  playSound(name, 0, sndFilename | sndAsync | sndNoDefault);
 }

@@ -31,7 +31,11 @@ class Discovery {
   /// When we last answered each address directly, to keep replies rare.
   final Map<String, DateTime> _lastDirectReply = {};
 
+  /// Starts listening and announcing. Calling it again restarts, which
+  /// re-joins multicast on the current network interfaces (after a Wi-Fi
+  /// switch or waking from sleep the old membership hears nothing).
   Future<void> start() async {
+    await stop();
     final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port, reuseAddress: true);
     socket.multicastLoopback = false;
     try {
@@ -58,9 +62,13 @@ class Discovery {
         // can still announce; AppState.scanNetwork finds the rest.
       }
     }
-    socket.listen((event) {
-      if (event == RawSocketEvent.read) _onRead(socket);
-    });
+    socket.listen(
+      (event) {
+        if (event == RawSocketEvent.read) _onRead(socket);
+      },
+      // The network went away; AppState restarts discovery when it's back.
+      onError: (Object _) {},
+    );
     _socket = socket;
     announce(askForReplies: true);
     _timer = Timer.periodic(interval, (_) => announce());
@@ -109,17 +117,23 @@ class Discovery {
 
   Future<void> stop() async {
     _timer?.cancel();
+    _timer = null;
     _socket?.close();
     _socket = null;
   }
 }
 
 /// This machine's LAN IPv4 addresses, for showing "reach me at" hints.
+/// Never throws: some phones refuse to list interfaces now and then.
 Future<List<String>> localAddresses() async {
-  final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
-  return [
-    for (final nic in interfaces)
-      for (final a in nic.addresses)
-        if (!a.isLoopback && !a.isLinkLocal) a.address,
-  ];
+  try {
+    final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+    return [
+      for (final nic in interfaces)
+        for (final a in nic.addresses)
+          if (!a.isLoopback && !a.isLinkLocal) a.address,
+    ];
+  } catch (_) {
+    return const [];
+  }
 }

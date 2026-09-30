@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import Flutter
 import UIKit
 
@@ -23,6 +24,16 @@ import UIKit
         switch call.method {
         case "setKeepAlive":
           keepAlive.set((call.arguments as? [String: Any])?["on"] as? Bool ?? false)
+          result(nil)
+        case "playSound":
+          // A system sound: short, mixes with other audio, and follows the
+          // ringer volume and the silent switch.
+          if let path = (call.arguments as? [String: Any])?["path"] as? String {
+            var sound: SystemSoundID = 0
+            if AudioServicesCreateSystemSoundID(URL(fileURLWithPath: path) as CFURL, &sound) == kAudioServicesNoError {
+              AudioServicesPlaySystemSoundWithCompletion(sound) { AudioServicesDisposeSystemSoundID(sound) }
+            }
+          }
           result(nil)
         default:
           result(FlutterMethodNotImplemented)
