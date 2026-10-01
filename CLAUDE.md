@@ -143,6 +143,17 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.5.0
+- **Pair with a QR code** (Connect device → QR code), alongside the 6-digit
+  code:
+  - Every device shows a one-time code (5 minutes, one device). iPhone,
+    Android and Mac scan it with the camera and pair with nothing to type,
+    over Wi-Fi or Bluetooth.
+  - The scanner only accepts the device whose certificate is in the code.
+  - The 6-digit code screen shows its QR too, and the code entry has
+    "Scan the QR code instead".
+  - Camera permission on iPhone, Mac and Android.
+
 ### 2.4.1
 - **The owner's own sounds:** app startup, a new file request, request
   accepted and request declined (`tool/sounds/`, prepared into WAV by
