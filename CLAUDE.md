@@ -148,6 +148,16 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Versions
 
+### 2.5.1
+- **Sounds play on the Mac:** the chime file went to a folder that didn't
+  exist on a Mac (`~/Library/Caches/<app id>`), so no sound ever played;
+  it's created now, and sounds use AVAudioPlayer.
+- **iPhone sounds** use the media volume (system sounds were muted by the
+  silent switch); **Android** keeps its player until the sound ends, on
+  the media volume.
+- Turning Settings → Sound on plays the chime.
+- **Only phones scan QR codes:** Mac and Windows just show theirs.
+
 ### 2.5.0
 - **Pair with a QR code** (Connect device → QR code), alongside the 6-digit
   code:
