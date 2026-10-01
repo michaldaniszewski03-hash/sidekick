@@ -243,16 +243,17 @@ class PeerClient {
 
   /// Asks the device to show a pairing code. Returns who it is and the
   /// certificate it presented.
-  Future<PairingTarget> requestPairing(DeviceInfo me, {required String myFingerprint}) async {
+  ///
+  /// With [invite], we scanned its QR code: it shows no code, and pairing
+  /// uses the QR code's secret.
+  Future<PairingTarget> requestPairing(DeviceInfo me, {required String myFingerprint, bool invite = false}) async {
     Map<String, dynamic> json;
     String? seen;
+    final body = {'device': me.toJson(), 'fingerprint': myFingerprint, if (invite) 'invite': true};
     if (ble != null) {
-      json = await _postJson('/v1/pair/request', {
-        'device': me.toJson(),
-        'fingerprint': myFingerprint,
-      }) as Map<String, dynamic>;
+      json = await _postJson('/v1/pair/request', body) as Map<String, dynamic>;
     } else {
-      final res = await _send('POST', '/v1/pair/request', json: {'device': me.toJson(), 'fingerprint': myFingerprint});
+      final res = await _send('POST', '/v1/pair/request', json: body);
       seen = res.certificate == null ? null : fingerprintOf(res.certificate!.der);
       json = jsonDecode(await utf8.decodeStream(res)) as Map<String, dynamic>;
     }

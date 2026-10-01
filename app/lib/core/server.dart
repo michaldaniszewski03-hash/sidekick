@@ -36,6 +36,12 @@ class PairRequested extends ServerEvent {
   final PairingRequest request;
 }
 
+/// A device scanned our QR code and is pairing with it; no code to show.
+class InviteScanned extends ServerEvent {
+  InviteScanned(this.device);
+  final DeviceInfo device;
+}
+
 /// Pairing finished. [device] is how we reach the new peer.
 class Paired extends ServerEvent {
   Paired(this.device);
@@ -215,6 +221,7 @@ class SidekickServer {
   Stream<ServerEvent> get events => _events.stream;
 
   final Map<String, PairingRequest> _pending = {};
+  PairingInvite? _invite;
   HttpServer? _server;
 
   int get port => _server?.port ?? 0;
@@ -237,6 +244,21 @@ class SidekickServer {
 
   /// Cancels a pairing request, e.g. when the user dismisses the PIN dialog.
   void cancelPairing(String deviceId) => _pending.remove(deviceId)?.cancelled = true;
+
+  /// A new QR code invitation (the previous one stops working).
+  PairingInvite createInvite() {
+    _invite?.cancelled = true;
+    return _invite = PairingInvite();
+  }
+
+  /// The QR code was closed: nobody can pair with it any more.
+  void cancelInvite(PairingInvite invite) {
+    invite.cancelled = true;
+    if (identical(_invite, invite)) _invite = null;
+    for (final request in _pending.values) {
+      if (identical(request.invite, invite)) request.cancelled = true;
+    }
+  }
 
   /// The request handler, shared by the Wi-Fi (HTTP) server and Bluetooth.
   late final Handler handler = _handler();
@@ -368,8 +390,9 @@ class SidekickServer {
 
   // -------------------------------------------------------------- pairing
 
-  /// Body: `{device, fingerprint}`. Shows a PIN on this device. Returns our
-  /// identity and certificate fingerprint.
+  /// Body: `{device, fingerprint, invite?}`. Shows a PIN on this device, or
+  /// with `invite: true` (the requester scanned our QR code) uses the QR
+  /// code's secret instead. Returns our identity and certificate fingerprint.
   Future<Response> _pairRequest(Request r) async {
     final body = await _body(r);
     final device = DeviceInfo.fromJson(body['device'] as Map<String, dynamic>, address: _remoteAddress(r));
@@ -381,13 +404,26 @@ class SidekickServer {
     final reply = {'ok': true, 'device': self().toJson(), 'fingerprint': identity.fingerprint};
     // A retry while the code is still on screen keeps the same code, and a
     // noisy network can't stack up dialogs.
+    final viaInvite = body['invite'] == true;
     final existing = _pending[device.id];
-    if (existing != null && existing.isOpen && existing.fingerprint == fingerprint) return _json(reply);
+    if (existing != null &&
+        existing.isOpen &&
+        existing.fingerprint == fingerprint &&
+        (existing.invite != null) == viaInvite) {
+      return _json(reply);
+    }
+    final invite = _invite;
+    if (viaInvite && (invite == null || !invite.isOpen)) {
+      return _error(410, 'That QR code has expired. Show a new one and scan again.');
+    }
     _pending.removeWhere((_, r) => !r.isOpen);
-    if (_pending.length >= 3) return _error(429, 'Too many pairing requests. Try again in a minute.');
-    final request = PairingRequest(device, fingerprint: fingerprint);
+    if (_pending.length >= 3 && existing == null) {
+      return _error(429, 'Too many pairing requests. Try again in a minute.');
+    }
+    existing?.cancelled = true;
+    final request = PairingRequest(device, fingerprint: fingerprint, invite: viaInvite ? invite : null);
     _pending[device.id] = request;
-    _events.add(PairRequested(request));
+    _events.add(viaInvite ? InviteScanned(device) : PairRequested(request));
     return _json(reply);
   }
 
@@ -457,6 +493,12 @@ class SidekickServer {
     }
     if (theirToken.length < 32) return _error(400, 'Token too short');
     _pending.remove(id);
+    // A QR code pairs one device.
+    final invite = request.invite;
+    if (invite != null) {
+      invite.used = true;
+      if (identical(_invite, invite)) _invite = null;
+    }
 
     final ourToken = newToken();
     final device = request.device;

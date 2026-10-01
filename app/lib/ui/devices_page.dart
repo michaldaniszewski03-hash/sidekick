@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
+import '../core/pairing_qr.dart';
 import 'bluetooth_pairing.dart';
+import 'qr_pairing.dart';
 import 'widgets.dart';
 
 class DevicesPage extends StatelessWidget {
@@ -56,6 +58,14 @@ class DevicesPage extends StatelessWidget {
                     onPressed: () => showBluetoothPairing(context, state),
                     child: const _MenuOption(title: 'Bluetooth', detail: 'When there\'s no shared Wi-Fi'),
                   ),
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.qr_code_2_rounded),
+                  onPressed: () => showMyQrCode(context, state),
+                  child: _MenuOption(
+                    title: 'QR code',
+                    detail: canScanQr ? 'Show or scan a code, nothing to type' : 'Show a code to scan with your phone',
+                  ),
+                ),
                 MenuItemButton(
                   leadingIcon: const Icon(Icons.dialpad_rounded),
                   onPressed: () => _addByIp(context),
@@ -192,19 +202,7 @@ Future<void> pairWith(BuildContext context, AppState state, DeviceInfo device) a
     barrierDismissible: false,
     builder: (context) => _EnterPinDialog(state: state, device: device),
   );
-  if (paired != null && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: Theme.of(context).colorScheme.inversePrimary),
-            const SizedBox(width: 12),
-            Expanded(child: Text('Paired with ${paired.name}')),
-          ],
-        ),
-      ),
-    );
-  }
+  if (paired != null && context.mounted) showPaired(context, paired);
 }
 
 class _EnterPinDialog extends StatefulWidget {
@@ -239,6 +237,20 @@ class _EnterPinDialogState extends State<_EnterPinDialog> {
     }
   }
 
+  /// Scans the QR code next to the 6-digit code instead of typing it.
+  Future<void> _scan() async {
+    final code = await scanPairingQr(context);
+    if (code == null || !mounted) return;
+    if (code is! PinQr || code.id != widget.device.id) {
+      setState(
+        () => _error = "That's not the code ${widget.device.name} is showing. Scan the one next to the 6 digits.",
+      );
+      return;
+    }
+    _controller.text = code.pin;
+    await _submit();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -268,6 +280,14 @@ class _EnterPinDialogState extends State<_EnterPinDialog> {
             ),
           ),
           if (_busy) const Padding(padding: EdgeInsets.only(top: 16), child: LinearProgressIndicator()),
+          if (canScanQr) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _scan,
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              label: const Text('Scan the QR code instead'),
+            ),
+          ],
         ],
       ),
       actions: [

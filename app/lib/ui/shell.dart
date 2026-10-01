@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
+import '../core/pairing_qr.dart';
 import '../core/server.dart';
 import '../core/trust.dart';
 import '../platform/sound.dart';
 import 'devices_page.dart';
 import 'files_page.dart';
+import 'qr_pairing.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
 import 'transfer_screens.dart';
@@ -95,7 +97,7 @@ class _ShellState extends State<Shell> {
     final cancelled = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _PinDialog(request: request, done: done),
+      builder: (context) => _PinDialog(request: request, done: done, selfId: state.id),
     );
     if (cancelled ?? true) state.cancelPairing(request.device.id);
   }
@@ -210,8 +212,11 @@ class _ShellState extends State<Shell> {
 }
 
 class _PinDialog extends StatefulWidget {
-  const _PinDialog({required this.request, required this.done});
+  const _PinDialog({required this.request, required this.done, required this.selfId});
   final PairingRequest request;
+
+  /// This device's id, in the QR code: the scanner checks it's ours.
+  final String selfId;
   final Future<Object> done;
 
   @override
@@ -263,6 +268,16 @@ class _PinDialogState extends State<_PinDialog> {
               ),
             ),
           ),
+          // A phone or Mac can scan this instead of typing the digits.
+          if (scansQr(widget.request.device.platform)) ...[
+            const SizedBox(height: 16),
+            Text('or scan it:', style: TextStyle(color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            PairingQrCode(
+              data: PinQr(id: widget.selfId, pin: pin).encode(),
+              size: 150,
+            ),
+          ],
           const SizedBox(height: 16),
           Text(
             'Only pair with devices you own. A paired device can send and browse files and use the mouse and keyboard.',

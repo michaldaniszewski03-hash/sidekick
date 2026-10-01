@@ -59,9 +59,13 @@ class TrustStore {
 /// An incoming request to pair, waiting for the user on the other device to
 /// type the [pin] we display.
 class PairingRequest {
-  PairingRequest(this.device, {required this.fingerprint})
-    : pin = _newPin(),
+  PairingRequest(this.device, {required this.fingerprint, this.invite})
+    : pin = invite?.secret ?? _newPin(),
       expires = DateTime.now().add(const Duration(minutes: 2));
+
+  /// Set when the requester scanned our QR code: the code is the invite's
+  /// secret, so nothing is shown and nobody types anything.
+  final PairingInvite? invite;
 
   final DeviceInfo device;
 
@@ -79,5 +83,25 @@ class PairingRequest {
 
   static const maxAttempts = 5;
 
-  bool get isOpen => !cancelled && attempts < maxAttempts && DateTime.now().isBefore(expires);
+  bool get isOpen =>
+      !cancelled && attempts < maxAttempts && DateTime.now().isBefore(expires) && (invite == null || invite!.isOpen);
+}
+
+/// A QR code shown on this device: whoever scans it can pair without typing
+/// a code. Its [secret] stands in for the 6-digit code in SPAKE2 (so only a
+/// device that saw the QR can finish pairing) and it works once, for 5
+/// minutes.
+class PairingInvite {
+  PairingInvite()
+    : secret = base64Url.encode(List<int>.generate(18, (_) => _random.nextInt(256))),
+      expires = DateTime.now().add(lifetime);
+
+  static const lifetime = Duration(minutes: 5);
+
+  final String secret;
+  final DateTime expires;
+  bool used = false;
+  bool cancelled = false;
+
+  bool get isOpen => !used && !cancelled && DateTime.now().isBefore(expires);
 }

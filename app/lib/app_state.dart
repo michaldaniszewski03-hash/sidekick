@@ -15,6 +15,7 @@ import 'core/client.dart';
 import 'core/crypto.dart';
 import 'core/discovery.dart';
 import 'core/models.dart';
+import 'core/pairing_qr.dart';
 import 'core/server.dart';
 import 'core/trust.dart';
 import 'platform/android.dart';
@@ -220,10 +221,14 @@ class AppState extends ChangeNotifier {
   /// arriving, and a request being accepted or declined.
   bool sound = true;
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
+  final _inviteScans = StreamController<DeviceInfo>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
 
   /// Someone wants to pair with us: show the PIN.
   Stream<PairingRequest> get pairRequests => _pairRequests.stream;
+
+  /// A device scanned our QR code and is pairing with it.
+  Stream<DeviceInfo> get inviteScans => _inviteScans.stream;
 
   /// A pairing finished (either direction).
   Stream<PairedDevice> get pairedEvents => _pairedEvents.stream;
@@ -944,9 +949,90 @@ class AppState extends ChangeNotifier {
   Future<PairedDevice> confirmPairing(DeviceInfo target, String pin) async {
     final pairing = _pairTargets[target.id];
     if (pairing == null) throw SidekickException('Start pairing again.');
-    final result = await _clientForTarget(target)
-        .confirmPairing(myId: id, myFingerprint: identity.fingerprint, target: pairing, pin: pin);
+    final device = await _finishPairing(_clientForTarget(target), pairing, pin);
     _pairTargets.remove(target.id);
+    return device;
+  }
+
+  /// A QR code for "Show QR code": scanning it pairs with this device, no
+  /// code to type. Close it with [cancelInvite].
+  ({PairingInvite invite, String qr}) createInvite() {
+    final invite = server.createInvite();
+    final qr = InviteQr(
+      id: id,
+      name: name,
+      platform: me.platform,
+      addresses: addresses,
+      port: server.port == 0 ? sidekickPort : server.port,
+      fingerprint: identity.fingerprint,
+      secret: invite.secret,
+    );
+    return (invite: invite, qr: qr.encode());
+  }
+
+  void cancelInvite(PairingInvite invite) => server.cancelInvite(invite);
+
+  /// Pairs with the device whose QR code we scanned: over Wi-Fi at one of
+  /// its addresses (only if it presents the certificate in the QR code), or
+  /// over Bluetooth when it's out of the network's reach.
+  Future<PairedDevice> pairWithInvite(InviteQr qr) async {
+    if (qr.id == id) throw SidekickException("That's this device's own QR code. Scan it with the other device.");
+    final client = await _reachInvite(qr);
+    final target = await client.requestPairing(me, myFingerprint: identity.fingerprint, invite: true);
+    if (target.device.id != qr.id || target.fingerprint != qr.fingerprint) {
+      throw SidekickException("That device doesn't match the QR code. Show a new code and scan again.");
+    }
+    return _finishPairing(client, target, qr.secret);
+  }
+
+  Future<PeerClient> _reachInvite(InviteQr qr) async {
+    final known = _nearby[qr.id]?.info.address;
+    final hosts = {?known, ...qr.addresses};
+    if (hosts.isNotEmpty && addresses.isNotEmpty) {
+      // Try every address at once; the first that answers as the device in
+      // the QR code (certificate pinned) wins.
+      final found = Completer<PeerClient?>();
+      var left = hosts.length;
+      for (final host in hosts) {
+        final client = PeerClient(host: host, port: qr.port, fingerprint: qr.fingerprint);
+        unawaited(
+          client
+              .info(timeout: const Duration(seconds: 3))
+              .then((info) {
+                if (info.id != qr.id) throw StateError('another device');
+                _onFound(info);
+                if (!found.isCompleted) found.complete(client);
+              })
+              .catchError((Object _) {
+                if (--left == 0 && !found.isCompleted) found.complete(null);
+              }),
+        );
+      }
+      final client = await found.future;
+      if (client != null) return client;
+    }
+    // Not on this network: look for it over Bluetooth.
+    final bt = bluetooth;
+    if (bt != null && _bleSeen[qr.id] == null) {
+      await bt.refresh();
+      if (bt.canScan) await bt.scan();
+    }
+    final sighting = _bleSeen[qr.id];
+    if (sighting == null || bt == null) {
+      throw SidekickException(
+        "Can't reach ${qr.name}. Put both devices on the same Wi-Fi, or turn on Bluetooth on both, then scan again.",
+      );
+    }
+    return PeerClient.bluetooth(bt.clientFor(sighting.bleId));
+  }
+
+  Future<PairedDevice> _finishPairing(PeerClient client, PairingTarget pairing, String pin) async {
+    final result = await client.confirmPairing(
+      myId: id,
+      myFingerprint: identity.fingerprint,
+      target: pairing,
+      pin: pin,
+    );
     trust.add(
       TrustedPeer(
         id: result.device.id,
@@ -994,6 +1080,8 @@ class AppState extends ChangeNotifier {
     switch (event) {
       case PairRequested(:final request):
         _pairRequests.add(request);
+      case InviteScanned(:final device):
+        _inviteScans.add(device);
       case TransferOffered(:final offer):
         _offers.add(offer);
       case Paired(:final device):

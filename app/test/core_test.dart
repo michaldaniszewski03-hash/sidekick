@@ -7,6 +7,7 @@ import 'package:sidekick/core/client.dart';
 import 'package:sidekick/core/crypto.dart';
 import 'package:sidekick/core/discovery.dart';
 import 'package:sidekick/core/models.dart';
+import 'package:sidekick/core/pairing_qr.dart';
 import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/platform/device_name.dart';
@@ -221,6 +222,107 @@ void main() {
     final pin = (await requested).request.pin;
     pc.server.cancelPairing(phone.id);
     await expectLater(phone.confirmWith(pc, target, pin), throwsA(isA<SidekickException>()));
+  });
+
+  group('QR code pairing', () {
+    /// The PC shows a QR code; returns the invite and what the code says.
+    (PairingInvite, InviteQr) showQr() {
+      final invite = pc.server.createInvite();
+      final qr = InviteQr(
+        id: pc.id,
+        name: pc.name,
+        platform: DevicePlatform.windows,
+        addresses: ['127.0.0.1'],
+        port: pc.server.port,
+        fingerprint: pc.identity.fingerprint,
+        secret: invite.secret,
+      );
+      return (invite, PairingQr.parse(qr.encode()) as InviteQr);
+    }
+
+    Future<PairingTarget> scan(InviteQr qr) => PeerClient(
+      host: qr.addresses.first,
+      port: qr.port,
+      fingerprint: qr.fingerprint,
+    ).requestPairing(phone.info, myFingerprint: phone.identity.fingerprint, invite: true);
+
+    test('scanning pairs without showing a code, once', () async {
+      final (_, qr) = showQr();
+      var codes = 0;
+      final sub = pc.server.events.only<PairRequested>().listen((_) => codes++);
+      final scanned = pc.server.events.only<InviteScanned>().first;
+      final paired = pc.server.events.only<Paired>().first;
+      final target = await scan(qr);
+      expect((await scanned).device.id, phone.id);
+      final result = await phone.confirmWith(pc, target, qr.secret);
+      expect(result.device.id, pc.id);
+      expect((await paired).device.id, phone.id);
+      expect(pc.trust.byId(phone.id), isNotNull);
+      expect(codes, 0, reason: 'nothing to type, so no code on screen');
+      await sub.cancel();
+
+      // The same QR code doesn't pair anything else.
+      final other = Node('tablet', tmp);
+      await expectLater(
+        PeerClient(
+          host: '127.0.0.1',
+          port: qr.port,
+          fingerprint: qr.fingerprint,
+        ).requestPairing(other.info, myFingerprint: other.identity.fingerprint, invite: true),
+        throwsA(isA<SidekickException>().having((e) => e.status, 'status', 410)),
+      );
+    });
+
+    test('the secret is the code: a wrong one fails', () async {
+      final (_, qr) = showQr();
+      final target = await scan(qr);
+      await expectLater(phone.confirmWith(pc, target, '123456'), throwsA(isA<SidekickException>()));
+      expect(pc.trust.peers, isEmpty);
+    });
+
+    test('a closed QR code stops working', () async {
+      final (invite, qr) = showQr();
+      final target = await scan(qr);
+      pc.server.cancelInvite(invite);
+      await expectLater(phone.confirmWith(pc, target, qr.secret), throwsA(isA<SidekickException>()));
+      await expectLater(scan(qr), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 410)));
+    });
+
+    test('a QR code with another fingerprint is refused (look-alike device)', () async {
+      final (_, qr) = showQr();
+      final fake = InviteQr(
+        id: qr.id,
+        name: qr.name,
+        platform: qr.platform,
+        addresses: qr.addresses,
+        port: qr.port,
+        fingerprint: phone.identity.fingerprint,
+        secret: qr.secret,
+      );
+      await expectLater(scan(fake), throwsA(isA<SidekickException>()));
+    });
+
+    test('codes round-trip and junk is ignored', () {
+      final pin = PairingQr.parse(const PinQr(id: 'abc', pin: '042917').encode());
+      expect(pin, isA<PinQr>().having((q) => q.pin, 'pin', '042917').having((q) => q.id, 'id', 'abc'));
+      final invite = InviteQr(
+        id: 'abc',
+        name: 'Michał’s Mac & co',
+        platform: DevicePlatform.macos,
+        addresses: [],
+        port: 53318,
+        fingerprint: 'a' * 64,
+        secret: newToken(),
+      );
+      final back = PairingQr.parse(invite.encode()) as InviteQr;
+      expect(back.name, invite.name);
+      expect(back.platform, DevicePlatform.macos);
+      expect(back.addresses, isEmpty);
+      expect(back.secret, invite.secret);
+      for (final junk in ['', 'hello', 'https://example.com', 'sidekick://pin?id=a&c=12', 'sidekick://pair?id=a']) {
+        expect(PairingQr.parse(junk), isNull, reason: junk);
+      }
+    });
   });
 
   /// Offers [files] to the PC and has the PC accept; returns the ticket.

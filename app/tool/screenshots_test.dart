@@ -17,6 +17,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidekick/app_state.dart';
+import 'package:sidekick/core/client.dart';
 import 'package:sidekick/core/crypto.dart';
 import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
@@ -148,7 +149,20 @@ void main() {
     await shot('1-devices');
     await tester.tap(find.text('Connect device'));
     await shot('1b-devices-connect-menu');
-    await tester.tapAt(const Offset(640, 700)); // close the menu
+    // QR code pairing: this device's code, then the 6-digit code with its QR
+    // (an iPhone asking, so it can scan).
+    await tester.tap(find.text('QR code'));
+    await shot('1c-qr-code');
+    await tester.tap(find.text('Close'));
+    await settle();
+    await tester.runAsync(
+      () => PeerClient(host: '127.0.0.1', port: state.server.port).requestPairing(
+        DeviceInfo(id: newDeviceId(), name: 'iPhone 17', platform: DevicePlatform.ios, port: 1),
+        myFingerprint: Identity.generate().fingerprint,
+      ),
+    );
+    await shot('1d-pin-with-qr');
+    await tester.tap(find.text('Cancel'));
     await settle();
     await tester.tap(find.text('Files').last);
     await shot('2-files', waitForData: true);
@@ -177,6 +191,14 @@ void main() {
       await tester.tap(find.text(tab).last);
       await shot('phone-$name', waitForData: name == 'files' || name == 'remote');
     }
+    await tester.tap(find.text('Devices').last);
+    await settle();
+    await tester.tap(find.text('Connect device'));
+    await settle();
+    await tester.tap(find.text('QR code'));
+    await shot('phone-qr-code');
+    await tester.tap(find.text('Close'));
+    await settle();
 
     // The welcome flow on a phone.
     state.welcomed = false;

@@ -26,6 +26,9 @@ its biggest features and fixes, and bumps the website links (see
   - `client.dart`: `PeerClient`, over HTTPS (pinned certificate) or Bluetooth.
   - `crypto.dart`: identity certificates, SPAKE2 pairing, AES-GCM sealing,
     security codes.
+  - `pairing_qr.dart`: what pairing QR codes say. `sidekick://pair?…` (an
+    invite: id, name, addresses, port, certificate fingerprint, one-time
+    secret) and `sidekick://pin?id=&c=` (the 6-digit code as a QR).
   - `ble_protocol.dart`: Bluetooth message framing, chunking, sealing, and
     the request dispatcher.
   - `bluetooth.dart`: `BluetoothService` (scan, identify, links,
@@ -35,6 +38,11 @@ its biggest features and fixes, and bumps the website links (see
     the `bluetooth_low_energy` plugin on Android and Windows.
 - `app/lib/ui/`: screens. `transfer_screens.dart` holds the sender's full
   screen and the receiver's Accept/Decline card.
+  - `qr_pairing.dart`: pairing by QR code (Connect device → QR code).
+    Every device can show its code; iPhone, Android and Mac can scan
+    (`mobile_scanner`; Windows has no scanner, it shows codes and types the
+    6 digits). The 6-digit code screen also shows its QR when the other
+    device can scan.
   - `startup.dart`: the startup animation (every platform; a tap skips it,
     reduced motion turns it off).
   - `widgets.dart` has the shared pieces: `PageFrame`, `SectionLabel` (with
@@ -104,6 +112,12 @@ its biggest features and fixes, and bumps the website links (see
     A mismatch is refused as "Pairing keys don't match" and the app shows
     "Pair again"; a failed decrypt with the same key means a damaged packet.
     Every refusal is written to the receiver's Bluetooth log.
+- Pairing is SPAKE2 with either the 6-digit code or a QR invite's secret
+  (`PairingInvite`: 5 minutes, one device, closed with the dialog). The
+  scanner only talks to the address that presents the QR code's
+  certificate fingerprint, and falls back to Bluetooth. Camera: iOS and Mac
+  `NSCameraUsageDescription`, Mac `device.camera` entitlement; Android's
+  permission comes from the plugin.
 - Devices announce their release (`DeviceInfo.app`, "2.2.0"); a paired card
   shows "Update Sidekick on it" when the other device runs an older one.
 - There is no Media feature (removed in 2.2.0: iPhones can't control other
