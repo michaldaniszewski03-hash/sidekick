@@ -12,9 +12,6 @@
 	<true/>
 	<key>com.apple.security.device.bluetooth</key>
 	<true/>
-	<!-- Scanning a pairing QR code (Connect device → QR code). -->
-	<key>com.apple.security.device.camera</key>
-	<true/>
 	<!-- The file picker (Send files, Save received files to…) refuses to open
 	     without this, even though the app isn't sandboxed. -->
 	<key>com.apple.security.files.user-selected.read-write</key>

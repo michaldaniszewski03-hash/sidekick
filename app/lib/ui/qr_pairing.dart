@@ -11,13 +11,12 @@ import '../core/pairing_qr.dart';
 import '../core/trust.dart';
 import 'widgets.dart';
 
-/// Devices with a camera Sidekick can scan with. Windows only shows codes
-/// (and types the 6-digit one).
-bool get canScanQr => Platform.isIOS || Platform.isAndroid || Platform.isMacOS;
+/// Only phones scan. Mac and Windows show their code (and type the 6-digit
+/// one): a computer's camera faces the user, not another screen.
+bool get canScanQr => Platform.isIOS || Platform.isAndroid;
 
 /// Whether a device on [platform] can scan a QR code shown here.
-bool scansQr(DevicePlatform platform) =>
-    const {DevicePlatform.ios, DevicePlatform.android, DevicePlatform.macos}.contains(platform);
+bool scansQr(DevicePlatform platform) => const {DevicePlatform.ios, DevicePlatform.android}.contains(platform);
 
 /// A QR code, dark on white whatever the theme (cameras want contrast), with
 /// the "sk" tile in the middle.
@@ -159,7 +158,7 @@ class _MyQrDialogState extends State<_MyQrDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text(
-            'On your phone or Mac, open Sidekick, tap Connect device, then QR code, '
+            'On your phone, open Sidekick, tap Connect device, then QR code, '
             'then Scan a code, and point it here.',
             textAlign: TextAlign.center,
           ),

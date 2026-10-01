@@ -39,10 +39,11 @@ its biggest features and fixes, and bumps the website links (see
 - `app/lib/ui/`: screens. `transfer_screens.dart` holds the sender's full
   screen and the receiver's Accept/Decline card.
   - `qr_pairing.dart`: pairing by QR code (Connect device → QR code).
-    Every device can show its code; iPhone, Android and Mac can scan
-    (`mobile_scanner`; Windows has no scanner, it shows codes and types the
-    6 digits). The 6-digit code screen also shows its QR when the other
-    device can scan.
+    Every device can show its code; only iPhone and Android scan
+    (`mobile_scanner`). Mac and Windows never offer scanning (the owner's
+    call: their cameras can't scan another screen); they show codes and
+    type the 6 digits. The 6-digit code screen also shows its QR when the
+    other device is a phone.
   - `startup.dart`: the startup animation (every platform; a tap skips it,
     reduced motion turns it off).
   - `widgets.dart` has the shared pieces: `PageFrame`, `SectionLabel` (with
@@ -119,9 +120,9 @@ its biggest features and fixes, and bumps the website links (see
 - Pairing is SPAKE2 with either the 6-digit code or a QR invite's secret
   (`PairingInvite`: 5 minutes, one device, closed with the dialog). The
   scanner only talks to the address that presents the QR code's
-  certificate fingerprint, and falls back to Bluetooth. Camera: iOS and Mac
-  `NSCameraUsageDescription`, Mac `device.camera` entitlement; Android's
-  permission comes from the plugin.
+  certificate fingerprint, and falls back to Bluetooth. Camera: iOS
+  `NSCameraUsageDescription`; Android's permission comes from the plugin.
+  The Mac has no camera permission (it never scans).
 - Devices announce their release (`DeviceInfo.app`, "2.2.0"); a paired card
   shows "Update Sidekick on it" when the other device runs an older one.
 - There is no Media feature (removed in 2.2.0: iPhones can't control other
