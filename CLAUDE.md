@@ -103,6 +103,10 @@ its biggest features and fixes, and bumps the website links (see
     receive screens.
   - The first also renders the startup animation as `startup-NN.png`
     frames (50 ms apart).
+  - `flutter test tool/qr_shots_test.dart --plain-name mac` (then
+    `iphone`, with `SIDEKICK_CAMERA=` a picture for the camera) renders the
+    QR pairing screens at 2x/3x for ads; `SIDEKICK_FONTS=` a folder of
+    Inter TTFs stands in for San Francisco.
   - Output goes to `build/screenshots/`.
 - Swift can't be compiled here. CI (`ios` and `macos` jobs) is the check.
 - Bluetooth:

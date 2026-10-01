@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -13,7 +12,10 @@ import 'widgets.dart';
 
 /// Only phones scan. Mac and Windows show their code (and type the 6-digit
 /// one): a computer's camera faces the user, not another screen.
-bool get canScanQr => Platform.isIOS || Platform.isAndroid;
+bool get canScanQr => hostIsIOS || hostIsAndroid;
+
+/// Lets the screenshot tool show a picture where the camera would be.
+WidgetBuilder? debugScannerPreview;
 
 /// Whether a device on [platform] can scan a QR code shown here.
 bool scansQr(DevicePlatform platform) => const {DevicePlatform.ios, DevicePlatform.android}.contains(platform);
@@ -311,7 +313,8 @@ class _Scanner extends StatefulWidget {
 }
 
 class _ScannerState extends State<_Scanner> {
-  final _controller = MobileScannerController(
+  final _preview = debugScannerPreview;
+  late final _controller = MobileScannerController(
     formats: const [BarcodeFormat.qrCode],
     detectionSpeed: DetectionSpeed.noDuplicates,
   );
@@ -320,7 +323,7 @@ class _ScannerState extends State<_Scanner> {
 
   @override
   void dispose() {
-    unawaited(_controller.dispose());
+    if (_preview == null) unawaited(_controller.dispose());
     super.dispose();
   }
 
@@ -351,11 +354,14 @@ class _ScannerState extends State<_Scanner> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-            errorBuilder: (context, error) => _CameraProblem(error),
-          ),
+          if (_preview != null)
+            _preview(context)
+          else
+            MobileScanner(
+              controller: _controller,
+              onDetect: _onDetect,
+              errorBuilder: (context, error) => _CameraProblem(error),
+            ),
           // The frame to aim with.
           IgnorePointer(
             child: Center(
