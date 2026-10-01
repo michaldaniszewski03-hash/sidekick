@@ -1,3 +1,4 @@
+import AVFoundation
 import ApplicationServices
 import Cocoa
 import FlutterMacOS
@@ -29,8 +30,24 @@ class MainFlutterWindow: NSWindow {
 /// (needs the Accessibility permission).
 final class SidekickNative {
   private let input = MacInput()
-  /// Held until it finishes, or NSSound stops playing it.
+  /// Held until they finish: a player that's let go stops at once.
+  private var players: [AVAudioPlayer] = []
   private var sound: NSSound?
+
+  /// Sidekick's sounds: AVAudioPlayer, or NSSound if that can't open the file.
+  private func play(_ path: String) -> Bool {
+    players.removeAll { !$0.isPlaying }
+    if let player = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path)) {
+      players.append(player)
+      player.prepareToPlay()
+      if player.play() { return true }
+    }
+    guard let sound = NSSound(contentsOfFile: path, byReference: false) else { return false }
+    self.sound?.stop()
+    self.sound = sound
+    return sound.play()
+  }
+
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "permissions":
@@ -45,15 +62,11 @@ final class SidekickNative {
       }
       result(nil)
     case "playSound":
-      guard let path = (call.arguments as? [String: Any])?["path"] as? String,
-        let sound = NSSound(contentsOfFile: path, byReference: true)
-      else {
+      guard let path = (call.arguments as? [String: Any])?["path"] as? String else {
         result(false)
         return
       }
-      self.sound?.stop()
-      self.sound = sound
-      result(sound.play())
+      result(play(path))
     case "input":
       if let msg = call.arguments as? [String: Any] { input.handle(msg) }
       result(AXIsProcessTrusted())

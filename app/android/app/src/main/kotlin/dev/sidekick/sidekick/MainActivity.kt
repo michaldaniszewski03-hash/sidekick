@@ -168,26 +168,36 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    /** The startup chime, as a UI sound: it follows silent mode. */
+    /** Sidekick's sounds, held until they finish: a MediaPlayer nobody
+     *  holds can be garbage-collected mid-sound and go quiet. */
+    private val players = mutableSetOf<MediaPlayer>()
+
+    /** Sidekick's sounds (startup, a request, accepted, declined), on the
+     *  media volume: the "system sounds" volume is muted on many phones. */
     private fun playSound(path: String) {
         val player = MediaPlayer()
+        players.add(player)
+        fun done(mp: MediaPlayer) {
+            players.remove(mp)
+            mp.release()
+        }
         try {
             player.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build(),
             )
             player.setDataSource(path)
-            player.setOnCompletionListener { it.release() }
+            player.setOnCompletionListener { done(it) }
             player.setOnErrorListener { mp, _, _ ->
-                mp.release()
+                done(mp)
                 true
             }
             player.prepare()
             player.start()
         } catch (e: Exception) {
-            player.release()
+            done(player)
         }
     }
 

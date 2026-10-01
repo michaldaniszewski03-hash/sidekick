@@ -49,12 +49,16 @@ its biggest features and fixes, and bumps the website links (see
     an icon), `IconTile` (tinted icon square for rows), `StatusPill`,
     `Entrance` (fade/slide-in cascade), `Radar` (searching), `GradientBadge`.
 - `app/lib/platform/`: per-OS glue (input, files, device names,
-  secret storage, hotspot, and the startup chime in `sound.dart`: afplay on
-  Mac, PlaySound on Windows, `playSound` on the `sidekick/ios` and
-  `sidekick/android` channels; the Mac uses NSSound on `sidekick/macos`).
+  secret storage, hotspot, and the sounds in `sound.dart`: PlaySound on
+  Windows, `playSound` on the `sidekick/macos`, `sidekick/ios` and
+  `sidekick/android` channels). Mac and iPhone use AVAudioPlayer, Android
+  MediaPlayer, all on the media volume and held until they finish (not
+  iPhone system sounds: muted by the silent switch). The WAV is copied to
+  the temp folder first; on the Mac that's `~/Library/Caches/<app id>`,
+  which must be created (it wasn't, and the Mac never played a sound).
   The sounds are the owner's own recordings in `app/tool/sounds/` (MP3),
   turned into `app/assets/sounds/*.wav` by `app/tool/prepare_sounds.py`
-  (WAV: Windows PlaySound and iPhone system sounds can't play MP3; silence
+  (WAV: Windows PlaySound can't play MP3; silence
   trimmed, soft fades, equal loudness). `appstartupchime` → startup.wav
   (launch), `newfilesendrequest` → request.wav (Accept/Decline card
   appears), `filerequest_accept` → accept.wav and `filerequest_deny` →

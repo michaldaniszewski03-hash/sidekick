@@ -1333,6 +1333,8 @@ class AppState extends ChangeNotifier {
   void setSound(bool value) {
     sound = value;
     _prefs.setBool('sound', value);
+    // Turning it on plays the startup chime, so you hear that it works.
+    if (value) unawaited(playStartupSound());
     notifyListeners();
   }
 

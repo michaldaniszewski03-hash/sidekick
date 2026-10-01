@@ -1,11 +1,11 @@
 import AVFoundation
-import AudioToolbox
 import Flutter
 import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let keepAlive = KeepAlive()
+  private let sounds = Sounds()
   private var ble: SidekickBLE?
 
   override func application(
@@ -20,19 +20,19 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SidekickIOS") {
       let channel = FlutterMethodChannel(name: "sidekick/ios", binaryMessenger: registrar.messenger())
       let keepAlive = self.keepAlive
+      let sounds = self.sounds
       channel.setMethodCallHandler { call, result in
         switch call.method {
         case "setKeepAlive":
           keepAlive.set((call.arguments as? [String: Any])?["on"] as? Bool ?? false)
           result(nil)
         case "playSound":
-          // A system sound: short, mixes with other audio, and follows the
-          // ringer volume and the silent switch.
+          // A regular player on the media volume, mixed with whatever else
+          // is playing. (A system sound was silent whenever the ring/silent
+          // switch was on or the ringer was turned down.) Settings → Sound
+          // turns Sidekick's sounds off.
           if let path = (call.arguments as? [String: Any])?["path"] as? String {
-            var sound: SystemSoundID = 0
-            if AudioServicesCreateSystemSoundID(URL(fileURLWithPath: path) as CFURL, &sound) == kAudioServicesNoError {
-              AudioServicesPlaySystemSoundWithCompletion(sound) { AudioServicesDisposeSystemSoundID(sound) }
-            }
+            sounds.play(path)
           }
           result(nil)
         default:
@@ -43,6 +43,24 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SidekickBLE") {
       ble = SidekickBLE.register(messenger: registrar.messenger())
     }
+  }
+}
+
+/// Plays Sidekick's sounds (startup, a request arriving, accepted, declined).
+final class Sounds {
+  /// Held until it finishes: a player that's let go stops at once.
+  private var players: [AVAudioPlayer] = []
+
+  func play(_ path: String) {
+    let session = AVAudioSession.sharedInstance()
+    // Same category as KeepAlive, so the two never fight over the session.
+    try? session.setCategory(.playback, options: [.mixWithOthers])
+    try? session.setActive(true)
+    guard let player = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path)) else { return }
+    players.removeAll { !$0.isPlaying }
+    players.append(player)
+    player.prepareToPlay()
+    player.play()
   }
 }
 

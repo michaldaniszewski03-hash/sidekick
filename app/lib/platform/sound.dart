@@ -9,14 +9,13 @@ import 'package:path_provider/path_provider.dart';
 
 /// Plays Sidekick's sounds on every platform, with what the system already
 /// has: no audio plugin. The sounds come from tool/sounds/ (prepared by
-/// tool/prepare_sounds.py): startup (Settings → Startup sound), and the
-/// transfer sounds (Settings → Transfer sounds): a request arriving, and a
-/// request accepted or declined.
+/// tool/prepare_sounds.py): startup, a request arriving, and a request
+/// accepted or declined. Settings → Sound turns them all off.
 ///
-/// * Mac: NSSound (falls back to `afplay`).
+/// * Mac: AVAudioPlayer (then NSSound, then `afplay`).
 /// * Windows: `PlaySound` from winmm.dll.
-/// * iPhone: a system sound (follows the ringer volume and silent switch).
-/// * Android: a UI sound (follows silent mode).
+/// * iPhone: AVAudioPlayer on the media volume, mixed with other audio.
+/// * Android: MediaPlayer on the media volume.
 ///
 /// Never throws: a missing chime is not worth an error.
 Future<void> playStartupSound() => _play('startup');
@@ -55,11 +54,23 @@ Future<void> _play(String name) async {
 /// The sound as a file the system players can open (written once).
 Future<String> _soundFile(String name) async {
   final data = await rootBundle.load('assets/sounds/$name.wav');
-  final file = File(p.join((await getTemporaryDirectory()).path, 'sidekick-$name.wav'));
+  final file = File(p.join((await _soundDir()).path, 'sidekick-$name.wav'));
   if (!file.existsSync() || file.lengthSync() != data.lengthInBytes) {
     await file.writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes), flush: true);
   }
   return file.path;
+}
+
+/// Where the sound files go. On the Mac the "temporary" directory is
+/// `~/Library/Caches/<app id>`, which nothing creates: writing there failed,
+/// so the Mac never played a sound. Created here, with the system's temp
+/// folder if even that fails.
+Future<Directory> _soundDir() async {
+  try {
+    return await (await getTemporaryDirectory()).create(recursive: true);
+  } catch (_) {
+    return Directory.systemTemp;
+  }
 }
 
 typedef _PlaySoundNative = Int32 Function(Pointer<Utf16> sound, IntPtr module, Uint32 flags);
