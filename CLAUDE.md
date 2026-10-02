@@ -126,6 +126,10 @@ its biggest features and fixes, and bumps the website links (see
   the two saying the same thing, and true: no account, no servers, no
   analytics; what's stored on the device; what's announced to nearby
   devices; every permission and why.
+- Website hero (`website/hero.webp`, `hero.png` fallback): a MacBook
+  receiving and an iPhone sending, made from the ad render frames
+  (`tool/ad_frames_test.dart`), transparent so the page's colors show.
+  There is no Media anywhere on the site (removed with the feature).
 - Logos (`website/`): `2.png` is the wide wordmark, used **only on the
   website**; `3.png` is the "sk" monogram, used for every app icon and the
   logo inside the app (`app/assets/logo/logo.png`). `app/tool/make_icons.py`
