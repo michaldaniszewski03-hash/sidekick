@@ -214,10 +214,53 @@ jobs:
           fi
           test -f "$dmg"
 
+      # The Mac's other choice: an installer package. It puts Sidekick in
+      # Applications, with a welcome page and the privacy policy. Unsigned,
+      # like the .dmg (first open: right-click → Open).
+      - name: Package the .pkg
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          app="$(ls -d build/macos/Build/Products/Release/*.app | head -1)"
+          rm -rf build/pkgroot build/pkg
+          mkdir -p build/pkgroot/Applications build/pkg/resources build/dist
+          cp -R "$app" build/pkgroot/Applications/Sidekick.app
+          # Always install into /Applications, never "update" a copy elsewhere.
+          pkgbuild --analyze --root build/pkgroot build/pkg/component.plist
+          plutil -replace 0.BundleIsRelocatable -bool NO build/pkg/component.plist
+          pkgbuild --root build/pkgroot --component-plist build/pkg/component.plist \
+            --identifier dev.sidekick.sidekick --version "$v" --install-location / build/pkg/Sidekick-app.pkg
+          cp macos/packaging/pkg/welcome.html packaging/privacy.txt build/pkg/resources/
+          # The glass "sk" in the corner, sharp on Retina.
+          tiffutil -cathidpicheck macos/packaging/pkg/background.png macos/packaging/pkg/background@2x.png \
+            -out build/pkg/resources/background.tiff
+          cat > build/pkg/distribution.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <installer-gui-script minSpecVersion="2">
+            <title>Sidekick</title>
+            <welcome file="welcome.html" mime-type="text/html"/>
+            <readme file="privacy.txt" mime-type="text/plain"/>
+            <background file="background.tiff" alignment="bottomleft" scaling="none"/>
+            <background-darkAqua file="background.tiff" alignment="bottomleft" scaling="none"/>
+            <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+            <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+            <volume-check><allowed-os-versions><os-version min="12.0"/></allowed-os-versions></volume-check>
+            <choices-outline><line choice="sidekick"/></choices-outline>
+            <choice id="sidekick" title="Sidekick"><pkg-ref id="dev.sidekick.sidekick"/></choice>
+            <pkg-ref id="dev.sidekick.sidekick" version="$v" onConclusion="none">Sidekick-app.pkg</pkg-ref>
+          </installer-gui-script>
+          EOF
+          productbuild --distribution build/pkg/distribution.xml --resources build/pkg/resources \
+            --package-path build/pkg "build/dist/Sidekick-$v.pkg"
+          test -f "build/dist/Sidekick-$v.pkg"
+          # It lists exactly the app, in Applications.
+          pkgutil --payload-files "build/dist/Sidekick-$v.pkg" | grep -q '^./Applications/Sidekick.app$'
+
       - uses: actions/upload-artifact@v4
         with:
           name: sidekick-macos
-          path: app/build/dist/*.dmg
+          path: |
+            app/build/dist/*.dmg
+            app/build/dist/*.pkg
           if-no-files-found: error
 
   ios:
@@ -400,7 +443,7 @@ jobs:
 
             **Android 8.0+:** on your phone, download the **Sidekick** `.apk` below and open it. If asked, allow your browser or Files app to install apps.
 
-            **macOS 12+:** open the **Sidekick** `.dmg` and drag Sidekick into Applications. The first time, right-click Sidekick → **Open** → **Open** (it isn't notarized yet). On macOS 15 and newer: try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+            **macOS 12+:** open the **Sidekick** `.dmg` and drag Sidekick into Applications, or open the `.pkg` installer and click **Continue**, then **Install**. The first time, right-click Sidekick → **Open** → **Open** (it isn't notarized yet). On macOS 15 and newer: try to open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
             **iPhone/iPad (iOS 15+):** install [AltStore](https://altstore.io) or [SideStore](https://sidestore.io) once, then add this source in it: `https://github.com/${{ github.repository }}/releases/latest/download/altstore.json` and tap **Sidekick → Install**. New versions then show up as updates. (Or install the `.ipa` below with [Sideloadly](https://sideloadly.io).)
 

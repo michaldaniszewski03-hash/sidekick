@@ -19,6 +19,10 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=Sidekick
 AppPublisherURL=https://github.com/michaldaniszewski03-hash/sidekick
+AppSupportURL=https://github.com/michaldaniszewski03-hash/sidekick/issues
+; The privacy policy, on a page before installing (same text as privacy.html
+; on the website).
+InfoBeforeFile=..\..\packaging\privacy.txt
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -46,6 +50,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\packaging\privacy.txt"; DestDir: "{app}"; DestName: "Privacy.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

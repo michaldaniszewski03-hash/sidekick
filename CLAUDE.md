@@ -73,7 +73,16 @@ its biggest features and fixes, and bumps the website links (see
   - `AppDelegate.swift` (iOS) and `MainFlutterWindow.swift` (macOS) register
     the channels.
   - The Windows runner compiles C++ with `/W4 /WX`.
-- `app/macos/packaging/`: the .dmg background (1x and 2x).
+- `app/macos/packaging/`: the .dmg background (1x and 2x), and `pkg/`: the
+  .pkg installer's welcome page and corner icon (glass "sk", 1x and 2x).
+  Macs get both: the .dmg (drag to Applications) and the .pkg (installs
+  into /Applications). CI builds the .pkg with pkgbuild/productbuild.
+- Privacy policy: `privacy.html` at the top of the repo (the website) and
+  `app/packaging/privacy.txt` (shown by the Windows installer before
+  installing, installed as `Privacy.txt`, and the .pkg's second page). Keep
+  the two saying the same thing, and true: no account, no servers, no
+  analytics; what's stored on the device; what's announced to nearby
+  devices; every permission and why.
 - Logos (`website/`): `2.png` is the wide wordmark, used **only on the
   website**; `3.png` is the "sk" monogram, used for every app icon and the
   logo inside the app (`app/assets/logo/logo.png`). `app/tool/make_icons.py`
@@ -149,10 +158,11 @@ its biggest features and fixes, and bumps the website links (see
 1. Push to the branch. CI runs tests and builds all four platforms.
 2. Run the `Build` workflow (workflow_dispatch) with `release_tag: vX.Y.Z`.
    It builds everything and publishes the release: `SidekickSetup-X.Y.Z.exe`,
-   `Sidekick-X.Y.Z.dmg`, `Sidekick-X.Y.Z.apk`, `Sidekick-X.Y.Z.ipa`,
-   `altstore.json`.
+   `Sidekick-X.Y.Z.dmg`, `Sidekick-X.Y.Z.pkg`, `Sidekick-X.Y.Z.apk`,
+   `Sidekick-X.Y.Z.ipa`, `altstore.json`.
 3. Update `index.html` (every `X.Y.Z` link, `version:` and "Version
-   X.Y.Z").
+   X.Y.Z"). `RELEASE.files.macosPkg` is empty until the first release with
+   a .pkg (2.5.2): set it to that release's `.pkg` link then.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions

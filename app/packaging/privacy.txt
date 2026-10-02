@@ -1,0 +1,101 @@
+SIDEKICK PRIVACY POLICY
+Effective 2 October 2026
+
+THE SHORT VERSION
+
+Sidekick has no account, no servers, no ads and no analytics. Your files go
+straight between your own devices, encrypted. Nothing is sent to us.
+
+WHAT SIDEKICK KEEPS ON YOUR DEVICE
+
+- Your settings: the device name, theme, sound, the folder for received
+  files, and what paired devices may do.
+- Your paired devices: each one's name, device ID, certificate fingerprint,
+  and the keys that let the two of you talk securely. These are kept in the
+  system's protected storage: the Keychain on iPhone, storage encrypted with
+  the Android Keystore on Android, Windows' built-in data protection on
+  Windows, and a file only your user account can read on the Mac.
+- Its own security identity: a certificate and private key made on the
+  device when Sidekick first starts.
+- Files you receive, in the folder you choose.
+
+None of this is uploaded anywhere. Removing Sidekick removes it, except the
+files you received, which stay in their folder.
+
+WHAT SIDEKICK SHARES, AND WITH WHOM
+
+Nearby devices. So your devices can find each other, Sidekick announces
+itself on your local network and over Bluetooth: its device name, a random
+device ID, the kind of device (for example Mac or Android), its Sidekick
+version, its network port, the fingerprint of its certificate, and which
+features it offers. Anyone on the same network or within Bluetooth range
+can see this announcement. It contains no files and no other personal
+content.
+
+Paired devices. A device can only do anything with yours after you pair
+them with a 6-digit code or a QR code. Paired devices can then:
+- ask to send you files (Sidekick asks you to Accept first, unless you turn
+  off "Ask before receiving files" in Settings);
+- browse your files and use your mouse and keyboard. Both are allowed by
+  default; turn either off in Settings under "What paired devices can do
+  here". Using the mouse and keyboard also needs the system's Accessibility
+  permission on the Mac and Android, which you grant yourself.
+You can unpair a device at any time.
+
+Encryption. Everything between paired devices is encrypted: over Wi-Fi with
+TLS, checked against each device's own certificate; over Bluetooth with
+AES-GCM keys agreed when you paired (SPAKE2, so the code itself never
+travels).
+
+PERMISSIONS, AND WHY
+
+- Local network (all devices): to find and talk to your devices.
+- Bluetooth (all devices): to connect when there's no shared Wi-Fi.
+- Camera (iPhone and Android): only to scan a pairing QR code. The picture
+  is read on the device and is never saved or sent.
+- Photos (iPhone): only the photos you pick to send.
+- Files and "All files access" (Android): to save files you receive and,
+  if you allow it, let paired devices browse your files.
+- Location (Android 12 and older only): those Android versions require it
+  for Bluetooth and Wi-Fi scanning. Sidekick never reads or stores your
+  location.
+- Accessibility (Mac and Android): only so a paired device can move the
+  pointer and type, when you allow it.
+- Wi-Fi hotspot (Android): for a direct link to your computer when there's
+  no shared Wi-Fi. Its name and password go to the paired computer over
+  encrypted Bluetooth, and nowhere else.
+- Firewall (Windows): the installer lets Sidekick accept connections from
+  devices on private networks, and from the local subnet on public networks
+  (for the direct link). Uninstalling removes these rules.
+
+WHAT WE DON'T DO
+
+- No account or sign-in.
+- No analytics, tracking, advertising or crash reports.
+- No servers: Sidekick never contacts us, and it doesn't go online to check
+  for updates.
+- We don't sell or share data. We don't have any.
+
+THE WEBSITE AND DOWNLOADS
+
+The download page uses no cookies and no analytics. It remembers your light
+or dark choice and color in your browser (local storage). It loads its
+fonts from Google Fonts, so your browser connects to Google's servers
+(see Google's privacy policy). The downloads are served by GitHub (see
+GitHub's privacy statement). If you install Sidekick through another
+service, such as AltStore, SideStore, Sideloadly or the Microsoft Store,
+that service's own privacy policy applies to it.
+
+CHILDREN
+
+Sidekick doesn't collect personal data from anyone, including children.
+
+CHANGES
+
+If this policy changes, the new version is published here with a new date.
+Earlier versions are in the project's history on GitHub.
+
+CONTACT
+
+Questions? Open an issue on GitHub:
+https://github.com/michaldaniszewski03-hash/sidekick/issues

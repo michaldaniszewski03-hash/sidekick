@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · Sidekick</title>
+<!-- Same text as app/packaging/privacy.txt (shown by the installers): keep
+     the two in step. System fonts only, so this page loads nothing from
+     anyone else. -->
+<link rel="icon" type="image/png" sizes="64x64" href="/website/favicon.png">
+<link rel="apple-touch-icon" href="/website/apple-touch-icon.png">
+<meta name="description" content="Sidekick's privacy policy: no account, no servers, no analytics. Your files go straight between your own devices, encrypted.">
+<style>
+:root {
+  --h: 290;
+  --primary: oklch(0.50 0.16 var(--h));
+  --primary-container: oklch(0.91 0.06 var(--h));
+  --on-primary-container: oklch(0.30 0.10 var(--h));
+  --surface: oklch(0.985 0.006 var(--h));
+  --surface-container: oklch(0.950 0.012 var(--h));
+  --on-surface: oklch(0.22 0.012 var(--h));
+  --on-surface-variant: oklch(0.43 0.020 var(--h));
+  --outline-variant: oklch(0.85 0.015 var(--h));
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --primary: oklch(0.80 0.10 var(--h));
+    --primary-container: oklch(0.38 0.12 var(--h));
+    --on-primary-container: oklch(0.92 0.05 var(--h));
+    --surface: oklch(0.17 0.010 var(--h));
+    --surface-container: oklch(0.22 0.014 var(--h));
+    --on-surface: oklch(0.92 0.010 var(--h));
+    --on-surface-variant: oklch(0.78 0.020 var(--h));
+    --outline-variant: oklch(0.36 0.020 var(--h));
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --primary: oklch(0.80 0.10 var(--h));
+  --primary-container: oklch(0.38 0.12 var(--h));
+  --on-primary-container: oklch(0.92 0.05 var(--h));
+  --surface: oklch(0.17 0.010 var(--h));
+  --surface-container: oklch(0.22 0.014 var(--h));
+  --on-surface: oklch(0.92 0.010 var(--h));
+  --on-surface-variant: oklch(0.78 0.020 var(--h));
+  --outline-variant: oklch(0.36 0.020 var(--h));
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--surface); color: var(--on-surface);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--primary); text-underline-offset: 3px; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+header { padding: 28px 0 8px; }
+.brand { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; font-weight: 700; font-size: 20px; }
+.brand img { width: 44px; height: 44px; border-radius: 12px; }
+h1 { font-size: clamp(34px, 6vw, 48px); line-height: 1.1; letter-spacing: -0.02em; margin: 36px 0 6px; }
+.date { color: var(--on-surface-variant); margin: 0 0 28px; }
+.short {
+  background: var(--primary-container); color: var(--on-primary-container);
+  border-radius: 24px; padding: 22px 24px; margin: 0 0 12px; font-size: 18px;
+}
+.short b { display: block; font-size: 14px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+h2 { font-size: 24px; letter-spacing: -0.01em; margin: 40px 0 10px; }
+h3 { font-size: 18px; margin: 22px 0 4px; }
+p, li { color: var(--on-surface); }
+ul { padding-left: 22px; }
+li { margin: 6px 0; }
+.perm { display: grid; grid-template-columns: minmax(150px, 34%) 1fr; gap: 0; border: 1px solid var(--outline-variant); border-radius: 20px; overflow: hidden; }
+.perm div { padding: 12px 16px; border-top: 1px solid var(--outline-variant); }
+.perm div:nth-child(-n+2) { border-top: 0; }
+.perm div:nth-child(odd) { background: var(--surface-container); font-weight: 600; }
+.muted { color: var(--on-surface-variant); }
+footer { margin: 56px 0 40px; padding-top: 20px; border-top: 1px solid var(--outline-variant); color: var(--on-surface-variant); font-size: 15px; display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+@media (max-width: 560px) {
+  .perm { grid-template-columns: 1fr; }
+  .perm div:nth-child(2) { border-top: 0; }
+  .perm div:nth-child(odd):not(:first-child) { border-top: 1px solid var(--outline-variant); }
+  .perm div:nth-child(even) { border-top: 0; }
+}
+</style>
+<script>
+// The light/dark choice and color from the download page, if any.
+try {
+  const t = localStorage.getItem('sidekick-theme');
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  const h = localStorage.getItem('sidekick-hue');
+  if (h && /^\d+$/.test(h)) document.documentElement.style.setProperty('--h', h);
+} catch (e) {}
+</script>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/"><img src="/website/apple-touch-icon.png" alt=""><span>Sidekick</span></a>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>Privacy</h1>
+  <p class="date">Effective 2 October 2026</p>
+
+  <div class="short">
+    <b>The short version</b>
+    Sidekick has no account, no servers, no ads and no analytics. Your files go straight between your own devices,
+    encrypted. Nothing is sent to us.
+  </div>
+
+  <h2>What Sidekick keeps on your device</h2>
+  <ul>
+    <li><strong>Your settings:</strong> the device name, theme, sound, the folder for received files, and what paired
+      devices may do.</li>
+    <li><strong>Your paired devices:</strong> each one's name, device ID, certificate fingerprint, and the keys that let
+      the two of you talk securely. These are kept in the system's protected storage: the Keychain on iPhone, storage
+      encrypted with the Android Keystore on Android, Windows' built-in data protection on Windows, and a file only
+      your user account can read on the Mac.</li>
+    <li><strong>Its own security identity:</strong> a certificate and private key made on the device when Sidekick
+      first starts.</li>
+    <li><strong>Files you receive,</strong> in the folder you choose.</li>
+  </ul>
+  <p>None of this is uploaded anywhere. Removing Sidekick removes it, except the files you received, which stay in
+    their folder.</p>
+
+  <h2>What Sidekick shares, and with whom</h2>
+  <h3>Nearby devices</h3>
+  <p>So your devices can find each other, Sidekick announces itself on your local network and over Bluetooth: its
+    device name, a random device ID, the kind of device (for example Mac or Android), its Sidekick version, its network
+    port, the fingerprint of its certificate, and which features it offers. Anyone on the same network or within
+    Bluetooth range can see this announcement. It contains no files and no other personal content.</p>
+  <h3>Paired devices</h3>
+  <p>A device can only do anything with yours after you pair them with a 6-digit code or a QR code. Paired devices
+    can then:</p>
+  <ul>
+    <li>ask to send you files. Sidekick asks you to Accept first, unless you turn off “Ask before receiving files”
+      in Settings;</li>
+    <li>browse your files and use your mouse and keyboard. Both are allowed by default; turn either off in Settings
+      under “What paired devices can do here”. Using the mouse and keyboard also needs the system's Accessibility
+      permission on the Mac and Android, which you grant yourself.</li>
+  </ul>
+  <p>You can unpair a device at any time.</p>
+  <h3>Encryption</h3>
+  <p>Everything between paired devices is encrypted: over Wi-Fi with TLS, checked against each device's own
+    certificate; over Bluetooth with AES-GCM keys agreed when you paired (SPAKE2, so the code itself never
+    travels).</p>
+
+  <h2>Permissions, and why</h2>
+  <div class="perm">
+    <div>Local network</div><div>All devices: to find and talk to your devices.</div>
+    <div>Bluetooth</div><div>All devices: to connect when there's no shared Wi-Fi.</div>
+    <div>Camera</div><div>iPhone and Android: only to scan a pairing QR code. The picture is read on the device and is
+      never saved or sent.</div>
+    <div>Photos</div><div>iPhone: only the photos you pick to send.</div>
+    <div>Files and “All files access”</div><div>Android: to save files you receive and, if you allow it, let paired
+      devices browse your files.</div>
+    <div>Location</div><div>Android 12 and older only: those versions require it for Bluetooth and Wi-Fi scanning.
+      Sidekick never reads or stores your location.</div>
+    <div>Accessibility</div><div>Mac and Android: only so a paired device can move the pointer and type, when you allow
+      it.</div>
+    <div>Wi-Fi hotspot</div><div>Android: for a direct link to your computer when there's no shared Wi-Fi. Its name and
+      password go to the paired computer over encrypted Bluetooth, and nowhere else.</div>
+    <div>Firewall</div><div>Windows: the installer lets Sidekick accept connections from devices on private networks,
+      and from the local subnet on public networks (for the direct link). Uninstalling removes these rules.</div>
+  </div>
+
+  <h2>What we don't do</h2>
+  <ul>
+    <li>No account or sign-in.</li>
+    <li>No analytics, tracking, advertising or crash reports.</li>
+    <li>No servers: Sidekick never contacts us, and it doesn't go online to check for updates.</li>
+    <li>We don't sell or share data. We don't have any.</li>
+  </ul>
+
+  <h2>This website and the downloads</h2>
+  <p>The download page uses no cookies and no analytics. It remembers your light or dark choice and color in your
+    browser (local storage). It loads its fonts from Google Fonts, so your browser connects to Google's servers (see
+    <a href="https://policies.google.com/privacy">Google's privacy policy</a>); this page doesn't. The downloads are
+    served by GitHub (see <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub's
+    privacy statement</a>). If you install Sidekick through another service, such as AltStore, SideStore, Sideloadly or
+    the Microsoft Store, that service's own privacy policy applies to it.</p>
+
+  <h2>Children</h2>
+  <p>Sidekick doesn't collect personal data from anyone, including children.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the new version is published here with a new date. Earlier versions are in the
+    <a href="https://github.com/michaldaniszewski03-hash/sidekick/commits/HEAD/privacy.html">project's history on
+    GitHub</a>.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? <a href="https://github.com/michaldaniszewski03-hash/sidekick/issues">Open an issue on GitHub</a>.</p>
+
+  <footer>
+    <a href="/">Sidekick</a>
+    <span class="muted">© 2026 Sidekick</span>
+  </footer>
+</main>
+</body>
+</html>

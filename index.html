@@ -846,6 +846,8 @@ section { scroll-margin-top: 80px; }
 .dl-meta { margin-top: 12px; font-size: 14px; color: var(--on-surface-variant); }
 .dl-meta a { color: var(--primary); font-weight: 600; }
 .fine { position: relative; margin-top: 20px; font-size: 13px; opacity: .8; }
+.fine .icon { font-size: 16px; vertical-align: -3px; }
+#macPkg { margin-top: 14px; }
 
 /* footer */
 footer { padding: 40px 0 56px; color: var(--on-surface-variant); font-size: 14px; }
@@ -1311,7 +1313,12 @@ footer nav a:hover { color: var(--on-surface); }
             <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .ipa</span></span>
           </a>
         </div>
-        <p class="fine" id="releaseNote">Version 2.5.1 · <a href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">Release notes and older versions</a></p>
+        <!-- Macs get a choice: the .dmg (drag to Applications) or the .pkg
+             installer. Shown once RELEASE.files.macosPkg is set. -->
+        <p class="fine" id="macPkg" hidden><span class="icon" aria-hidden="true">laptop_mac</span> On a Mac you can also use the
+          <a id="macPkgLink" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">.pkg installer</a>:
+          open it and click Continue, then Install.</p>
+        <p class="fine" id="releaseNote">Version 2.5.1 · <a href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">Release notes and older versions</a> · <a href="/privacy.html">Privacy</a></p>
       </div>
     </div>
   </section>
@@ -1326,6 +1333,7 @@ footer nav a:hover { color: var(--on-surface); }
       <a href="#platforms">Platforms</a>
       <a href="#how">How it works</a>
       <a href="https://github.com/michaldaniszewski03-hash/sidekick">GitHub</a>
+      <a href="/privacy.html">Privacy</a>
     </nav>
     <span>© 2026 Sidekick</span>
   </div>
@@ -1523,6 +1531,9 @@ const RELEASE = {
     macos: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.5.1/Sidekick-2.5.1.dmg',
     android: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.5.1/Sidekick-2.5.1.apk',
     ios: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.5.1/Sidekick-2.5.1.ipa',
+    // The Mac's other choice, an installer. Releases have it from 2.5.2 on:
+    // then set it to …/download/vX.Y.Z/Sidekick-X.Y.Z.pkg.
+    macosPkg: '',
   },
 };
 
@@ -1562,7 +1573,14 @@ const OS_INFO = {
     tile.classList.toggle('mine', tile.dataset.os === os);
   });
   const note = $('#releaseNote');
-  note.innerHTML = `Version ${RELEASE.version} · <a href="${RELEASE.page}">Release notes and older versions</a>`;
+  note.innerHTML = `Version ${RELEASE.version} · <a href="${RELEASE.page}">Release notes and older versions</a> · <a href="/privacy.html">Privacy</a>`;
+  if (RELEASE.files.macosPkg) {
+    $('#macPkgLink').href = RELEASE.files.macosPkg;
+    $('#macPkg').hidden = false;
+    if (os === 'macos') {
+      $('#heroDownloadMeta').innerHTML += ` · <a href="${RELEASE.files.macosPkg}">.pkg installer</a>`;
+    }
+  }
 })();
 
 /* ---------- the app: Send files → ask → accept → progress, on both screens */
