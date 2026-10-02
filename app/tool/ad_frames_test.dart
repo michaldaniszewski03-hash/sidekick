@@ -97,6 +97,8 @@ void main() {
   }
 
   Future<void> finish(WidgetTester tester, AppState state) async {
+    // Let screens that close by themselves (a finished transfer) do so.
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpWidget(const SizedBox());
     await tester.runAsync(state.server.stop);
     debugForceMobile = false;
@@ -193,7 +195,30 @@ void main() {
     showIncomingOffer(context, offer).ignore();
     final n = await frames(tester, key, 'receive', 66);
     await tester.tap(find.text('Accept'));
-    await frames(tester, key, 'receive', 50, first: n);
+    // The files arrive as the iPhone sends them (its progress runs over 45
+    // frames from a few frames after Accept): the same pace here.
+    var m = await frames(tester, key, 'receive', 3, first: n);
+    var sent = 0;
+    var file = 0;
+    for (var i = 0; i < 47; i++) {
+      final target = i >= 44 ? offer.totalBytes : (offer.totalBytes * Curves.easeInOut.transform(i / 44)).round();
+      // Finish files as the running total passes their ends.
+      var end = 0;
+      for (var k = 0; k <= file && k < offer.files.length; k++) {
+        end += offer.files[k].size;
+      }
+      while (file < offer.files.length && target >= end) {
+        offer.debugReceived(offer.files[file].size, fileDone: true);
+        sent = end;
+        file++;
+        if (file < offer.files.length) end += offer.files[file].size;
+      }
+      if (target > sent) {
+        offer.debugReceived(target - sent);
+        sent = target;
+      }
+      m = await frames(tester, key, 'receive', 1, first: m);
+    }
     await finish(tester, state);
   });
 }

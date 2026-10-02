@@ -117,6 +117,10 @@ class TransferOffer {
     if (!_progress.isClosed) _progress.add(received);
   }
 
+  /// Lets the screenshot tool (tool/ad_frames_test.dart) show a transfer
+  /// in progress without one: [bytes] received, or a file finished.
+  void debugReceived(int bytes, {bool fileDone = false}) => fileDone ? _fileDone(bytes) : _addReceived(bytes);
+
   void _fileDone(int size) {
     filesReceived++;
     _doneBytes += size;
