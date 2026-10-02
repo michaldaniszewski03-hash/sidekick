@@ -7,6 +7,8 @@
 // * send: an iPhone sending photos to a Mac: waiting for permission, the
 //   progress, then Sent.
 // * receive: the Mac's Accept/Decline card arriving, then Accept (confetti).
+// * remote: stills of an iPhone's Remote tab (a touchpad for the Mac) and
+//   the Mac's Devices page with the iPhone paired (build/ad/remote/).
 //
 // Frames land in build/ad/<scene>/NNN.png. SIDEKICK_FONTS as in
 // qr_shots_test.dart. SIDEKICK_THEME picks the color theme (e.g. mono).
@@ -23,9 +25,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidekick/app_state.dart';
+import 'package:sidekick/core/crypto.dart';
 import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
+import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/main.dart';
+import 'package:sidekick/platform/files.dart';
+import 'package:sidekick/platform/input.dart';
 import 'package:sidekick/ui/transfer_screens.dart';
 import 'package:sidekick/ui/widgets.dart';
 
@@ -100,6 +106,8 @@ void main() {
     // Let screens that close by themselves (a finished transfer) do so.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpWidget(const SizedBox());
+    // Past the direct link's 3-minute idle timer the Remote screen starts.
+    await tester.pump(const Duration(minutes: 4));
     await tester.runAsync(state.server.stop);
     debugForceMobile = false;
     debugHostPlatform = null;
@@ -224,5 +232,93 @@ void main() {
       m = await frames(tester, key, scene, 1, first: m);
     }
     await finish(tester, state);
+  });
+
+  /// A stand-in for the other device: a real server on loopback that [state]
+  /// pairs with, so it shows as paired and connected (and, for a computer,
+  /// with remote control allowed).
+  Future<SidekickServer> pairWith(WidgetTester tester, AppState state, String name, DevicePlatform platform) async {
+    late SidekickServer peer;
+    await tester.runAsync(() async {
+      final id = newDeviceId();
+      final home = await Directory.systemTemp.createTemp('sidekick_peer');
+      peer = SidekickServer(
+        identity: Identity.generate(),
+        self: () => DeviceInfo(
+          id: id,
+          name: name,
+          platform: platform,
+          port: peer.port,
+          capabilities: const Capabilities(files: true, input: true),
+        ),
+        trust: TrustStore(),
+        files: FileService(home: home.path),
+        input: UnsupportedInputInjector(),
+        inputReady: () async => true,
+        receiveDir: () async => home.path,
+      );
+      await peer.start(port: 0, address: InternetAddress.loopbackIPv4);
+      final target = DeviceInfo(id: id, name: name, platform: platform, port: peer.port, address: '127.0.0.1');
+      final pin = peer.events.where((e) => e is PairRequested).cast<PairRequested>().first;
+      await state.requestPairing(target);
+      await state.confirmPairing(target, (await pin).request.pin);
+    });
+    return peer;
+  }
+
+  /// Waits (in real time too: the remote session connects over a socket)
+  /// until [ready] or ~10 s, then saves build/ad/remote/[name].png.
+  Future<void> still(WidgetTester tester, GlobalKey key, String name, {bool Function()? ready}) async {
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 250)));
+      await tester.pump(const Duration(milliseconds: 300));
+      if (i >= 6 && (ready == null || ready())) break;
+    }
+    final dir = Directory('build/ad/remote')..createSync(recursive: true);
+    final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    await tester.runAsync(() async {
+      final image = await boundary.toImage(pixelRatio: tester.view.devicePixelRatio);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      File(p.join(dir.path, '$name.png')).writeAsBytesSync(bytes!.buffer.asUint8List());
+    });
+  }
+
+  testWidgets('remote iphone', (tester) async {
+    iphone(tester);
+    final state = await start(tester, 'iPhone 17 Pro');
+    final mac = await pairWith(tester, state, 'MacBook Pro', DevicePlatform.macos);
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: key,
+        child: SidekickApp(state: state),
+      ),
+    );
+    await still(tester, key, 'iphone-devices');
+    await tester.tap(find.text('Remote').last);
+    await still(tester, key, 'iphone-remote', ready: () => find.text('Not connected').evaluate().isEmpty);
+    // Close the screen first, so the remote session doesn't try to
+    // reconnect to the Mac once it's gone.
+    await finish(tester, state);
+    await tester.runAsync(mac.stop);
+  });
+
+  testWidgets('remote mac', (tester) async {
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(1280 * 2, 800 * 2);
+    debugHostPlatform = DevicePlatform.macos;
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    final state = await start(tester, 'MacBook Pro');
+    final phone = await pairWith(tester, state, 'iPhone 17 Pro', DevicePlatform.ios);
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: key,
+        child: SidekickApp(state: state),
+      ),
+    );
+    await still(tester, key, 'mac-devices');
+    await finish(tester, state);
+    await tester.runAsync(phone.stop);
   });
 }
