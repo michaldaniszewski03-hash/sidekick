@@ -8,6 +8,7 @@
 // * iphone: the QR scanner on an iPhone (393×852 at 3x), with the picture
 //   in SIDEKICK_CAMERA where the camera would be.
 //
+// SIDEKICK_THEME picks the color theme (e.g. mono; default purple).
 // SIDEKICK_FONTS can point at a folder with Inter-*.ttf (the closest open
 // font to Apple's San Francisco, which Sidekick uses on Mac and iPhone);
 // without it the text is Roboto. Screenshots land in build/screenshots/.
@@ -57,7 +58,11 @@ void main() {
   /// Starts Sidekick as [name], with nothing paired and nothing nearby.
   Future<AppState> start(WidgetTester tester, String name) async {
     HttpOverrides.global = null;
-    SharedPreferences.setMockInitialValues({'name': name, 'welcomed': true, 'themeColor': 'purple'});
+    SharedPreferences.setMockInitialValues({
+      'name': name,
+      'welcomed': true,
+      'themeColor': Platform.environment['SIDEKICK_THEME'] ?? 'purple',
+    });
     late AppState state;
     await tester.runAsync(() async {
       await _loadFonts();

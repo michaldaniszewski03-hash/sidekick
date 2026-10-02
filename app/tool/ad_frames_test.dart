@@ -9,7 +9,7 @@
 // * receive: the Mac's Accept/Decline card arriving, then Accept (confetti).
 //
 // Frames land in build/ad/<scene>/NNN.png. SIDEKICK_FONTS as in
-// qr_shots_test.dart.
+// qr_shots_test.dart. SIDEKICK_THEME picks the color theme (e.g. mono).
 
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 import 'dart:io';
@@ -54,7 +54,11 @@ Future<void> _loadFonts() async {
 void main() {
   Future<AppState> start(WidgetTester tester, String name) async {
     HttpOverrides.global = null;
-    SharedPreferences.setMockInitialValues({'name': name, 'welcomed': true, 'themeColor': 'purple'});
+    SharedPreferences.setMockInitialValues({
+      'name': name,
+      'welcomed': true,
+      'themeColor': Platform.environment['SIDEKICK_THEME'] ?? 'purple',
+    });
     late AppState state;
     await tester.runAsync(() async {
       await _loadFonts();
