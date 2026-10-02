@@ -134,6 +134,10 @@ its biggest features and fixes, and bumps the website links (see
   receiving and an iPhone sending, made from the ad render frames
   (`tool/ad_frames_test.dart`), transparent so the page's colors show.
   There is no Media anywhere on the site (removed with the feature).
+- Website sounds (`website/sounds/`, copies of the owner's MP3s): the
+  request sound when the demo phone asks, accept / decline on its buttons,
+  accept on a download; only after a click; the speaker button in the top
+  bar turns them off (`localStorage` `sidekick-sound`).
 - Logos (`website/`): `2.png` is the wide wordmark, used **only on the
   website**; `3.png` is the "sk" monogram, used for every app icon and the
   logo inside the app (`app/assets/logo/logo.png`). `app/tool/make_icons.py`

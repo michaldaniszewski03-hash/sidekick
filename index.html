@@ -750,6 +750,9 @@ footer nav a:hover { color: var(--on-surface); }
       <a href="#how">How it works</a>
     </nav>
     <div class="spacer"></div>
+    <button class="icon-btn" id="soundBtn" type="button" aria-label="Turn sounds off" aria-pressed="true">
+      <span class="icon" id="soundIcon">volume_up</span>
+    </button>
     <button class="icon-btn" id="themeBtn" type="button" aria-label="Toggle dark mode">
       <span class="icon" id="themeIcon">dark_mode</span>
     </button>
@@ -1124,6 +1127,39 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
 };
 
+/* ---------- sounds: the app's own (the owner's recordings), only after a
+   click (browsers don't allow sound before one), and off with the speaker
+   button in the top bar. */
+const sounds = (() => {
+  let on = store.get('sidekick-sound') !== 'off';
+  const cache = {};
+  const btn = $('#soundBtn'), icon = $('#soundIcon');
+  const paint = () => {
+    icon.textContent = on ? 'volume_up' : 'volume_off';
+    btn.setAttribute('aria-pressed', String(on));
+    btn.setAttribute('aria-label', on ? 'Turn sounds off' : 'Turn sounds on');
+  };
+  function play(name) {
+    if (!on) return;
+    const a = cache[name] ??= new Audio(`/website/sounds/${name}.mp3`);
+    a.volume = 0.7;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+  }
+  btn.addEventListener('click', () => {
+    on = !on;
+    store.set('sidekick-sound', on ? 'on' : 'off');
+    paint();
+    if (on) play('startup');
+  });
+  paint();
+  return { play };
+})();
+// A download gets the "accepted" chime.
+document.addEventListener('click', e => {
+  if (e.target.closest('a[href*="/releases/download/"]')) sounds.play('accept');
+});
+
 /* ---------- theme (light / dark) */
 const themeIcon = $('#themeIcon');
 const systemDark = matchMedia('(prefers-color-scheme: dark)');
@@ -1295,7 +1331,7 @@ const OS_INFO = {
   function start() {
     reset();
     over.classList.add('show');
-    later(700, () => phone.classList.add('asking'));
+    later(700, () => { phone.classList.add('asking'); sounds.play('request'); });
     // Nobody tapping? Accept on the phone's behalf so the demo plays on.
     later(7000, accept);
   }
@@ -1303,6 +1339,7 @@ const OS_INFO = {
   function accept() {
     if (!phone.classList.contains('asking')) return;
     stop();
+    sounds.play('accept');
     phone.classList.replace('asking', 'receiving');
     offerTitle.textContent = 'Receiving from Gaming PC…';
     over.classList.add('busy');
@@ -1329,6 +1366,7 @@ const OS_INFO = {
   function decline() {
     if (!phone.classList.contains('asking')) return;
     stop();
+    sounds.play('decline');
     phone.classList.remove('asking');
     icon.textContent = 'close';
     title.textContent = 'Pixel 9 declined';
