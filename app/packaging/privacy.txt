@@ -1,5 +1,5 @@
 SIDEKICK PRIVACY POLICY
-Effective 2 October 2026
+Effective 2 October 2026 (updated for 2.6.1)
 
 THE SHORT VERSION
 
@@ -17,7 +17,9 @@ WHAT SIDEKICK KEEPS ON YOUR DEVICE
   Windows, and a file only your user account can read on the Mac.
 - Its own security identity: a certificate and private key made on the
   device when Sidekick first starts.
-- Files you receive, in the folder you choose.
+- Files you receive, in the folder you choose. On iPhone and Android,
+  received photos and videos go to Photos or the gallery instead (on
+  Android, in Pictures/Sidekick and Movies/Sidekick).
 
 None of this is uploaded anywhere. Removing Sidekick removes it, except the
 files you received, which stay in their folder.
@@ -53,7 +55,9 @@ PERMISSIONS, AND WHY
 - Bluetooth (all devices): to connect when there's no shared Wi-Fi.
 - Camera (iPhone and Android): only to scan a pairing QR code. The picture
   is read on the device and is never saved or sent.
-- Photos (iPhone): only the photos you pick to send.
+- Photos (iPhone): only the photos you pick to send, and adding the photos
+  and videos you receive to your library. Adding doesn't let Sidekick see
+  the rest of your library.
 - Files and "All files access" (Android): to save files you receive and,
   if you allow it, let paired devices browse your files.
 - Location (Android 12 and older only): those Android versions require it

@@ -365,14 +365,17 @@ void main() {
     expect(p.dirname(saved), p.join(pc.home.path, 'Received'));
     expect(File(saved).lengthSync(), 300000);
     expect((await received).from.id, phone.id);
+    expect((await received).toReceiveFolder, isTrue, reason: 'sent to the device: a phone puts photos in its gallery');
 
     // Same name again doesn't overwrite.
     final saved2 = await client.upload(upload, ticket: ticket);
     expect(p.basename(saved2), 'photo (1).jpg');
 
-    // Upload into a folder we browsed to.
+    // Upload into a folder we browsed to: it stays there.
+    final intoFolder = pc.server.events.only<FileReceived>().first;
     final intoDocs = await client.upload(upload, remoteDir: docs.path);
     expect(p.dirname(intoDocs), docs.path);
+    expect((await intoFolder).toReceiveFolder, isFalse);
     // No partial files left behind.
     expect(docs.listSync().where((e) => e.path.endsWith('.sidekick-part')), isEmpty);
   });

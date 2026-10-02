@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../app_state.dart';
 import '../core/crypto.dart';
 import '../core/models.dart';
+import '../platform/gallery.dart';
 import 'widgets.dart';
 
 class FilesPage extends StatelessWidget {
@@ -383,7 +384,7 @@ class _Transfers extends StatelessWidget {
                                             ? 'Sent to'
                                             : t.received
                                             ? 'Received from'
-                                            : 'Saved from'} ${t.deviceName} · ${formatBytes(t.total)}',
+                                            : 'Saved from'} ${t.deviceName} · ${formatBytes(t.total)}${t.inGallery ? ' · in ${Gallery.name}' : ''}',
                                   style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                                 ),
                               if (t.security case final security?)

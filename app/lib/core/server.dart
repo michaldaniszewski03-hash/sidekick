@@ -54,11 +54,15 @@ class Unpaired extends ServerEvent {
 }
 
 class FileReceived extends ServerEvent {
-  FileReceived(this.from, this.file, this.size, this.security);
+  FileReceived(this.from, this.file, this.size, this.security, {this.toReceiveFolder = false});
   final TrustedPeer from;
   final File file;
   final int size;
   final TransferSecurity security;
+
+  /// Sent to this device (into the receive folder), not copied into a
+  /// folder someone picked while browsing its files.
+  final bool toReceiveFolder;
 }
 
 /// A paired device wants to send files here. Show [offer] and answer it;
@@ -147,10 +151,12 @@ class _PartUpload {
     required this.total,
     required this.ticket,
     required this.partial,
+    required this.toReceiveFolder,
   });
   final String peerId;
   final String name;
   final String dir;
+  final bool toReceiveFolder;
   final int total;
   final _Ticket? ticket;
   final File partial;
@@ -730,6 +736,7 @@ class SidekickServer {
         total: total,
         ticket: ticket,
         partial: File(p.join(dir, '.$name.${newToken().substring(0, 8)}.sidekick-part')),
+        toReceiveFolder: dirParam == null || dirParam.isEmpty,
       );
       await up.partial.writeAsBytes(const [], flush: true);
     }
@@ -757,7 +764,7 @@ class SidekickServer {
         ? const TransferSecurity.bluetooth()
         : TransferSecurity.wifi(certificate: _peer(r).fingerprint);
     up.ticket?.offer._fileDone(up.total);
-    _events.add(FileReceived(_peer(r), saved, up.total, security));
+    _events.add(FileReceived(_peer(r), saved, up.total, security, toReceiveFolder: up.toReceiveFolder));
     return _json({'path': saved.path, 'size': up.total, 'received': up.total});
   }
 
@@ -804,7 +811,7 @@ class SidekickServer {
           ? const TransferSecurity.bluetooth()
           : TransferSecurity.wifi(certificate: _peer(r).fingerprint);
       ticket?.offer._fileDone(size);
-      _events.add(FileReceived(_peer(r), saved, size, security));
+      _events.add(FileReceived(_peer(r), saved, size, security, toReceiveFolder: dirParam == null || dirParam.isEmpty));
       return _json({'path': saved.path, 'size': size});
     } catch (_) {
       // Counts as finished, so the receiving screen doesn't wait for it.

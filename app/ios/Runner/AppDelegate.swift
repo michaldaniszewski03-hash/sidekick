@@ -1,5 +1,6 @@
 import AVFoundation
 import Flutter
+import Photos
 import UIKit
 
 @main
@@ -35,6 +36,14 @@ import UIKit
             sounds.play(path)
           }
           result(nil)
+        case "saveToGallery":
+          // A received photo or video, moved into Photos.
+          let args = call.arguments as? [String: Any]
+          guard let path = args?["path"] as? String else {
+            result(FlutterError(code: "failed", message: "No file", details: nil))
+            return
+          }
+          PhotosSaver.save(path: path, video: args?["video"] as? Bool ?? false, done: result)
         default:
           result(FlutterMethodNotImplemented)
         }
@@ -127,5 +136,40 @@ final class KeepAlive {
     player = nil
     engine = nil
     try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+  }
+}
+
+/// Moves received photos and videos into the Photos library, like AirDrop.
+/// Only asks to add (NSPhotoLibraryAddUsageDescription), never to read.
+enum PhotosSaver {
+  static func save(path: String, video: Bool, done: @escaping FlutterResult) {
+    PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+      guard status == .authorized || status == .limited else {
+        DispatchQueue.main.async {
+          done(FlutterError(
+            code: "denied", message: "allow it in Settings → Sidekick → Photos", details: nil))
+        }
+        return
+      }
+      let url = URL(fileURLWithPath: path)
+      PHPhotoLibrary.shared().performChanges({
+        let request = PHAssetCreationRequest.forAsset()
+        let options = PHAssetResourceCreationOptions()
+        options.originalFilename = url.lastPathComponent
+        // Moved, not copied: no second copy left taking up space.
+        options.shouldMoveFile = true
+        request.addResource(with: video ? .video : .photo, fileURL: url, options: options)
+      }) { ok, error in
+        if ok { try? FileManager.default.removeItem(at: url) }
+        DispatchQueue.main.async {
+          if ok {
+            done(nil)
+          } else {
+            done(FlutterError(
+              code: "failed", message: error?.localizedDescription ?? "Photos didn't take it", details: nil))
+          }
+        }
+      }
+    }
   }
 }

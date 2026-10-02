@@ -67,6 +67,16 @@ its biggest features and fixes, and bumps the website links (see
   answer). One switch for all of them: Settings → Sound ("Sound enabled" /
   "Sound disabled"; `AppState.sound`, pref `sound`). Don't synthesize
   replacements.
+- Photos and videos a phone receives (sent to it, or downloaded from the
+  other device's files) go straight to Photos / the gallery, automatically,
+  like AirDrop (the owner's call: no switch). `platform/gallery.dart` picks
+  which files (`Gallery.kindOf`) and calls `saveToGallery` on
+  `sidekick/ios` (`PhotosSaver`: add-only access, the file is moved in) and
+  `sidekick/android` (MediaStore, Pictures/Sidekick and Movies/Sidekick,
+  on a worker thread; the original is deleted after). Files a computer
+  copies into a folder it browsed to stay there (`FileReceived.
+  toReceiveFolder`). If saving fails, the file stays in the receive folder
+  and the notice says why.
 - Native code:
   - `app/ios/Runner/SidekickBLE.swift` and `app/macos/Runner/SidekickBLE.swift`
     must stay **identical** (copy one to the other after any edit).
@@ -159,6 +169,10 @@ its biggest features and fixes, and bumps the website links (see
 
 ## Releasing
 
+The owner wants finished work released right away: once a feature or fix
+is done and CI is green, release it (next patch version unless they name
+one) without asking.
+
 1. Push to the branch. CI runs tests and builds all four platforms.
 2. Run the `Build` workflow (workflow_dispatch) with `release_tag: vX.Y.Z`.
    It builds everything and publishes the release: `SidekickSetup-X.Y.Z.exe`,
@@ -169,6 +183,15 @@ its biggest features and fixes, and bumps the website links (see
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.6.1
+- **Photos and videos go straight to Photos / the gallery** on iPhone and
+  Android, automatically: whatever is sent to the phone, and whatever it
+  downloads from the computer. On Android they're in Pictures/Sidekick and
+  Movies/Sidekick. Other files stay in the Sidekick folder. The transfer
+  shows "in Photos" / "in the gallery".
+- iPhone asks once to add to Photos (add-only: Sidekick can't see the
+  library). The privacy policy says so.
 
 ### 2.6.0
 - **A .pkg installer for the Mac**, next to the .dmg: open it, Continue,

@@ -30,6 +30,8 @@
 	<string>Sidekick uses the camera only to pair with your computer by scanning the QR code it shows.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Sidekick finds and talks to your computer on this Wi-Fi network.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Photos and videos you receive go straight to your library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose photos and videos to send to your computer.</string>
 	<!-- Received files appear in the Files app under On My iPhone → Sidekick. -->

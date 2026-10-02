@@ -2,10 +2,12 @@ package dev.sidekick.sidekick
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
+import android.media.MediaScannerConnection
 import android.media.MediaPlayer
 import android.net.Uri
 import android.net.wifi.WifiManager
@@ -13,10 +15,13 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.IOException
 
 /**
  * Hosts the Flutter UI and answers the `sidekick/android` channel, which the
@@ -61,6 +66,12 @@ class MainActivity : FlutterActivity() {
                             call.argument<String>("path")?.let { playSound(it) }
                             result.success(null)
                         }
+                        "saveToGallery" -> saveToGallery(
+                            call.argument<String>("path") ?: "",
+                            call.argument<String>("mime") ?: "",
+                            call.argument<Boolean>("video") ?: false,
+                            result,
+                        )
                         "input" -> {
                             val service = SidekickAccessibilityService.instance
                             val args = call.arguments as? Map<*, *>
@@ -199,6 +210,67 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             done(player)
         }
+    }
+
+    /**
+     * Moves a received photo or video into the shared Pictures/Sidekick or
+     * Movies/Sidekick folder, so the gallery shows it. On a worker thread:
+     * videos can be big. The original is removed once the copy is in.
+     */
+    private fun saveToGallery(path: String, mime: String, video: Boolean, result: MethodChannel.Result) {
+        val main = Handler(Looper.getMainLooper())
+        val folder = if (video) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 3)
+            result.error("denied", "allow Sidekick to use storage", null)
+            return
+        }
+        Thread {
+            try {
+                val src = File(path)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val collection = if (video) {
+                        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    } else {
+                        MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    }
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, src.name)
+                        put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, "$folder/Sidekick")
+                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+                    val uri = contentResolver.insert(collection, values) ?: throw IOException("the gallery refused it")
+                    try {
+                        val out = contentResolver.openOutputStream(uri) ?: throw IOException("couldn't write to the gallery")
+                        out.use { o -> src.inputStream().use { it.copyTo(o) } }
+                    } catch (e: Exception) {
+                        contentResolver.delete(uri, null, null)
+                        throw e
+                    }
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    contentResolver.update(uri, values, null, null)
+                } else {
+                    @Suppress("DEPRECATION")
+                    val dir = File(Environment.getExternalStoragePublicDirectory(folder), "Sidekick").apply { mkdirs() }
+                    var dest = File(dir, src.name)
+                    var n = 1
+                    while (dest.exists()) dest = File(dir, "${src.nameWithoutExtension} (${n++}).${src.extension}")
+                    src.copyTo(dest)
+                    MediaScannerConnection.scanFile(this, arrayOf(dest.absolutePath), arrayOf(mime), null)
+                }
+                src.delete()
+                // If the gallery had already found the original (the public
+                // Download folder), this makes it forget it.
+                MediaScannerConnection.scanFile(this, arrayOf(src.absolutePath), null, null)
+                main.post { result.success(null) }
+            } catch (e: Exception) {
+                main.post { result.error("failed", e.message ?: "couldn't save it", null) }
+            }
+        }.start()
     }
 
     private fun permissions(): Map<String, Boolean> = mapOf(

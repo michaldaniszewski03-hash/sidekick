@@ -21,6 +21,7 @@ import 'core/trust.dart';
 import 'platform/android.dart';
 import 'platform/device_name.dart';
 import 'platform/files.dart';
+import 'platform/gallery.dart';
 import 'platform/ios.dart';
 import 'platform/hotspot.dart';
 import 'platform/macos.dart';
@@ -62,6 +63,9 @@ class Transfer {
 
   /// Sent to us by the other device (not something we downloaded).
   bool received = false;
+
+  /// A received photo or video that went to Photos / the gallery.
+  bool inGallery = false;
 
   double? get fraction => total > 0 ? done / total : null;
 }
@@ -1092,21 +1096,24 @@ class AppState extends ChangeNotifier {
         _savePaired();
         notifyListeners();
         if (name != null) _notices.add(Notice('$name unpaired from this device'));
-      case FileReceived(:final from, :final file, :final size, :final security):
-        transfers.insert(
-          0,
-          Transfer(name: p.basename(file.path), upload: false, deviceName: from.name)
-            ..done = size
-            ..total = size
-            ..state = TransferState.done
-            ..received = true
-            ..security = security
-            ..peerFingerprint = from.fingerprint
-            ..localPath = file.path,
-        );
+      case FileReceived(:final from, :final file, :final size, :final security, :final toReceiveFolder):
+        final transfer = Transfer(name: p.basename(file.path), upload: false, deviceName: from.name)
+          ..done = size
+          ..total = size
+          ..state = TransferState.done
+          ..received = true
+          ..security = security
+          ..peerFingerprint = from.fingerprint
+          ..localPath = file.path;
+        transfers.insert(0, transfer);
         if (transfers.length > 50) transfers.removeLast();
         notifyListeners();
-        _notices.add(Notice('Received ${p.basename(file.path)} from ${from.name}', revealPath: file.path));
+        // Photos and videos sent to a phone go straight to Photos / the gallery.
+        if (toReceiveFolder && _forGallery(file)) {
+          unawaited(_toGallery(transfer, file, 'Received ${p.basename(file.path)} from ${from.name}'));
+        } else {
+          _notices.add(Notice('Received ${p.basename(file.path)} from ${from.name}', revealPath: file.path));
+        }
       case InputBlocked(:final peer):
         final where = Platform.isMacOS
             ? 'Allow Sidekick in Settings → Accessibility (if it\'s already on there, remove it and add it again).'
@@ -1123,6 +1130,25 @@ class AppState extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- transfers
+
+  /// A photo or video this phone can put in Photos / the gallery.
+  bool _forGallery(File file) => Gallery.supported && Gallery.kindOf(file.path, android: Platform.isAndroid) != null;
+
+  /// Moves a photo or video that arrived on this phone into Photos / the
+  /// gallery. If that fails it stays in the receive folder, and the notice
+  /// ([what] happened) says why.
+  Future<void> _toGallery(Transfer transfer, File file, String what) async {
+    final why = await Gallery.save(file);
+    if (why == null) {
+      transfer
+        ..localPath = null
+        ..inGallery = true;
+      notifyListeners();
+      _notices.add(Notice('$what. It\'s in ${Gallery.name}.'));
+    } else {
+      _notices.add(Notice('$what. It couldn\'t go to ${Gallery.name} ($why), so it\'s in the Sidekick folder.'));
+    }
+  }
 
   Future<String> receiveDir() async {
     if (_receiveDir != null) return _receiveDir!;
@@ -1284,7 +1310,11 @@ class AppState extends ChangeNotifier {
         ..security = client.lastSecurity
         ..localPath = file.path;
       notifyListeners();
-      _notices.add(Notice('Saved ${entry.name}', revealPath: file.path));
+      if (_forGallery(file)) {
+        await _toGallery(t, file, 'Saved ${entry.name}');
+      } else {
+        _notices.add(Notice('Saved ${entry.name}', revealPath: file.path));
+      }
       return file;
     } catch (e) {
       _noteFailure(d, e);
