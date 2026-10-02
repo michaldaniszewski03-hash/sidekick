@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
-import '../core/pairing_qr.dart';
 import '../core/server.dart';
 import '../core/trust.dart';
+import '../platform/desktop_window.dart';
+import '../platform/notifications.dart';
 import '../platform/sound.dart';
 import 'devices_page.dart';
 import 'files_page.dart';
@@ -47,6 +48,8 @@ class _ShellState extends State<Shell> {
       state.sends.listen(_showSend),
     ];
     _lifecycle = AppLifecycleListener(onResume: state.resumed);
+    // Phones: requests while Sidekick is in the background become notifications.
+    unawaited(OfferNotifications.init());
   }
 
   @override
@@ -63,6 +66,10 @@ class _ShellState extends State<Shell> {
   void _showOffer(TransferOffer offer) {
     if (!mounted) return;
     if (state.sound) unawaited(playRequestSound());
+    // Closed to the tray: the small corner window asks instead.
+    if (DesktopWindow.supported && DesktopWindow.instance.show(offer)) return;
+    // Phones in the background: a notification too; the card waits in the app.
+    OfferNotifications.show(offer);
     showIncomingOffer(context, offer, sounds: state.sound);
   }
 
@@ -97,7 +104,7 @@ class _ShellState extends State<Shell> {
     final cancelled = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _PinDialog(request: request, done: done, selfId: state.id),
+      builder: (context) => _PinDialog(request: request, done: done, state: state),
     );
     if (cancelled ?? true) state.cancelPairing(request.device.id);
   }
@@ -212,11 +219,9 @@ class _ShellState extends State<Shell> {
 }
 
 class _PinDialog extends StatefulWidget {
-  const _PinDialog({required this.request, required this.done, required this.selfId});
+  const _PinDialog({required this.request, required this.done, required this.state});
   final PairingRequest request;
-
-  /// This device's id, in the QR code: the scanner checks it's ours.
-  final String selfId;
+  final AppState state;
   final Future<Object> done;
 
   @override
@@ -225,6 +230,10 @@ class _PinDialog extends StatefulWidget {
 
 class _PinDialogState extends State<_PinDialog> {
   Timer? _expiry;
+
+  /// The same QR code as Connect device → QR code: one code for every way
+  /// of pairing. Only for phones (they scan); closed with the dialog.
+  late final _invite = scansQr(widget.request.device.platform) ? widget.state.createInvite() : null;
 
   @override
   void initState() {
@@ -240,6 +249,7 @@ class _PinDialogState extends State<_PinDialog> {
   @override
   void dispose() {
     _expiry?.cancel();
+    if (_invite case final code?) widget.state.cancelInvite(code.invite);
     super.dispose();
   }
 
@@ -268,15 +278,12 @@ class _PinDialogState extends State<_PinDialog> {
               ),
             ),
           ),
-          // A phone or Mac can scan this instead of typing the digits.
-          if (scansQr(widget.request.device.platform)) ...[
+          // A phone can scan this instead of typing the digits.
+          if (_invite case final code?) ...[
             const SizedBox(height: 16),
-            Text('or scan it:', style: TextStyle(color: scheme.onSurfaceVariant)),
+            Text('or scan the QR code:', style: TextStyle(color: scheme.onSurfaceVariant)),
             const SizedBox(height: 12),
-            PairingQrCode(
-              data: PinQr(id: widget.selfId, pin: pin).encode(),
-              size: 150,
-            ),
+            PairingQrCode(data: code.qr, size: 150),
           ],
           const SizedBox(height: 16),
           Text(

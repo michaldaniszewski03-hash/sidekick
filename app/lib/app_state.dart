@@ -174,6 +174,36 @@ class AppState extends ChangeNotifier {
   final List<Transfer> transfers = [];
   final Map<String, TrustedPeer> activeRemoteSessions = {};
   List<String> addresses = [];
+
+  /// This device is on Wi-Fi (or Ethernet). Bluetooth is only used when
+  /// it's sure it isn't (two checks in a row), or the other device isn't.
+  bool wifiConnected = true;
+
+  /// Its local-network addresses (no mobile data, VPNs or virtual adapters).
+  List<String> lan = [];
+  int _noLan = 0;
+
+  Future<void> _checkWifi() async {
+    lan = await lanAddresses();
+    final was = wifiConnected;
+    if (lan.isNotEmpty) {
+      _noLan = 0;
+      wifiConnected = true;
+    } else if (++_noLan >= 2) {
+      wifiConnected = false;
+    } else {
+      // Once could be a blip (switching networks): look again shortly.
+      Timer(const Duration(seconds: 3), () => unawaited(_checkWifi()));
+    }
+    if (wifiConnected != was) {
+      notifyListeners();
+      if (!wifiConnected) unawaited(_maybeScanBluetooth());
+    }
+  }
+
+  /// Bluetooth may carry requests to a device: when this one isn't on
+  /// Wi-Fi, or the other one says it isn't.
+  bool _bluetoothAllowed(DeviceInfo? other) => !wifiConnected || other?.wifi == false;
   String? selectedId;
   String? networkError;
 
@@ -352,6 +382,7 @@ class AppState extends ChangeNotifier {
     port: server.port == 0 ? sidekickPort : server.port,
     fingerprint: identity.fingerprint,
     app: appVersion.isEmpty ? null : appVersion,
+    wifi: wifiConnected,
     capabilities: Capabilities(
       files: permissions.files && (!Platform.isAndroid || AndroidBridge.permissions.allFiles),
       input: permissions.input && input.supported,
@@ -429,6 +460,7 @@ class AppState extends ChangeNotifier {
     }
 
     addresses = await localAddresses();
+    await _checkWifi();
     _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) => _checkPresence());
     unawaited(_checkPresence());
     notifyListeners();
@@ -638,10 +670,12 @@ class AppState extends ChangeNotifier {
   }
 
   /// Wi-Fi isn't available for this device but Bluetooth is, so requests go
-  /// over Bluetooth (slower, no remote control).
-  bool viaBluetooth(String id) => !reachableViaWifi(id) && reachableViaBluetooth(id);
+  /// over Bluetooth (slower, no remote control). Never while both devices
+  /// are on Wi-Fi: Wi-Fi first, always.
+  bool viaBluetooth(String id) =>
+      !reachableViaWifi(id) && reachableViaBluetooth(id) && _bluetoothAllowed(_bleSeen[id]?.info);
 
-  bool isOnline(String id) => reachableViaWifi(id) || reachableViaBluetooth(id);
+  bool isOnline(String id) => reachableViaWifi(id) || viaBluetooth(id);
 
   PairedDevice? get selected {
     final d = pairedById(selectedId);
@@ -661,9 +695,7 @@ class AppState extends ChangeNotifier {
   PeerClient clientFor(PairedDevice d) {
     final sighting = _bleSeen[d.id];
     final bt = bluetooth;
-    if (reachableViaWifi(d.id) || sighting == null || bt == null || !reachableViaBluetooth(d.id)) {
-      return PeerClient.forDevice(d);
-    }
+    if (sighting == null || bt == null || !viaBluetooth(d.id)) return PeerClient.forDevice(d);
     // Paired again since (new key or token): the cached client would seal
     // with the old key, and the other device would refuse everything.
     final cached = _bleClients[d.id];
@@ -681,6 +713,9 @@ class AppState extends ChangeNotifier {
     final sighting = _bleSeen[target.id];
     final bt = bluetooth;
     if (sighting == null || bt == null) throw SidekickException('${target.name} is out of reach.');
+    if (!_bluetoothAllowed(sighting.info)) {
+      throw SidekickException("${target.name} is on Wi-Fi too, but not this one. Connect both to the same Wi-Fi.");
+    }
     return PeerClient.bluetooth(bt.clientFor(sighting.bleId));
   }
 
@@ -818,10 +853,11 @@ class AppState extends ChangeNotifier {
     await bt.refresh();
     if (!bt.canScan) return;
     // No Wi-Fi at all (a field, a train): Bluetooth is the only way, so look
-    // every 10 s. On Wi-Fi, only every 20 s and only for devices it can't reach.
-    final offline = addresses.isEmpty;
+    // every 10 s. On Wi-Fi, only once a minute, and only to learn whether a
+    // device it can't reach is off Wi-Fi (Bluetooth is only for that case).
+    final offline = !wifiConnected;
     _bleTick++;
-    if (!offline && _bleTick.isOdd) return;
+    if (!offline && _bleTick % 6 != 0) return;
     final needed = offline || _paired.keys.any((id) => !reachableViaWifi(id)) || (_paired.isEmpty && nearby.isEmpty);
     if (needed) await bt.scan();
   }
@@ -917,6 +953,7 @@ class AppState extends ChangeNotifier {
       addresses = now;
       unawaited(_restartDiscovery());
     }
+    await _checkWifi();
     await Future.wait([
       for (final d in _paired.values)
         if (!reachableViaWifi(d.id) && d.lastAddress != null)
@@ -966,7 +1003,7 @@ class AppState extends ChangeNotifier {
       id: id,
       name: name,
       platform: me.platform,
-      addresses: addresses,
+      addresses: lan,
       port: server.port == 0 ? sidekickPort : server.port,
       fingerprint: identity.fingerprint,
       secret: invite.secret,
@@ -1014,6 +1051,10 @@ class AppState extends ChangeNotifier {
       }
       final client = await found.future;
       if (client != null) return client;
+    }
+    // Both on Wi-Fi (the code lists its network addresses): Wi-Fi only.
+    if (wifiConnected && qr.addresses.isNotEmpty) {
+      throw SidekickException("Can't reach ${qr.name}. Connect both devices to the same Wi-Fi, then scan again.");
     }
     // Not on this network: look for it over Bluetooth.
     final bt = bluetooth;

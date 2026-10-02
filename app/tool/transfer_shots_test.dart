@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 import 'package:sidekick/app_state.dart';
 import 'package:sidekick/core/models.dart';
 import 'package:sidekick/core/server.dart';
+import 'package:sidekick/ui/corner_popup.dart';
 import 'package:sidekick/ui/transfer_screens.dart';
 
 Future<void> _loadFonts() async {
@@ -151,5 +152,64 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }
     await tester.pumpWidget(const SizedBox());
+  });
+
+  // The small corner window on Windows and Mac, at its real size (2x).
+  testWidgets('corner popup', (tester) async {
+    tester.view.physicalSize = const Size(720, 300);
+    tester.view.devicePixelRatio = 2;
+    await tester.runAsync(_loadFonts);
+    final out = Directory('build/screenshots')..createSync(recursive: true);
+    final key = GlobalKey();
+    for (final dark in [false, true]) {
+      final offer = TransferOffer(
+        id: 'o',
+        from: TrustedPeer(
+          id: 'p',
+          name: "Ana's iPhone",
+          platform: DevicePlatform.ios,
+          token: 't',
+          fingerprint: 'f',
+          key: 'k',
+        ),
+        files: const [OfferedFile('IMG_2041.HEIC', 3200000), OfferedFile('Trip.mov', 41000000)],
+      );
+      var done = false;
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              colorSchemeSeed: const Color(0xFF6750A4),
+              brightness: dark ? Brightness.dark : Brightness.light,
+              fontFamily: 'Roboto',
+            ),
+            home: CornerPopup(offer: offer, onDone: () => done = true),
+          ),
+        ),
+      );
+      Future<void> shot(String name) async {
+        await tester.pump(const Duration(milliseconds: 100));
+        final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        await tester.runAsync(() async {
+          final image = await boundary.toImage(pixelRatio: 2);
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          File(p.join(out.path, '$name${dark ? '-dark' : ''}.png')).writeAsBytesSync(bytes!.buffer.asUint8List());
+        });
+      }
+
+      await shot('corner_asking');
+      await tester.tap(find.text('Accept'));
+      offer.debugReceived(19000000);
+      await shot('corner_receiving');
+      offer
+        ..debugReceived(3200000, fileDone: true)
+        ..debugReceived(41000000, fileDone: true);
+      await shot('corner_done');
+      await tester.pump(const Duration(seconds: 1));
+      expect(done, isTrue, reason: 'closes by itself once everything is in');
+      await tester.pumpWidget(const SizedBox());
+    }
   });
 }

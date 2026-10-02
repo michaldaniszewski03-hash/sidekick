@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Without a multicast lock many phones drop discovery packets. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- A small "Ready to receive" notification keeps Sidekick running in the
+         background; file requests show as notifications with Accept/Decline. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Bluetooth: find and talk to devices when there's no shared Wi-Fi. -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
@@ -73,6 +78,14 @@
         </activity>
 
         <!-- Lets a paired PC tap, scroll and type on this phone. -->
+        <service
+            android:name=".SidekickService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="true" />
+        <receiver
+            android:name=".OfferActionReceiver"
+            android:exported="false" />
         <service
             android:name=".SidekickAccessibilityService"
             android:exported="false"

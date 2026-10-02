@@ -47,7 +47,13 @@ class DeviceInfo {
     this.version = protocolVersion,
     this.fingerprint,
     this.app,
+    this.wifi,
   });
+
+  /// Whether the device is on Wi-Fi (or Ethernet), as it says over
+  /// Bluetooth; null from releases before 2.6.2. Bluetooth is only for
+  /// when one of the two isn't.
+  final bool? wifi;
 
   /// The Sidekick release it runs ("2.1.3"); null before 2.1.3, which didn't
   /// say. Lets the other device point out that one of them needs updating.
@@ -85,6 +91,7 @@ class DeviceInfo {
     version: version,
     fingerprint: fingerprint,
     app: app,
+    wifi: wifi,
   );
 
   Map<String, dynamic> toJson() => {
@@ -96,6 +103,7 @@ class DeviceInfo {
     'caps': capabilities.toJson(),
     'fp': ?fingerprint,
     'app': ?app,
+    'wifi': ?wifi,
   };
 
   factory DeviceInfo.fromJson(Map<String, dynamic> json, {String? address}) => DeviceInfo(
@@ -108,6 +116,7 @@ class DeviceInfo {
     version: (json['v'] as num?)?.toInt() ?? 1,
     fingerprint: json['fp'] as String?,
     app: json['app'] as String?,
+    wifi: json['wifi'] as bool?,
   );
 }
 

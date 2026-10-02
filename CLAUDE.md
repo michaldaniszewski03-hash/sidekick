@@ -42,8 +42,15 @@ its biggest features and fixes, and bumps the website links (see
     Every device can show its code; only iPhone and Android scan
     (`mobile_scanner`). Mac and Windows never offer scanning (the owner's
     call: their cameras can't scan another screen); they show codes and
-    type the 6 digits. The 6-digit code screen also shows its QR when the
-    other device is a phone.
+    type the 6 digits. **One QR code for everything** (the owner's call):
+    every QR Sidekick shows is the same invite (`sidekick://pair?…`), on
+    Connect device → QR code and next to the 6 digits (when the other
+    device is a phone); scanning it pairs on its own, from either
+    scanner. `sidekick://pin` is only still read, from older releases.
+  - `corner_popup.dart`: the small window in the bottom-right corner on
+    Windows and Mac (360×150) when a request arrives while Sidekick is in
+    the tray: Accept / Decline, then a progress bar; it closes by itself
+    as soon as the files are in, or at once on Decline.
   - `startup.dart`: the startup animation (every platform; a tap skips it,
     reduced motion turns it off).
   - `widgets.dart` has the shared pieces: `PageFrame`, `SectionLabel` (with
@@ -67,6 +74,23 @@ its biggest features and fixes, and bumps the website links (see
   answer). One switch for all of them: Settings → Sound ("Sound enabled" /
   "Sound disabled"; `AppState.sound`, pref `sound`). Don't synthesize
   replacements.
+- `platform/desktop_window.dart` (Windows, Mac; `window_manager`,
+  `tray_manager` 0.5.x: 0.6+ is a native-library rewrite): closing the
+  window hides it to the tray / menu bar (Open, Quit); a request then
+  shows [CornerPopup] instead of the app (main.dart `_withCornerPopup`),
+  the window put back afterwards. While hidden, animations are paused.
+  Tray icons: `assets/tray/` and Android's `ic_stat_sidekick`, from
+  `make_icons.py` (`tray()`).
+- `platform/notifications.dart` (phones): a request while Sidekick isn't on
+  screen becomes a notification with Accept / Decline (`notifyOffer`;
+  the buttons come back as `offerAction`). Android: `Notifications.kt`
+  (also the progress and "Received"), `OfferActionReceiver`, and
+  `SidekickService`, a foreground service (connectedDevice, stopWithTask)
+  with a small "Ready to receive" notification; Back on the last screen
+  sends Sidekick to the background instead of closing it. iPhone:
+  `OfferNotifier` in AppDelegate.swift (only while it runs in the
+  background; iOS stops apps that are swiped away). The in-app card follows
+  answers given there.
 - Photos and videos a phone receives (sent to it, or downloaded from the
   other device's files) go straight to Photos / the gallery, automatically,
   like AirDrop (the owner's call: no switch). `platform/gallery.dart` picks
@@ -138,6 +162,12 @@ its biggest features and fixes, and bumps the website links (see
   - Output goes to `build/screenshots/`.
 - Swift can't be compiled here. CI (`ios` and `macos` jobs) is the check.
 - Bluetooth:
+  - **Wi-Fi first** (the owner's call): while this device is on Wi-Fi
+    (`lanAddresses`: private ranges on real Wi-Fi/Ethernet interfaces,
+    not mobile data, VPNs or virtual adapters) Bluetooth is never used,
+    unless the other device says it isn't on Wi-Fi (`DeviceInfo.wifi`,
+    sent over Bluetooth). "Not on Wi-Fi" needs two checks in a row. On
+    Wi-Fi, Bluetooth scans once a minute at most.
   - Writes are always one packet (MTU minus 3), never long writes.
   - Files go over Bluetooth in 32 KB sealed parts (`/v1/fs/upload/part`),
     each retried if it arrives damaged ("Message failed authentication"),
@@ -183,6 +213,22 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.6.2
+- **Closing the window keeps Sidekick in the tray** (Windows) / menu bar
+  (Mac), still receiving; Open and Quit are there. A file request then
+  pops up a **small window in the bottom-right corner** with Accept and
+  Decline, then the progress, and closes by itself when the files are in.
+- **Notifications on iPhone and Android:** a request while Sidekick is in
+  the background shows Accept / Decline; Android also shows the progress
+  and keeps a small "Ready to receive" notification while it runs in the
+  background (Back no longer closes it).
+- **Wi-Fi first:** Bluetooth is only used when one of the devices isn't
+  on Wi-Fi (no more Bluetooth while both are).
+- **One QR code for everything:** the QR next to the 6-digit code is the
+  same pairing code as Connect device → QR code; scanning either pairs.
+- **Faster:** themes are built once instead of on every update, and
+  nothing animates while the window is in the tray.
 
 ### 2.6.1
 - **Photos and videos go straight to Photos / the gallery** on iPhone and

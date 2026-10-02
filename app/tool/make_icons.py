@@ -281,7 +281,27 @@ def in_app() -> None:
     (out / "wordmark.png").unlink(missing_ok=True)
 
 
+def tray() -> None:
+    """The tray icon (Windows), the menu-bar icon (Mac: a black template the
+    system tints) and Android's small notification icon (white)."""
+    out = APP / "assets/tray"
+    out.mkdir(parents=True, exist_ok=True)
+    write_ico(out / "tray.ico", [tile(s, radius_frac=0.2) for s in (16, 20, 24, 32, 40, 48)])
+    template = Image.new("RGBA", (44, 44), (0, 0, 0, 255))  # 22 pt at 2x
+    template.putalpha(_glyph_mask(44, 0.92))
+    template.save(out / "tray_mac.png", optimize=True)
+    res = APP / "android/app/src/main/res"
+    for density, scale in {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}.items():
+        s = round(24 * scale)
+        im = Image.new("RGBA", (s, s), (255, 255, 255, 255))
+        im.putalpha(_glyph_mask(s, 0.86))
+        folder = res / f"drawable-{density}"
+        folder.mkdir(parents=True, exist_ok=True)
+        im.save(folder / "ic_stat_sidekick.png", optimize=True)
+
+
 if __name__ == "__main__":
+    tray()
     windows()
     android()
     macos()

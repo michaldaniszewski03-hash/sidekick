@@ -102,7 +102,7 @@ try {
 
 <main class="wrap">
   <h1>Privacy</h1>
-  <p class="date">Effective 2 October 2026 (updated for 2.6.1)</p>
+  <p class="date">Effective 2 October 2026 (updated for 2.6.2)</p>
 
   <div class="short">
     <b>The short version</b>
@@ -130,8 +130,11 @@ try {
   <h3>Nearby devices</h3>
   <p>So your devices can find each other, Sidekick announces itself on your local network and over Bluetooth: its
     device name, a random device ID, the kind of device (for example Mac or Android), its Sidekick version, its network
-    port, the fingerprint of its certificate, and which features it offers. Anyone on the same network or within
+    port, the fingerprint of its certificate, which features it offers, and (over Bluetooth) whether it's on Wi-Fi. Anyone on the same network or within
     Bluetooth range can see this announcement. It contains no files and no other personal content.</p>
+  <p>On Windows and Mac, closing Sidekick's window keeps it running in the tray (the menu bar on a Mac), so your devices
+    can still reach it; choose Quit there to stop it. On Android, a small "Ready to receive" notification shows while it
+    runs in the background.</p>
   <h3>Paired devices</h3>
   <p>A device can only do anything with yours after you pair them with a 6-digit code or a QR code. Paired devices
     can then:</p>
@@ -151,7 +154,10 @@ try {
   <h2>Permissions, and why</h2>
   <div class="perm">
     <div>Local network</div><div>All devices: to find and talk to your devices.</div>
-    <div>Bluetooth</div><div>All devices: to connect when there's no shared Wi-Fi.</div>
+    <div>Bluetooth</div><div>All devices: to connect when one of them isn't on Wi-Fi. While both are, Sidekick only
+      uses Wi-Fi.</div>
+    <div>Notifications</div><div>iPhone and Android: to show a file request while Sidekick is in the background, with
+      Accept and Decline, and on Android its progress and the "Ready to receive" notice.</div>
     <div>Camera</div><div>iPhone and Android: only to scan a pairing QR code. The picture is read on the device and is
       never saved or sent.</div>
     <div>Photos</div><div>iPhone: only the photos you pick to send, and adding the photos and videos you receive to

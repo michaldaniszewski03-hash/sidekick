@@ -1,5 +1,5 @@
 SIDEKICK PRIVACY POLICY
-Effective 2 October 2026 (updated for 2.6.1)
+Effective 2 October 2026 (updated for 2.6.2)
 
 THE SHORT VERSION
 
@@ -29,10 +29,15 @@ WHAT SIDEKICK SHARES, AND WITH WHOM
 Nearby devices. So your devices can find each other, Sidekick announces
 itself on your local network and over Bluetooth: its device name, a random
 device ID, the kind of device (for example Mac or Android), its Sidekick
-version, its network port, the fingerprint of its certificate, and which
-features it offers. Anyone on the same network or within Bluetooth range
-can see this announcement. It contains no files and no other personal
-content.
+version, its network port, the fingerprint of its certificate, which
+features it offers, and (over Bluetooth) whether it's on Wi-Fi. Anyone on
+the same network or within Bluetooth range can see this announcement. It
+contains no files and no other personal content.
+
+On Windows and Mac, closing Sidekick's window keeps it running in the tray
+(the menu bar on a Mac), so your devices can still reach it; choose Quit
+there to stop it. On Android, a small "Ready to receive" notification shows
+while it runs in the background.
 
 Paired devices. A device can only do anything with yours after you pair
 them with a 6-digit code or a QR code. Paired devices can then:
@@ -52,7 +57,11 @@ travels).
 PERMISSIONS, AND WHY
 
 - Local network (all devices): to find and talk to your devices.
-- Bluetooth (all devices): to connect when there's no shared Wi-Fi.
+- Bluetooth (all devices): to connect when one of them isn't on Wi-Fi.
+  While both are, Sidekick only uses Wi-Fi.
+- Notifications (iPhone and Android): to show a file request while
+  Sidekick is in the background, with Accept and Decline, and on Android
+  its progress and the "Ready to receive" notice.
 - Camera (iPhone and Android): only to scan a pairing QR code. The picture
   is read on the device and is never saved or sent.
 - Photos (iPhone): only the photos you pick to send, and adding the photos

@@ -1,12 +1,14 @@
 import AVFoundation
 import Flutter
 import Photos
+import UserNotifications
 import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let keepAlive = KeepAlive()
   private let sounds = Sounds()
+  private let offers = OfferNotifier()
   private var ble: SidekickBLE?
 
   override func application(
@@ -22,6 +24,8 @@ import UIKit
       let channel = FlutterMethodChannel(name: "sidekick/ios", binaryMessenger: registrar.messenger())
       let keepAlive = self.keepAlive
       let sounds = self.sounds
+      let offers = self.offers
+      offers.attach(channel)
       channel.setMethodCallHandler { call, result in
         switch call.method {
         case "setKeepAlive":
@@ -44,6 +48,26 @@ import UIKit
             return
           }
           PhotosSaver.save(path: path, video: args?["video"] as? Bool ?? false, done: result)
+        case "requestNotifications":
+          offers.requestPermission()
+          result(nil)
+        case "notifyOffer":
+          let args = call.arguments as? [String: Any] ?? [:]
+          offers.show(
+            id: args["id"] as? String ?? "", title: args["title"] as? String ?? "",
+            body: args["body"] as? String ?? "")
+          result(nil)
+        case "offerDone":
+          let args = call.arguments as? [String: Any] ?? [:]
+          offers.done(
+            id: args["id"] as? String ?? "", title: args["title"] as? String ?? "",
+            body: args["body"] as? String ?? "")
+          result(nil)
+        case "cancelOffer":
+          offers.cancel(id: (call.arguments as? [String: Any])?["id"] as? String ?? "")
+          result(nil)
+        case "offerProgress":
+          result(nil)  // iPhone notifications have no progress bar.
         default:
           result(FlutterMethodNotImplemented)
         }
@@ -171,5 +195,71 @@ enum PhotosSaver {
         }
       }
     }
+  }
+}
+
+/// A file request while Sidekick is in the background: a notification with
+/// Accept and Decline. The buttons go back to Dart as `offerAction`.
+final class OfferNotifier: NSObject, UNUserNotificationCenterDelegate {
+  private weak var channel: FlutterMethodChannel?
+  private let center = UNUserNotificationCenter.current()
+
+  func attach(_ channel: FlutterMethodChannel) {
+    self.channel = channel
+    center.delegate = self
+    let accept = UNNotificationAction(identifier: "accept", title: "Accept", options: [])
+    let decline = UNNotificationAction(identifier: "decline", title: "Decline", options: [.destructive])
+    center.setNotificationCategories([
+      UNNotificationCategory(identifier: "offer", actions: [accept, decline], intentIdentifiers: [], options: [])
+    ])
+  }
+
+  func requestPermission() {
+    center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+  }
+
+  private func post(id: String, title: String, body: String, category: String?) {
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = body
+    content.sound = .default
+    if let category { content.categoryIdentifier = category }
+    center.add(UNNotificationRequest(identifier: "offer-\(id)", content: content, trigger: nil))
+  }
+
+  func show(id: String, title: String, body: String) {
+    post(id: id, title: title, body: body, category: "offer")
+  }
+
+  func done(id: String, title: String, body: String) {
+    cancel(id: id)
+    post(id: id, title: title, body: body, category: nil)
+  }
+
+  func cancel(id: String) {
+    center.removeDeliveredNotifications(withIdentifiers: ["offer-\(id)"])
+    center.removePendingNotificationRequests(withIdentifiers: ["offer-\(id)"])
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let request = response.notification.request.identifier
+    if request.hasPrefix("offer-"),
+      ["accept", "decline"].contains(response.actionIdentifier)
+    {
+      let id = String(request.dropFirst("offer-".count))
+      channel?.invokeMethod("offerAction", arguments: ["id": id, "action": response.actionIdentifier])
+    }
+    completionHandler()
+  }
+
+  // On screen, the app shows its own card: no banner.
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([])
   }
 }

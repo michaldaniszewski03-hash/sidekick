@@ -125,6 +125,41 @@ class Discovery {
 
 /// This machine's LAN IPv4 addresses, for showing "reach me at" hints.
 /// Never throws: some phones refuse to list interfaces now and then.
+/// Addresses on a local network (Wi-Fi or Ethernet): private ranges only,
+/// and not mobile data, a VPN or a phone's own hotspot-to-carrier link.
+/// Empty means this device isn't on Wi-Fi.
+Future<List<String>> lanAddresses() async {
+  try {
+    final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+    return [
+      for (final nic in interfaces)
+        if (!isCellularOrVpn(nic.name))
+          for (final a in nic.addresses)
+            if (isPrivateLan(a.address)) a.address,
+    ];
+  } catch (_) {
+    return const [];
+  }
+}
+
+/// Mobile data (Android rmnet/ccmni, iPhone pdp_ip), tunnels (VPNs) and
+/// virtual adapters (WSL/Hyper-V, VMware, VirtualBox, Docker), which have
+/// private addresses but aren't Wi-Fi.
+bool isCellularOrVpn(String interface) {
+  final n = interface.toLowerCase();
+  const prefixes = ['rmnet', 'ccmni', 'pdp', 'wwan', 'utun', 'ipsec', 'tun', 'ppp', 'v4-', 'clat', 'wg', 'zt'];
+  const anywhere = ['vethernet', 'vmnet', 'vmware', 'virtualbox', 'docker', 'veth', 'tailscale', 'hyper-v', 'wsl'];
+  return prefixes.any(n.startsWith) || anywhere.any(n.contains) || n.startsWith('br-');
+}
+
+/// 10/8, 172.16/12 and 192.168/16: home and office networks (not 100.64/10,
+/// which carriers and VPNs use).
+bool isPrivateLan(String address) {
+  final p = address.split('.').map(int.tryParse).toList();
+  if (p.length != 4 || p.contains(null)) return false;
+  return p[0] == 10 || (p[0] == 172 && p[1]! >= 16 && p[1]! <= 31) || (p[0] == 192 && p[1] == 168);
+}
+
 Future<List<String>> localAddresses() async {
   try {
     final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);

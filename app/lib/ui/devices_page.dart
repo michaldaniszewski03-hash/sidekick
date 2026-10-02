@@ -237,18 +237,37 @@ class _EnterPinDialogState extends State<_EnterPinDialog> {
     }
   }
 
-  /// Scans the QR code next to the 6-digit code instead of typing it.
+  /// Scans the QR code next to the 6-digit code instead of typing it. It's
+  /// the same QR code as everywhere else (an invite), which pairs on its own.
   Future<void> _scan() async {
     final code = await scanPairingQr(context);
     if (code == null || !mounted) return;
-    if (code is! PinQr || code.id != widget.device.id) {
-      setState(
-        () => _error = "That's not the code ${widget.device.name} is showing. Scan the one next to the 6 digits.",
-      );
-      return;
+    switch (code) {
+      case InviteQr() when code.id == widget.device.id:
+        setState(() {
+          _busy = true;
+          _error = null;
+        });
+        try {
+          final paired = await widget.state.pairWithInvite(code);
+          if (mounted) Navigator.pop(context, paired);
+        } catch (e) {
+          if (mounted) {
+            setState(() {
+              _busy = false;
+              _error = '$e';
+            });
+          }
+        }
+      // A device before 2.6.2 shows the 6 digits as a QR code.
+      case PinQr() when code.id == widget.device.id:
+        _controller.text = code.pin;
+        await _submit();
+      default:
+        setState(
+          () => _error = "That's not the code ${widget.device.name} is showing. Scan the one next to the 6 digits.",
+        );
     }
-    _controller.text = code.pin;
-    await _submit();
   }
 
   @override

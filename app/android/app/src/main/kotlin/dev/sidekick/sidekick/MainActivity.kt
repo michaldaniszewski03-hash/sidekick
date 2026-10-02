@@ -29,13 +29,19 @@ import java.io.IOException
  * the hotspot and the multicast lock.
  */
 class MainActivity : FlutterActivity() {
+    companion object {
+        /** The channel to Dart while Sidekick runs (notification buttons use it). */
+        var channel: MethodChannel? = null
+    }
+
     private var multicastLock: WifiManager.MulticastLock? = null
     private var hotspot: WifiManager.LocalOnlyHotspotReservation? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/android")
-            .setMethodCallHandler { call, result ->
+        val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/android")
+        channel = ch
+        ch.setMethodCallHandler { call, result ->
                 try {
                     when (call.method) {
                         "acquireMulticastLock" -> {
@@ -72,6 +78,51 @@ class MainActivity : FlutterActivity() {
                             call.argument<Boolean>("video") ?: false,
                             result,
                         )
+                        "requestNotifications" -> {
+                            if (Build.VERSION.SDK_INT >= 33 &&
+                                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4)
+                            }
+                            result.success(null)
+                        }
+                        "startService" -> {
+                            startForegroundService(Intent(this, SidekickService::class.java))
+                            result.success(null)
+                        }
+                        "notifyOffer" -> {
+                            Notifications.offer(
+                                this,
+                                call.argument<String>("id") ?: "",
+                                call.argument<String>("title") ?: "",
+                                call.argument<String>("body") ?: "",
+                                (call.argument<Number>("timeout") ?: 60000).toLong(),
+                            )
+                            result.success(null)
+                        }
+                        "offerProgress" -> {
+                            Notifications.progress(
+                                this,
+                                call.argument<String>("id") ?: "",
+                                call.argument<String>("title") ?: "",
+                                (call.argument<Number>("done") ?: 0).toLong(),
+                                (call.argument<Number>("total") ?: 0).toLong(),
+                            )
+                            result.success(null)
+                        }
+                        "offerDone" -> {
+                            Notifications.done(
+                                this,
+                                call.argument<String>("id") ?: "",
+                                call.argument<String>("title") ?: "",
+                                call.argument<String>("body") ?: "",
+                            )
+                            result.success(null)
+                        }
+                        "cancelOffer" -> {
+                            Notifications.cancel(this, call.argument<String>("id") ?: "")
+                            result.success(null)
+                        }
                         "input" -> {
                             val service = SidekickAccessibilityService.instance
                             val args = call.arguments as? Map<*, *>
@@ -86,7 +137,18 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    /** Back on the last screen sends Sidekick to the background (still
+     *  receiving, with its notification) instead of closing it. */
+    override fun popSystemNavigator(): Boolean {
+        moveTaskToBack(true)
+        return true
+    }
+
     override fun onDestroy() {
+        if (isFinishing) {
+            channel = null
+            stopService(Intent(this, SidekickService::class.java))
+        }
         hotspot?.close()
         hotspot = null
         multicastLock?.release()

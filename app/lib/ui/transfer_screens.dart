@@ -545,11 +545,17 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
   void initState() {
     super.initState();
     offer.answer.then((answer) {
-      if (!mounted || answer == OfferAnswer.accepted) return;
-      // The sender gave up, or time ran out.
-      if (_stage == _Stage.asking) {
-        setState(() => _stage = _Stage.gone);
-        Timer(const Duration(milliseconds: 1400), _leave);
+      if (!mounted || _stage != _Stage.asking) return;
+      switch (answer) {
+        // Answered from the notification: follow along.
+        case OfferAnswer.accepted:
+          _receive();
+        case OfferAnswer.declined:
+          _leave();
+        // The sender gave up, or time ran out.
+        case OfferAnswer.cancelled || OfferAnswer.timedOut:
+          setState(() => _stage = _Stage.gone);
+          Timer(const Duration(milliseconds: 1400), _leave);
       }
     });
   }
@@ -574,6 +580,11 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
   void _accept() {
     offer.accept();
     if (widget.sounds) unawaited(playAcceptSound());
+    _receive();
+  }
+
+  void _receive() {
+    if (_stage != _Stage.asking) return;
     _countdown.stop();
     _celebrate();
     setState(() => _stage = _Stage.receiving);

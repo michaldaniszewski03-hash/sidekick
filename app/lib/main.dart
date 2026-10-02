@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
+import 'platform/desktop_window.dart';
 import 'platform/sound.dart';
+import 'ui/corner_popup.dart';
 import 'ui/shell.dart';
 import 'ui/startup.dart';
 import 'ui/welcome.dart';
@@ -15,6 +17,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   _catchErrors();
   try {
+    // Windows and Mac: closing the window keeps Sidekick in the tray.
+    if (DesktopWindow.supported) {
+      try {
+        await DesktopWindow.instance.init();
+      } catch (e) {
+        debugPrint('Sidekick: no tray: $e');
+      }
+    }
     final state = await AppState.load();
     await state.start();
     runApp(SidekickApp(state: state, splash: true));
@@ -194,6 +204,20 @@ class SidekickApp extends StatelessWidget {
     );
   }
 
+  /// Themes are built once per look: the app rebuilds on every change (up to
+  /// ten times a second during a transfer), and building a palette from a
+  /// seed color and a full theme each time made every rebuild re-theme the
+  /// whole app.
+  static final _themes = <Object, ThemeData>{};
+
+  ThemeData _themeFor(ColorScheme? dynamic, Brightness brightness) {
+    final key = (state.themeColor, state.pureBlack, brightness, dynamic);
+    final theme = _themes[key];
+    if (theme != null) return theme;
+    if (_themes.length > 8) _themes.clear();
+    return _themes[key] = _theme(_scheme(dynamic, brightness));
+  }
+
   ColorScheme _scheme(ColorScheme? dynamic, Brightness brightness) {
     final choice = state.themeColor;
     ColorScheme scheme;
@@ -232,8 +256,9 @@ class SidekickApp extends StatelessWidget {
           title: 'Sidekick',
           debugShowCheckedModeBanner: false,
           themeMode: state.themeMode,
-          theme: _theme(_scheme(lightDynamic, Brightness.light)),
-          darkTheme: _theme(_scheme(darkDynamic, Brightness.dark)),
+          theme: _themeFor(lightDynamic, Brightness.light),
+          darkTheme: _themeFor(darkDynamic, Brightness.dark),
+          builder: DesktopWindow.supported ? _withCornerPopup : null,
           home: _maybeSplash(
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 400),
@@ -246,4 +271,27 @@ class SidekickApp extends StatelessWidget {
   }
 
   Widget _maybeSplash(Widget app) => splash ? StartupSplash(child: app) : app;
+
+  /// In the tray, a request shows only the small corner card; the rest of
+  /// the app stays as it was, not drawn and not animating.
+  Widget _withCornerPopup(BuildContext context, Widget? child) => ListenableBuilder(
+    listenable: Listenable.merge([DesktopWindow.instance.popup, DesktopWindow.instance.hidden]),
+    builder: (context, _) {
+      final offer = DesktopWindow.instance.popup.value;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Offstage(
+            offstage: offer != null,
+            // In the tray nothing's on screen: no animations ticking away.
+            child: TickerMode(
+              enabled: offer == null && !DesktopWindow.instance.hidden.value,
+              child: child ?? const SizedBox(),
+            ),
+          ),
+          if (offer != null) CornerPopup(offer: offer, onDone: DesktopWindow.instance.popupDone, sounds: state.sound),
+        ],
+      );
+    },
+  );
 }
