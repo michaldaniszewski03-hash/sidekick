@@ -110,7 +110,8 @@ its biggest features and fixes, and bumps the website links (see
   - `flutter test tool/ad_frames_test.dart` renders the startup animation,
     an iPhone sending and the Mac's Accept card as 30 fps frames
     (`build/ad/<scene>/NNN.png`) for video ads. `SIDEKICK_THEME=mono`
-    renders both tools in the Monochrome theme (the ads use it).
+    renders both tools in the Monochrome theme. `SIDEKICK_DPR=4` renders
+    the Mac scene at 4x (`receive@4x`), sharp enough to zoom into in 4K.
   - Output goes to `build/screenshots/`.
 - Swift can't be compiled here. CI (`ios` and `macos` jobs) is the check.
 - Bluetooth:

@@ -162,8 +162,12 @@ void main() {
   });
 
   testWidgets('receive', (tester) async {
-    tester.view.devicePixelRatio = 2;
-    tester.view.physicalSize = const Size(1280 * 2, 800 * 2);
+    // SIDEKICK_DPR renders sharper frames (e.g. 4, for zooming in on 4K);
+    // they go to build/ad/receive@<dpr>x.
+    final dpr = double.tryParse(Platform.environment['SIDEKICK_DPR'] ?? '') ?? 2;
+    final scene = dpr == 2 ? 'receive' : 'receive@${dpr.round()}x';
+    tester.view.devicePixelRatio = dpr;
+    tester.view.physicalSize = Size(1280 * dpr, 800 * dpr);
     debugHostPlatform = DevicePlatform.macos;
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     final state = await start(tester, 'MacBook Pro');
@@ -193,11 +197,11 @@ void main() {
     );
     final context = tester.element(find.byType(Scaffold).first);
     showIncomingOffer(context, offer).ignore();
-    final n = await frames(tester, key, 'receive', 66);
+    final n = await frames(tester, key, scene, 66);
     await tester.tap(find.text('Accept'));
     // The files arrive as the iPhone sends them (its progress runs over 45
     // frames from a few frames after Accept): the same pace here.
-    var m = await frames(tester, key, 'receive', 3, first: n);
+    var m = await frames(tester, key, scene, 3, first: n);
     var sent = 0;
     var file = 0;
     for (var i = 0; i < 47; i++) {
@@ -217,7 +221,7 @@ void main() {
         offer.debugReceived(target - sent);
         sent = target;
       }
-      m = await frames(tester, key, 'receive', 1, first: m);
+      m = await frames(tester, key, scene, 1, first: m);
     }
     await finish(tester, state);
   });
