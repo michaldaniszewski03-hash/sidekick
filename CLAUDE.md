@@ -79,6 +79,10 @@ its biggest features and fixes, and bumps the website links (see
   window hides it to the tray / menu bar (Open, Quit); a request then
   shows [CornerPopup] instead of the app (main.dart `_withCornerPopup`),
   the window put back afterwards. While hidden, animations are paused.
+  **Never call `setSkipTaskbar`** (or anything else using the plugin's
+  taskbar object) on Windows: it's only created in `waitUntilReadyToShow`,
+  so it's a null pointer and the app crashes (2.6.2 crashed this way when a
+  request arrived in the tray).
   Tray icons: `assets/tray/` and Android's `ic_stat_sidekick`, from
   `make_icons.py` (`tray()`).
 - `platform/notifications.dart` (phones): a request while Sidekick isn't on
@@ -232,6 +236,9 @@ one) without asking.
 ## Versions
 
 ### 2.6.3
+- **Fixed: Windows crashed when a file request arrived while Sidekick was
+  in the tray** (the sender saw "Connection reset by peer"). The corner
+  window's skip-taskbar call hit a null pointer inside window_manager.
 - **Close works on the sending screen again:** Close and Cancel close that
   screen, even if something opened on top of it; Cancel works even as the
   send moves on.

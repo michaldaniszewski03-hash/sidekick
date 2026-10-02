@@ -83,7 +83,10 @@ class DesktopWindow with WindowListener, TrayListener {
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
     await windowManager.setResizable(false);
     await windowManager.setAlwaysOnTop(true);
-    await windowManager.setSkipTaskbar(true);
+    // Never setSkipTaskbar: on Windows, window_manager only creates its
+    // taskbar object in waitUntilReadyToShow (which Sidekick doesn't use),
+    // so setSkipTaskbar dereferenced a null pointer and the whole app
+    // crashed the moment a request arrived in the tray (2.6.2).
     final display = await screenRetriever.getPrimaryDisplay();
     final area = (display.visiblePosition ?? Offset.zero) & (display.visibleSize ?? display.size);
     const margin = 16.0;
@@ -109,7 +112,6 @@ class DesktopWindow with WindowListener, TrayListener {
     await windowManager.hide();
     popup.value = null;
     await windowManager.setAlwaysOnTop(false);
-    await windowManager.setSkipTaskbar(false);
     await windowManager.setResizable(true);
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
     if (_bounds case final bounds?) await windowManager.setBounds(bounds);
