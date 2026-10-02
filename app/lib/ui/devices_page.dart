@@ -603,7 +603,7 @@ class _Searching extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final offline = state.addresses.isEmpty;
+    final offline = !state.wifiConnected;
     final bt = state.bluetooth;
     final bluetoothOff = bt == null || bt.status != BluetoothStatus.on;
     return Container(
@@ -631,7 +631,8 @@ class _Searching extends StatelessWidget {
                             '${Platform.isWindows ? ' If Windows asks, allow Sidekick on private networks.' : ''}',
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
-                if (bt != null) ...[
+                // Without Wi-Fi it offers Bluetooth (asking to turn it on first).
+                if (bt != null || (offline && AppState.bluetoothSupported)) ...[
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     onPressed: () => showBluetoothPairing(context, state),

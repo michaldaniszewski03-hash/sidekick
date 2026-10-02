@@ -8,7 +8,28 @@ import 'widgets.dart';
 /// Pairing over Bluetooth, for when there's no Wi-Fi: searches the whole
 /// time it's open and lists every Sidekick device it hears, with what's
 /// happening (reading its name, or why that failed).
-Future<void> showBluetoothPairing(BuildContext context, AppState state) {
+Future<void> showBluetoothPairing(BuildContext context, AppState state) async {
+  // Bluetooth is off unless the user turns it on; ask first.
+  if (!state.bluetoothOn) {
+    final on = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.bluetooth_rounded),
+        title: const Text('Turn on Bluetooth?'),
+        content: const Text(
+          'Sidekick uses Wi-Fi. Bluetooth is for connecting when a device has no Wi-Fi, '
+          'and you can turn it off again in Settings.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Turn on')),
+        ],
+      ),
+    );
+    if (on != true || !context.mounted) return;
+    await state.setBluetooth(true);
+    if (!context.mounted) return;
+  }
   final page = _BluetoothPairing(state: state);
   if (isMobile) {
     return showModalBottomSheet<void>(

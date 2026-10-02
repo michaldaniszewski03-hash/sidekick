@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -67,6 +68,9 @@ class Transfer {
   /// A received photo or video that went to Photos / the gallery.
   bool inGallery = false;
 
+  /// Where it is there (Android), to open it.
+  String? galleryUri;
+
   double? get fraction => total > 0 ? done / total : null;
 }
 
@@ -122,11 +126,15 @@ class NearbyDevice {
 
 /// A one-off message for the snackbar.
 class Notice {
-  Notice(this.message, {this.revealPath});
+  Notice(this.message, {this.revealPath, this.inGallery = false, this.galleryUri});
   final String message;
 
   /// If set, the snackbar offers "Show in folder" for this file.
   final String? revealPath;
+
+  /// It's in Photos / the gallery: the snackbar offers to open it there.
+  final bool inGallery;
+  final String? galleryUri;
 }
 
 DevicePlatform get currentPlatform {
@@ -307,6 +315,7 @@ class AppState extends ChangeNotifier {
         _prefs.getBool('sound') ??
         ((_prefs.getBool('startupSound') ?? true) && (_prefs.getBool('requestSound') ?? true));
     welcomed = _prefs.getBool('welcomed') ?? false;
+    bluetoothOn = _prefs.getBool('bluetooth') ?? false;
     permissions = Permissions(files: _prefs.getBool('allowFiles') ?? true, input: _prefs.getBool('allowInput') ?? true);
     _receiveDir = _prefs.getString('receiveDir');
     selectedId = _prefs.getString('selectedId');
@@ -440,13 +449,9 @@ class AppState extends ChangeNotifier {
       _scanTimer = Timer.periodic(const Duration(seconds: 30), (_) => scanNetwork());
     }
 
-    if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows) {
-      final bt = bluetooth = BluetoothService(self: () => me, server: server)..onChanged = _bluetoothChanged;
-      bt.found.listen(_onBluetoothSighting);
-      bt.statusChanges.listen((_) => notifyListeners());
-      unawaited(bt.start().then((_) => _maybeScanBluetooth()).catchError((_) {}));
-      _bleTimer = Timer.periodic(const Duration(seconds: 10), (_) => _maybeScanBluetooth());
-    }
+    // Off unless turned on (Settings → Bluetooth): Wi-Fi by default, and no
+    // Bluetooth permission prompt at start.
+    if (bluetoothOn) _startBluetooth();
 
     if (Platform.isMacOS) {
       // Coming back from System Settings doesn't always count as "resumed".
@@ -483,6 +488,51 @@ class AppState extends ChangeNotifier {
     final fresh = await Isolate.run(Identity.generate);
     await secrets.write('identity', jsonEncode(fresh.toJson()));
     return fresh;
+  }
+
+  /// Bluetooth works on these; [bluetoothOn] says whether it's turned on.
+  static bool get bluetoothSupported => Platform.isAndroid || Platform.isIOS || Platform.isMacOS || Platform.isWindows;
+
+  /// The user turned Bluetooth on in Sidekick (off by default: Wi-Fi only).
+  bool bluetoothOn = false;
+  final _bluetoothSubs = <StreamSubscription<Object?>>[];
+
+  void _startBluetooth() {
+    if (!bluetoothSupported || bluetooth != null) return;
+    final bt = bluetooth = BluetoothService(self: () => me, server: server)..onChanged = _bluetoothChanged;
+    _bluetoothSubs
+      ..add(bt.found.listen(_onBluetoothSighting))
+      ..add(bt.statusChanges.listen((_) => notifyListeners()));
+    unawaited(bt.start().then((_) => _maybeScanBluetooth()).catchError((_) {}));
+    _bleTimer = Timer.periodic(const Duration(seconds: 10), (_) => _maybeScanBluetooth());
+  }
+
+  Future<void> _stopBluetooth() async {
+    _bleTimer?.cancel();
+    _bleTimer = null;
+    for (final s in _bluetoothSubs) {
+      await s.cancel();
+    }
+    _bluetoothSubs.clear();
+    final bt = bluetooth;
+    bluetooth = null;
+    _bleSeen.clear();
+    _bleClients.clear();
+    await bt?.stop();
+  }
+
+  /// Settings → Bluetooth. Turning it on is when the system asks for
+  /// permission (the first time).
+  Future<void> setBluetooth(bool on) async {
+    if (on == bluetoothOn) return;
+    bluetoothOn = on;
+    await _prefs.setBool('bluetooth', on);
+    if (on) {
+      _startBluetooth();
+    } else {
+      await _stopBluetooth();
+    }
+    notifyListeners();
   }
 
   @override
@@ -1179,13 +1229,14 @@ class AppState extends ChangeNotifier {
   /// gallery. If that fails it stays in the receive folder, and the notice
   /// ([what] happened) says why.
   Future<void> _toGallery(Transfer transfer, File file, String what) async {
-    final why = await Gallery.save(file);
+    final (:why, :uri) = await Gallery.save(file);
     if (why == null) {
       transfer
         ..localPath = null
-        ..inGallery = true;
+        ..inGallery = true
+        ..galleryUri = uri;
       notifyListeners();
-      _notices.add(Notice('$what. It\'s in ${Gallery.name}.'));
+      _notices.add(Notice('$what. It\'s in ${Gallery.name}.', inGallery: true, galleryUri: uri));
     } else {
       _notices.add(Notice('$what. It couldn\'t go to ${Gallery.name} ($why), so it\'s in the Sidekick folder.'));
     }
@@ -1449,11 +1500,23 @@ class AppState extends ChangeNotifier {
 }
 
 /// Whether [revealInFolder] can do anything on this platform.
-bool get canRevealFiles => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+/// Every platform can show where a file is (phones since 2.6.3).
+bool get canRevealFiles => true;
 
-/// Opens Explorer (or Finder) with [path] selected.
+/// What the "open" button says.
+String get revealLabel => Platform.isIOS || Platform.isAndroid ? 'Show in Files' : 'Show in folder';
+
+/// Opens Explorer (or Finder) with [path] selected; on a phone, the Files
+/// app at the folder it's in (iPhone: On My iPhone → Sidekick).
 Future<void> revealInFolder(String path) async {
-  if (Platform.isWindows) {
+  if (Platform.isIOS || Platform.isAndroid) {
+    try {
+      await MethodChannel(Platform.isIOS ? 'sidekick/ios' : 'sidekick/android')
+          .invokeMethod('openFolder', {'path': p.dirname(path)});
+    } catch (e) {
+      debugPrint('Sidekick: openFolder: $e');
+    }
+  } else if (Platform.isWindows) {
     await Process.run('explorer.exe', ['/select,', path]);
   } else if (Platform.isMacOS) {
     await Process.run('open', ['-R', path]);

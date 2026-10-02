@@ -401,9 +401,17 @@ class _Transfers extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (t.localPath != null && canRevealFiles)
+                        // The "open" button: where the file is (the folder, or
+                        // Photos / the gallery for photos and videos on a phone).
+                        if (t.inGallery)
                           IconButton(
-                            tooltip: 'Show in folder',
+                            tooltip: 'Open in ${Gallery.name}',
+                            icon: const Icon(Icons.photo_library_outlined, size: 20),
+                            onPressed: () => Gallery.open(t.galleryUri),
+                          )
+                        else if (t.localPath != null && canRevealFiles)
+                          IconButton(
+                            tooltip: revealLabel,
                             icon: const Icon(Icons.folder_open_outlined, size: 20),
                             onPressed: () => revealInFolder(t.localPath!),
                           ),

@@ -6,6 +6,7 @@ import '../app_state.dart';
 import '../core/server.dart';
 import '../core/trust.dart';
 import '../platform/desktop_window.dart';
+import '../platform/gallery.dart';
 import '../platform/notifications.dart';
 import '../platform/sound.dart';
 import 'devices_page.dart';
@@ -91,9 +92,11 @@ class _ShellState extends State<Shell> {
             Expanded(child: Text(notice.message)),
           ],
         ),
-        action: notice.revealPath == null || !canRevealFiles
+        action: notice.inGallery
+            ? SnackBarAction(label: 'Open', onPressed: () => Gallery.open(notice.galleryUri))
+            : notice.revealPath == null || !canRevealFiles
             ? null
-            : SnackBarAction(label: 'Show in folder', onPressed: () => revealInFolder(notice.revealPath!)),
+            : SnackBarAction(label: revealLabel, onPressed: () => revealInFolder(notice.revealPath!)),
       ),
     );
   }

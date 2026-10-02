@@ -117,65 +117,80 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SectionLabel('Mac permissions', icon: Icons.shield_outlined),
                     _Group(children: [const MacAccessibilityRow()]),
                   ],
-                  if (state.bluetooth case final bt?) ...[
+                  if (AppState.bluetoothSupported) ...[
                     const SectionLabel('Bluetooth', icon: Icons.bluetooth_rounded),
                     _Group(
                       children: [
-                        ListTile(
-                          leading: const IconTile(Icons.bluetooth_rounded, tone: TileTone.primary),
-                          title: const Text('Connect without Wi-Fi'),
-                          subtitle: Text(switch (bt.status) {
-                            _ when bt.problem != null => bt.problem!,
-                            BluetoothStatus.on => 'On. Used when your devices aren\'t on the same Wi-Fi.',
-                            BluetoothStatus.off => 'Bluetooth is off. Turn it on to connect without Wi-Fi.',
-                            BluetoothStatus.unauthorized => "Sidekick isn't allowed to use Bluetooth.",
-                            BluetoothStatus.unsupported => "This device doesn't support Bluetooth LE.",
-                            BluetoothStatus.starting => 'Starting…',
-                          }),
-                          trailing: switch (bt.status) {
-                            _ when bt.problem != null => const Icon(Icons.error_outline, color: Colors.orange),
-                            BluetoothStatus.on => const Icon(Icons.check_circle, color: Colors.green),
-                            BluetoothStatus.unauthorized => FilledButton.tonal(
-                              onPressed: bt.requestPermission,
-                              child: const Text('Allow'),
-                            ),
-                            _ => null,
-                          },
-                        ),
-                        ExpansionTile(
-                          leading: const IconTile(Icons.troubleshoot_rounded),
-                          title: const Text('Details'),
+                        // Off by default: Sidekick uses Wi-Fi. Turning it on is
+                        // when the system asks for permission.
+                        SwitchListTile(
+                          secondary: const IconTile(Icons.bluetooth_rounded, tone: TileTone.primary),
+                          title: const Text('Bluetooth'),
                           subtitle: Text(
-                            [
-                              bt.advertising ? 'Visible to other devices' : 'Not visible to other devices',
-                              if (bt.scanning) 'scanning…',
-                            ].join(' · '),
+                            state.bluetoothOn
+                                ? 'Used only when a device has no Wi-Fi'
+                                : 'Off. Sidekick uses Wi-Fi only',
                           ),
-                          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: FilledButton.tonalIcon(
-                                onPressed: bt.scanning || !bt.canScan ? null : state.scanBluetoothNow,
-                                icon: const Icon(Icons.bluetooth_searching),
-                                label: Text(bt.scanning ? 'Scanning…' : 'Scan now'),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text('Seen over Bluetooth', style: Theme.of(context).textTheme.titleSmall),
-                            if (state.bluetoothSightings.isEmpty) const Text('Nothing yet'),
-                            for (final s in state.bluetoothSightings)
-                              Text('${s.info.name} (${s.info.platform.name}), ${_ago(s.seen)}'),
-                            const SizedBox(height: 12),
-                            Text('Log', style: Theme.of(context).textTheme.titleSmall),
-                            const SizedBox(height: 4),
-                            SelectableText(
-                              bt.log.isEmpty ? 'Empty' : bt.log.reversed.take(25).join('\n'),
-                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                            ),
-                          ],
+                          value: state.bluetoothOn,
+                          onChanged: state.setBluetooth,
                         ),
+                        if (state.bluetooth case final bt?) ...[
+                          ListTile(
+                            leading: const IconTile(Icons.bluetooth_rounded, tone: TileTone.primary),
+                            title: const Text('Connect without Wi-Fi'),
+                            subtitle: Text(switch (bt.status) {
+                              _ when bt.problem != null => bt.problem!,
+                              BluetoothStatus.on => 'On. Used when your devices aren\'t on the same Wi-Fi.',
+                              BluetoothStatus.off => 'Bluetooth is off. Turn it on to connect without Wi-Fi.',
+                              BluetoothStatus.unauthorized => "Sidekick isn't allowed to use Bluetooth.",
+                              BluetoothStatus.unsupported => "This device doesn't support Bluetooth LE.",
+                              BluetoothStatus.starting => 'Starting…',
+                            }),
+                            trailing: switch (bt.status) {
+                              _ when bt.problem != null => const Icon(Icons.error_outline, color: Colors.orange),
+                              BluetoothStatus.on => const Icon(Icons.check_circle, color: Colors.green),
+                              BluetoothStatus.unauthorized => FilledButton.tonal(
+                                onPressed: bt.requestPermission,
+                                child: const Text('Allow'),
+                              ),
+                              _ => null,
+                            },
+                          ),
+                          ExpansionTile(
+                            leading: const IconTile(Icons.troubleshoot_rounded),
+                            title: const Text('Details'),
+                            subtitle: Text(
+                              [
+                                bt.advertising ? 'Visible to other devices' : 'Not visible to other devices',
+                                if (bt.scanning) 'scanning…',
+                              ].join(' · '),
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: bt.scanning || !bt.canScan ? null : state.scanBluetoothNow,
+                                  icon: const Icon(Icons.bluetooth_searching),
+                                  label: Text(bt.scanning ? 'Scanning…' : 'Scan now'),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text('Seen over Bluetooth', style: Theme.of(context).textTheme.titleSmall),
+                              if (state.bluetoothSightings.isEmpty) const Text('Nothing yet'),
+                              for (final s in state.bluetoothSightings)
+                                Text('${s.info.name} (${s.info.platform.name}), ${_ago(s.seen)}'),
+                              const SizedBox(height: 12),
+                              Text('Log', style: Theme.of(context).textTheme.titleSmall),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                bt.log.isEmpty ? 'Empty' : bt.log.reversed.take(25).join('\n'),
+                                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ],

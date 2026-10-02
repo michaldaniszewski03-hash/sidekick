@@ -91,6 +91,15 @@ its biggest features and fixes, and bumps the website links (see
   `OfferNotifier` in AppDelegate.swift (only while it runs in the
   background; iOS stops apps that are swiped away). The in-app card follows
   answers given there.
+- The "open" button (folder icon) on received files and on the
+  "Received" snackbar: Explorer/Finder on computers; on phones the Files
+  app at the folder (`openFolder`: iPhone `shareddocuments://`, Android
+  DocumentsContract, Download/Sidekick), or Photos / the gallery for photos
+  and videos (`openGallery`; Android returns the MediaStore uri from
+  `saveToGallery`).
+- Screens close themselves with `closeRoute` (their own route, never
+  "whatever's on top": that closed the wrong thing and left the sending
+  screen's Close button dead).
 - Photos and videos a phone receives (sent to it, or downloaded from the
   other device's files) go straight to Photos / the gallery, automatically,
   like AirDrop (the owner's call: no switch). `platform/gallery.dart` picks
@@ -162,6 +171,10 @@ its biggest features and fixes, and bumps the website links (see
   - Output goes to `build/screenshots/`.
 - Swift can't be compiled here. CI (`ios` and `macos` jobs) is the check.
 - Bluetooth:
+  - **Off by default** (the owner's call): Settings → Bluetooth turns it
+    on (`AppState.bluetoothOn`, pref `bluetooth`); until then Sidekick
+    never starts the radio, so no permission prompt at start. Picking
+    Bluetooth in Connect device asks to turn it on.
   - **Wi-Fi first** (the owner's call): while this device is on Wi-Fi
     (`lanAddresses`: private ranges on real Wi-Fi/Ethernet interfaces,
     not mobile data, VPNs or virtual adapters) Bluetooth is never used,
@@ -213,6 +226,16 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.6.3
+- **Close works on the sending screen again:** Close and Cancel close that
+  screen, even if something opened on top of it; Cancel works even as the
+  send moves on.
+- **Bluetooth is off by default:** Sidekick uses Wi-Fi and doesn't ask for
+  Bluetooth at start. Turn it on in Settings → Bluetooth (or when picking
+  Bluetooth in Connect device).
+- **Open button on phones:** a received file's folder icon opens the Files
+  app at its folder; photos and videos open in Photos / the gallery.
 
 ### 2.6.2
 - **Closing the window keeps Sidekick in the tray** (Windows) / menu bar

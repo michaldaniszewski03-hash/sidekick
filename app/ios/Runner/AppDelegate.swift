@@ -68,6 +68,19 @@ import UIKit
           result(nil)
         case "offerProgress":
           result(nil)  // iPhone notifications have no progress bar.
+        case "openFolder":
+          // The Files app at Sidekick's folder (On My iPhone → Sidekick).
+          let path = (call.arguments as? [String: Any])?["path"] as? String ?? ""
+          let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+          if let url = URL(string: "shareddocuments://\(encoded)") {
+            UIApplication.shared.open(url)
+          }
+          result(nil)
+        case "openGallery":
+          if let url = URL(string: "photos-redirect://") {
+            UIApplication.shared.open(url)
+          }
+          result(nil)
         default:
           result(FlutterMethodNotImplemented)
         }

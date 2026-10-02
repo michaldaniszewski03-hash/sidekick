@@ -28,6 +28,21 @@ Future<void> showSendingScreen(BuildContext context, OutgoingSend send) => Navig
   ),
 );
 
+/// Closes the screen or dialog [context] is in: this one, even when
+/// something else (a dialog, a snackbar's route) has opened on top of it.
+/// Popping "whatever's on top" closed the wrong thing and left the screen
+/// stuck with its Close button spent.
+void closeRoute(BuildContext context) {
+  final route = ModalRoute.of(context);
+  if (route == null || !route.isActive) return;
+  final navigator = Navigator.of(context);
+  if (route.isCurrent) {
+    navigator.pop();
+  } else {
+    navigator.removeRoute(route);
+  }
+}
+
 class SendingScreen extends StatefulWidget {
   const SendingScreen({super.key, required this.send});
   final OutgoingSend send;
@@ -69,7 +84,13 @@ class _SendingScreenState extends State<SendingScreen> {
   void _leave() {
     if (_closing || !mounted) return;
     _closing = true;
-    Navigator.of(context).maybePop();
+    closeRoute(context);
+  }
+
+  /// Cancel always closes the screen, even if the send moved on meanwhile.
+  void _cancel() {
+    unawaited(send.cancel());
+    _leave();
   }
 
   @override
@@ -197,7 +218,7 @@ class _SendingScreenState extends State<SendingScreen> {
 
   Widget _actions() {
     final (label, onPressed) = switch (send.phase) {
-      SendPhase.connecting || SendPhase.waiting => ('Cancel', send.cancel),
+      SendPhase.connecting || SendPhase.waiting => ('Cancel', _cancel),
       // It keeps going in the background; the Files tab shows it.
       SendPhase.sending => ('Hide', _leave),
       _ => ('Close', _leave),
@@ -574,7 +595,7 @@ class _IncomingOfferState extends State<_IncomingOffer> with TickerProviderState
   void _leave() {
     if (_closing || !mounted) return;
     _closing = true;
-    Navigator.of(context).pop();
+    closeRoute(context);
   }
 
   void _accept() {

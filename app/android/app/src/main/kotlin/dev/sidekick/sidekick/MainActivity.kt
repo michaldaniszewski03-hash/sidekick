@@ -1,6 +1,7 @@
 package dev.sidekick.sidekick
 
 import android.Manifest
+import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Context
@@ -15,6 +16,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
@@ -117,6 +119,14 @@ class MainActivity : FlutterActivity() {
                                 call.argument<String>("title") ?: "",
                                 call.argument<String>("body") ?: "",
                             )
+                            result.success(null)
+                        }
+                        "openFolder" -> {
+                            openFolder(call.argument<String>("path") ?: "")
+                            result.success(null)
+                        }
+                        "openGallery" -> {
+                            openGallery(call.argument<String>("uri"))
                             result.success(null)
                         }
                         "cancelOffer" -> {
@@ -292,6 +302,7 @@ class MainActivity : FlutterActivity() {
         Thread {
             try {
                 val src = File(path)
+                var saved: String? = null
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     val collection = if (video) {
                         MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -315,6 +326,7 @@ class MainActivity : FlutterActivity() {
                     values.clear()
                     values.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     contentResolver.update(uri, values, null, null)
+                    saved = uri.toString()
                 } else {
                     @Suppress("DEPRECATION")
                     val dir = File(Environment.getExternalStoragePublicDirectory(folder), "Sidekick").apply { mkdirs() }
@@ -328,11 +340,46 @@ class MainActivity : FlutterActivity() {
                 // If the gallery had already found the original (the public
                 // Download folder), this makes it forget it.
                 MediaScannerConnection.scanFile(this, arrayOf(src.absolutePath), null, null)
-                main.post { result.success(null) }
+                main.post { result.success(saved) }
             } catch (e: Exception) {
                 main.post { result.error("failed", e.message ?: "couldn't save it", null) }
             }
         }.start()
+    }
+
+    /**
+     * The Files app at [folder], when it's in shared storage (Download/Sidekick
+     * with "All files access"). A folder only Sidekick can see (Android/data)
+     * can't be shown, so Files opens at Downloads instead.
+     */
+    private fun openFolder(folder: String) {
+        val root = Environment.getExternalStorageDirectory().absolutePath
+        val docs = "com.android.externalstorage.documents"
+        val uri = if (folder.startsWith("$root/") && !folder.startsWith("$root/Android/")) {
+            DocumentsContract.buildDocumentUri(docs, "primary:" + folder.removePrefix("$root/"))
+        } else {
+            DocumentsContract.buildDocumentUri(docs, "primary:" + Environment.DIRECTORY_DOWNLOADS)
+        }
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            open(intent)
+        } catch (e: ActivityNotFoundException) {
+            open(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+        }
+    }
+
+    /** The gallery at [uri] (a photo or video Sidekick put there), or just the gallery. */
+    private fun openGallery(uri: String?) {
+        try {
+            if (uri != null) {
+                open(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                return
+            }
+        } catch (e: ActivityNotFoundException) {
+        }
+        open(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_GALLERY))
     }
 
     private fun permissions(): Map<String, Boolean> = mapOf(

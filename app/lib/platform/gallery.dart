@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
@@ -27,23 +28,34 @@ abstract final class Gallery {
     return null;
   }
 
-  /// Moves [file] into the library. Returns null when it's there, otherwise
-  /// why not (the file then stays where it is).
-  static Future<String?> save(File file) async {
+  static MethodChannel get _channel => MethodChannel(Platform.isIOS ? 'sidekick/ios' : 'sidekick/android');
+
+  /// Moves [file] into the library. [why] is null when it's there (with
+  /// [uri], where it is on Android), otherwise why not (the file then stays
+  /// where it is).
+  static Future<({String? why, String? uri})> save(File file) async {
     final kind = kindOf(file.path, android: Platform.isAndroid);
-    if (kind == null) return 'not a photo or video';
-    final channel = MethodChannel(Platform.isIOS ? 'sidekick/ios' : 'sidekick/android');
+    if (kind == null) return (why: 'not a photo or video', uri: null);
     try {
-      await channel.invokeMethod('saveToGallery', {
+      final uri = await _channel.invokeMethod<String>('saveToGallery', {
         'path': file.path,
         'video': kind == 'video',
         'mime': lookupMimeType(file.path) ?? (kind == 'video' ? 'video/mp4' : 'image/jpeg'),
       });
-      return null;
+      return (why: null, uri: uri);
     } on PlatformException catch (e) {
-      return e.message ?? e.code;
+      return (why: e.message ?? e.code, uri: null);
     } on MissingPluginException {
-      return 'not supported on this device';
+      return (why: 'not supported on this device', uri: null);
+    }
+  }
+
+  /// Opens Photos / the gallery, at [uri] if it's known.
+  static Future<void> open([String? uri]) async {
+    try {
+      await _channel.invokeMethod('openGallery', {'uri': ?uri});
+    } catch (e) {
+      debugPrint('Sidekick: openGallery: $e');
     }
   }
 }
