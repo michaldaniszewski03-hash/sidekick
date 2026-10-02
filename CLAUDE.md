@@ -165,11 +165,21 @@ its biggest features and fixes, and bumps the website links (see
    `Sidekick-X.Y.Z.dmg`, `Sidekick-X.Y.Z.pkg`, `Sidekick-X.Y.Z.apk`,
    `Sidekick-X.Y.Z.ipa`, `altstore.json`.
 3. Update `index.html` (every `X.Y.Z` link, `version:` and "Version
-   X.Y.Z"). `RELEASE.files.macosPkg` is empty until the first release with
-   a .pkg (2.5.2): set it to that release's `.pkg` link then.
+   X.Y.Z"), including `RELEASE.files.macosPkg` (the `.pkg`).
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.6.0
+- **A .pkg installer for the Mac**, next to the .dmg: open it, Continue,
+  Install, and Sidekick lands in Applications. Its welcome page has the
+  glass "sk", and the privacy policy is its second page. The website
+  offers it to Mac visitors under the main download.
+- **Privacy policy:** on the website (`privacy.html`, linked in the
+  footer and under the download), on a page in the Windows installer
+  before installing (and installed as `Privacy.txt`), and in the .pkg.
+  No account, no servers, no analytics; what stays on the device, what
+  nearby devices see, and every permission and why.
 
 ### 2.5.1
 - **Sounds play on the Mac:** the chime file went to a folder that didn't
