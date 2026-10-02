@@ -107,6 +107,9 @@ its biggest features and fixes, and bumps the website links (see
     `iphone`, with `SIDEKICK_CAMERA=` a picture for the camera) renders the
     QR pairing screens at 2x/3x for ads; `SIDEKICK_FONTS=` a folder of
     Inter TTFs stands in for San Francisco.
+  - `flutter test tool/ad_frames_test.dart` renders the startup animation,
+    an iPhone sending and the Mac's Accept card as 30 fps frames
+    (`build/ad/<scene>/NNN.png`) for video ads.
   - Output goes to `build/screenshots/`.
 - Swift can't be compiled here. CI (`ios` and `macos` jobs) is the check.
 - Bluetooth:
