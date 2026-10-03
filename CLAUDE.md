@@ -5,8 +5,11 @@ from another (touchpad, keyboard, shortcuts), and connect over Bluetooth
 when there's no shared Wi-Fi. Everything is encrypted.
 
 One Flutter app for **Windows, macOS, Android and iOS** (`app/`), plus a
-download page (`index.html` at the top of the repo, not hosted anywhere
-yet; its images live in `website/` and it links them as `/website/…`).
+download page (`index.html` at the top of the repo; its images live in
+`website/` and it links them as `/website/…`). The owner hosts it at
+https://sk.dankor.digital on cyber_Folks (LiteSpeed), uploading with
+FileZilla: `index.html`, `privacy.html`, `404.html`, `.htaccess` and
+`website/` go in the subdomain's root folder.
 
 **Every change must work on all four platforms.**
 
@@ -135,7 +138,9 @@ its biggest features and fixes, and bumps the website links (see
   (`tool/ad_frames_test.dart`), transparent so the page's colors show.
   There is no Media anywhere on the site (removed with the feature).
 - `404.html` (top of the repo): the not-found page, for any missing
-  address, so every link in it is absolute (`/…`). Same look and theme
+  address, so every link in it is absolute (`/…`). `.htaccess` makes the
+  server show it for every wrong address, keeping the address and a real
+  404 status (no redirect); folder listings are off and show it too. Same look and theme
   choice as the site, system fonts only, like `privacy.html`.
 - Website sounds (`website/sounds/`, copies of the owner's MP3s): the
   request sound when the demo phone asks, accept / decline on its buttons,

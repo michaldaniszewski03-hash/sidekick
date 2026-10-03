@@ -1,0 +1,10 @@
+# Sidekick's website on cyber_Folks (LiteSpeed / Apache).
+# Upload this next to index.html (the subdomain's root folder).
+
+# Any address that doesn't exist shows 404.html, at the same address (no
+# redirect), with a real "404 Not Found" status.
+ErrorDocument 404 /404.html
+
+# No folder listings (e.g. /website/): those show the 404 page too.
+Options -Indexes
+ErrorDocument 403 /404.html
