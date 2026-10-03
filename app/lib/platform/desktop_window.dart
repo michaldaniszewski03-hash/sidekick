@@ -116,20 +116,32 @@ class DesktopWindow with WindowListener, TrayListener {
     final display = await screenRetriever.getPrimaryDisplay();
     final area = (display.visiblePosition ?? Offset.zero) & (display.visibleSize ?? display.size);
     const margin = 16.0;
-    await windowManager.setBounds(
-      Rect.fromLTWH(
-        area.right - popupSize.width - margin,
-        area.bottom - popupSize.height - margin,
-        popupSize.width,
-        popupSize.height,
-      ),
+    final target = Rect.fromLTWH(
+      area.right - popupSize.width - margin,
+      area.bottom - popupSize.height - margin,
+      popupSize.width,
+      popupSize.height,
     );
     // Without taking focus from whatever you're doing (window_manager's
-    // show always activates the app on a Mac).
+    // show always activates the app on a Mac). The Mac fades it in itself.
     if (Platform.isMacOS) {
+      await windowManager.setBounds(target);
       await _mac.invokeMethod('showPopup');
     } else {
-      await windowManager.show(inactive: true);
+      await _riseInto(target);
+    }
+  }
+
+  /// Windows: the corner window rises a little into place as it appears.
+  Future<void> _riseInto(Rect target) async {
+    const rise = 18.0, steps = 8;
+    await windowManager.setBounds(target.translate(0, rise));
+    await windowManager.show(inactive: true);
+    for (var i = 1; i <= steps; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+      if (popup.value == null) return;
+      final t = Curves.easeOutCubic.transform(i / steps);
+      await windowManager.setPosition(target.topLeft.translate(0, rise * (1 - t)));
     }
   }
 
@@ -140,7 +152,11 @@ class DesktopWindow with WindowListener, TrayListener {
       popup.value = _queue.removeAt(0);
       return;
     }
-    await windowManager.hide();
+    if (Platform.isMacOS) {
+      await _mac.invokeMethod('hidePopup');
+    } else {
+      await windowManager.hide();
+    }
     popup.value = null;
     await windowManager.setAlwaysOnTop(false);
     await windowManager.setResizable(true);

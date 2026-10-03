@@ -1,6 +1,7 @@
 import AVFoundation
 import ApplicationServices
 import Cocoa
+import QuartzCore
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
@@ -107,9 +108,32 @@ final class SidekickNative {
         (call.arguments as? [String: Any])?["on"] as? Bool ?? false
       result(nil)
     case "showPopup":
-      // In front of everything, without activating Sidekick.
-      window?.orderFrontRegardless()
+      // In front of everything, without activating Sidekick: it fades in,
+      // rising a little into its corner.
+      guard let window else { return result(nil) }
+      let target = window.frame
+      window.alphaValue = 0
+      window.setFrame(target.offsetBy(dx: 0, dy: -18), display: false)
+      window.orderFrontRegardless()
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.28
+        context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        window.animator().alphaValue = 1
+        window.animator().setFrame(target, display: true)
+      }
       result(nil)
+    case "hidePopup":
+      // Fades out, then hides (ready to come back at full opacity).
+      guard let window else { return result(nil) }
+      NSAnimationContext.runAnimationGroup({ context in
+        context.duration = 0.18
+        context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        window.animator().alphaValue = 0
+      }, completionHandler: {
+        window.orderOut(nil)
+        window.alphaValue = 1
+        result(nil)
+      })
     default:
       result(FlutterMethodNotImplemented)
     }

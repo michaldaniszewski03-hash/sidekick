@@ -156,7 +156,7 @@ void main() {
 
   // The small corner window on Windows and Mac, at its real size (2x).
   testWidgets('corner popup', (tester) async {
-    tester.view.physicalSize = const Size(720, 300);
+    tester.view.physicalSize = const Size(760, 344);
     tester.view.devicePixelRatio = 2;
     await tester.runAsync(_loadFonts);
     final out = Directory('build/screenshots')..createSync(recursive: true);
@@ -199,15 +199,25 @@ void main() {
         });
       }
 
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       await shot('corner_asking');
       await tester.tap(find.text('Accept'));
       offer.debugReceived(19000000);
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       await shot('corner_receiving');
       offer
         ..debugReceived(3200000, fileDone: true)
         ..debugReceived(41000000, fileDone: true);
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
       await shot('corner_done');
       await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 300));
       expect(done, isTrue, reason: 'closes by itself once everything is in');
       await tester.pumpWidget(const SizedBox());
     }

@@ -54,9 +54,15 @@ its biggest features and fixes, and bumps the website links (see
     device is a phone); scanning it pairs on its own, from either
     scanner. `sidekick://pin` is only still read, from older releases.
   - `corner_popup.dart`: the small window in the bottom-right corner on
-    Windows and Mac (360×150) when a request arrives while Sidekick is in
+    Windows and Mac (380×172) when a request arrives while Sidekick is in
     the tray: Accept / Decline, then a progress bar; it closes by itself
-    as soon as the files are in, or at once on Decline.
+    as soon as the files are in, or at once on Decline. Animated: the
+    window rises into its corner (Mac: native fade in `showPopup`, fade
+    out in `hidePopup`; Windows: a few `setPosition` steps), the contents
+    cascade in, rings ripple from the device badge, a countdown runs along
+    the top, a ring fills while receiving, a check pops in, and the
+    contents fade out (`CornerPopup.exit`) before `onDone`. Reduced motion
+    turns all of it off.
   - `startup.dart`: the startup animation (every platform; a tap skips it,
     reduced motion turns it off).
   - `widgets.dart` has the shared pieces: `PageFrame`, `SectionLabel` (with
@@ -82,8 +88,12 @@ its biggest features and fixes, and bumps the website links (see
   replacements.
 - `platform/desktop_window.dart` (Windows, Mac; `window_manager`,
   `tray_manager` 0.5.x: 0.6+ is a native-library rewrite): closing the
-  window hides it to the tray / menu bar (Open, Quit); a request then
-  shows [CornerPopup] instead of the app (main.dart `_withCornerPopup`),
+  window hides it to the tray / menu bar (Open, Quit). On the Mac
+  `MainFlutterWindow.performClose` does it (window_manager never got the
+  red button there, and Sidekick quit); Sidekick stays in the Dock with its
+  dot (the owner's call). The pop-up is shown with `orderFrontRegardless`
+  (no focus taken), the window's minimum size lifted while it's up. A
+  request then shows [CornerPopup] instead of the app (main.dart `_withCornerPopup`),
   the window put back afterwards. While hidden, animations are paused.
   **Never call `setSkipTaskbar`** (or anything else using the plugin's
   taskbar object) on Windows: it's only created in `waitUntilReadyToShow`,
@@ -257,6 +267,16 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.6.6
+- **The Mac keeps Sidekick in the menu bar:** the red close button no
+  longer quits it. Sidekick stays in the Dock and the menu bar (Open,
+  Quit), still receiving, and a request pops up the small corner window,
+  like on Windows, without taking the focus.
+- **A nicer, animated corner pop-up** on Windows and Mac: it rises into
+  the corner, rings ripple from the sending device, a countdown runs along
+  the top, Accept glows, a ring and bar fill while files arrive, a check
+  pops in when they're all in, and it fades away.
 
 ### 2.6.5
 - **Remote on an iPhone** no longer shows a touchpad that can't work: it
