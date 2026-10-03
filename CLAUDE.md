@@ -289,6 +289,20 @@ its biggest features and fixes, and bumps the website links (see
   `ExcludeClipboardContentFromMonitorProcessing` / `Clipboard Viewer
   Ignore`, Mac `ConcealedType` / `TransientType`, Android 13
   `EXTRA_IS_SENSITIVE`. `_lastClip` stops echoes.
+- **Live Activities** (iPhone, iOS 16.2+): a transfer's progress on the
+  Lock Screen and in the Dynamic Island, for files coming in (once
+  accepted) and going out with Send (`platform/live_activity.dart`
+  `LiveTransfers`, at most one update a second; ends with Received / Sent /
+  Declined…, gone 4 s later). Native: `LiveTransfers` in AppDelegate.swift
+  (`liveStart`, `liveUpdate`, `liveEnd`); `Runner/TransferActivity.swift`
+  (the attributes) is compiled into both the app and the **SidekickLive**
+  widget extension (`ios/SidekickLive/`, its own target in the Xcode
+  project, embedded by "Embed Foundation Extensions", which must stay
+  before "Thin Binary"; bundle id `dev.sidekick.sidekick.LiveActivity`,
+  which the TestFlight job renames along with the app's).
+  `NSSupportsLiveActivities` is on in Info.plist. When adding objects to
+  the .pbxproj by hand, use IDs nothing else has (2.7.0's first push reused
+  the app icon's and Xcode called the project damaged).
 - **Ping** (`/v1/ping`, the card's Ping button): the other device plays
   `ping.wav` three times (`tool/make_ping.py`; Android on the alarm volume,
   heard on silent; whatever Settings → Sound says) and shows "Ping from …"
@@ -327,6 +341,11 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.10.0
+- **Live Activities on iPhone:** a transfer's progress on the Lock Screen
+  and in the Dynamic Island, receiving and sending: who, what, a progress
+  bar and percentage, then Received / Sent (or Declined) for a few seconds.
 
 ### 2.9.0
 - **Shared clipboard on every device:** copy on one, paste on the other.

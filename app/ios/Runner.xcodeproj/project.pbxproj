@@ -19,6 +19,10 @@
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		5E1DE0C2A7C24F0100C0FFEE /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 5E1DE0C1A7C24F0100C0FFEE /* AppIcon.icon */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		5E1DE0E1A7C24F0100C0FFEE /* TransferActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1DE0E0A7C24F0100C0FFEE /* TransferActivity.swift */; };
+		5E1DE0E2A7C24F0100C0FFEE /* TransferActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1DE0E0A7C24F0100C0FFEE /* TransferActivity.swift */; };
+		5E1DE0E4A7C24F0100C0FFEE /* SidekickLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1DE0E3A7C24F0100C0FFEE /* SidekickLive.swift */; };
+		5E1DE0E7A7C24F0100C0FFEE /* SidekickLive.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,6 +32,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		5E1DE0EEA7C24F0100C0FFEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E1DE0E9A7C24F0100C0FFEE;
+			remoteInfo = SidekickLive;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -40,6 +51,17 @@
 			files = (
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E1DE0EDA7C24F0100C0FFEE /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5E1DE0E7A7C24F0100C0FFEE /* SidekickLive.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -65,6 +87,10 @@
 		5E1DE0C1A7C24F0100C0FFEE /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5E1DE0E0A7C24F0100C0FFEE /* TransferActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferActivity.swift; sourceTree = "<group>"; };
+		5E1DE0E3A7C24F0100C0FFEE /* SidekickLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidekickLive.swift; sourceTree = "<group>"; };
+		5E1DE0E5A7C24F0100C0FFEE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SidekickLive.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +99,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E1DE0EBA7C24F0100C0FFEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -106,6 +139,7 @@
 				97C146F01CF9000F007C117D /* Runner */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				5E1DE0E8A7C24F0100C0FFEE /* SidekickLive */,
 			);
 			sourceTree = "<group>";
 		};
@@ -114,6 +148,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -131,10 +166,20 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				5E1DE0B0A7C24F0100C0FFEE /* SidekickBLE.swift */,
 				5E1DE0D0A7C24F0100C0FFEE /* SidekickP2P.swift */,
+				5E1DE0E0A7C24F0100C0FFEE /* TransferActivity.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		5E1DE0E8A7C24F0100C0FFEE /* SidekickLive */ = {
+			isa = PBXGroup;
+			children = (
+				5E1DE0E3A7C24F0100C0FFEE /* SidekickLive.swift */,
+				5E1DE0E5A7C24F0100C0FFEE /* Info.plist */,
+			);
+			path = SidekickLive;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -166,11 +211,13 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				5E1DE0EDA7C24F0100C0FFEE /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5E1DE0EFA7C24F0100C0FFEE /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -179,6 +226,23 @@
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		5E1DE0E9A7C24F0100C0FFEE /* SidekickLive */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E1DE0F0A7C24F0100C0FFEE /* Build configuration list for PBXNativeTarget "SidekickLive" */;
+			buildPhases = (
+				5E1DE0EAA7C24F0100C0FFEE /* Sources */,
+				5E1DE0EBA7C24F0100C0FFEE /* Frameworks */,
+				5E1DE0ECA7C24F0100C0FFEE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SidekickLive;
+			productName = SidekickLive;
+			productReference = 5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -197,6 +261,9 @@
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
+					};
+					5E1DE0E9A7C24F0100C0FFEE = {
+						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
@@ -218,6 +285,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				5E1DE0E9A7C24F0100C0FFEE /* SidekickLive */,
 			);
 		};
 /* End PBXProject section */
@@ -239,6 +307,13 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				5E1DE0C2A7C24F0100C0FFEE /* AppIcon.icon in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E1DE0ECA7C24F0100C0FFEE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -294,8 +369,18 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				5E1DE0B1A7C24F0100C0FFEE /* SidekickBLE.swift in Sources */,
 				5E1DE0D1A7C24F0100C0FFEE /* SidekickP2P.swift in Sources */,
+				5E1DE0E1A7C24F0100C0FFEE /* TransferActivity.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E1DE0EAA7C24F0100C0FFEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E1DE0E4A7C24F0100C0FFEE /* SidekickLive.swift in Sources */,
+				5E1DE0E2A7C24F0100C0FFEE /* TransferActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -306,6 +391,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		5E1DE0EFA7C24F0100C0FFEE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E1DE0E9A7C24F0100C0FFEE /* SidekickLive */;
+			targetProxy = 5E1DE0EEA7C24F0100C0FFEE /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -609,6 +699,79 @@
 			};
 			name = Release;
 		};
+		5E1DE0F1A7C24F0100C0FFEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				INFOPLIST_FILE = SidekickLive/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		5E1DE0F2A7C24F0100C0FFEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				INFOPLIST_FILE = SidekickLive/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5E1DE0F3A7C24F0100C0FFEE /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				INFOPLIST_FILE = SidekickLive/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -638,6 +801,16 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E1DE0F0A7C24F0100C0FFEE /* Build configuration list for PBXNativeTarget "SidekickLive" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E1DE0F1A7C24F0100C0FFEE /* Debug */,
+				5E1DE0F2A7C24F0100C0FFEE /* Release */,
+				5E1DE0F3A7C24F0100C0FFEE /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

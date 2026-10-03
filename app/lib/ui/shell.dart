@@ -8,6 +8,7 @@ import '../core/server.dart';
 import '../core/trust.dart';
 import '../platform/desktop_window.dart';
 import '../platform/gallery.dart';
+import '../platform/live_activity.dart';
 import '../platform/notifications.dart';
 import '../platform/sound.dart';
 import 'devices_page.dart';
@@ -84,6 +85,8 @@ class _ShellState extends State<Shell> {
   void _go(int index) => setState(() => _index = index);
 
   void _showOffer(TransferOffer offer) {
+    // iPhone: the progress on the Lock Screen and in the Dynamic Island.
+    LiveTransfers.followIncoming(offer);
     if (!mounted) return;
     if (state.sound) unawaited(playRequestSound());
     // Closed to the tray: the small corner window asks instead.
@@ -94,6 +97,7 @@ class _ShellState extends State<Shell> {
   }
 
   void _showSend(OutgoingSend send) {
+    LiveTransfers.followOutgoing(send);
     if (mounted) showSendingScreen(context, send);
   }
 

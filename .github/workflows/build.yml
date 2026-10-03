@@ -377,6 +377,8 @@ jobs:
           # Only the app target: a command-line override would also rename
           # the plugin frameworks, and Apple rejects duplicate bundle ids.
           sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick;/PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;/" ios/Runner.xcodeproj/project.pbxproj
+          # The Live Activity extension's id has to start with the app's.
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick.LiveActivity;/PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID.LiveActivity;/" ios/Runner.xcodeproj/project.pbxproj
           flutter build ios --release --config-only --build-name=${{ steps.version.outputs.version }} --build-number=${{ github.run_number }}
 
       # Xcode signs with automatically managed certificates and profiles,

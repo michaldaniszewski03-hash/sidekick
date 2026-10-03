@@ -1,3 +1,4 @@
+import ActivityKit
 import AVFoundation
 import Flutter
 import NetworkExtension
@@ -10,6 +11,7 @@ import UIKit
   private let keepAlive = KeepAlive()
   private let sounds = Sounds()
   private let offers = OfferNotifier()
+  private let live = LiveTransfers()
   private var ble: SidekickBLE?
   private var p2p: SidekickP2P?
 
@@ -27,6 +29,7 @@ import UIKit
       let keepAlive = self.keepAlive
       let sounds = self.sounds
       let offers = self.offers
+      let live = self.live
       offers.attach(channel)
       channel.setMethodCallHandler { call, result in
         switch call.method {
@@ -82,6 +85,20 @@ import UIKit
           if let url = URL(string: "photos-redirect://") {
             UIApplication.shared.open(url)
           }
+          result(nil)
+        case "liveStart":
+          let args = call.arguments as? [String: Any] ?? [:]
+          live.start(
+            id: args["id"] as? String ?? "", device: args["device"] as? String ?? "",
+            incoming: args["incoming"] as? Bool ?? true, title: args["title"] as? String ?? "",
+            total: (args["total"] as? NSNumber)?.int64Value ?? 0, status: args["status"] as? String ?? "")
+          result(nil)
+        case "liveUpdate", "liveEnd":
+          let args = call.arguments as? [String: Any] ?? [:]
+          live.update(
+            id: args["id"] as? String ?? "", done: (args["done"] as? NSNumber)?.int64Value ?? 0,
+            total: (args["total"] as? NSNumber)?.int64Value ?? 0, status: args["status"] as? String ?? "",
+            end: call.method == "liveEnd", failed: args["failed"] as? Bool ?? false)
           result(nil)
         case "joinHotspot":
           // Another device's network for a direct link (an Android phone's
@@ -316,6 +333,46 @@ enum HotspotJoiner {
           done(FlutterError(code: "byHand", message: error.localizedDescription, details: nil))
         }
       }
+    }
+  }
+}
+
+/// A transfer's progress on the Lock Screen and in the Dynamic Island (Live
+/// Activities, iOS 16.2+; drawn by the SidekickLive extension). Dart starts
+/// one per transfer, updates it about once a second, and ends it; a finished
+/// one stays a few seconds, then goes.
+final class LiveTransfers {
+  /// Activity<TransferActivityAttributes> by transfer id (Any: the type
+  /// only exists on iOS 16.1+).
+  private var activities: [String: Any] = [:]
+
+  func start(id: String, device: String, incoming: Bool, title: String, total: Int64, status: String) {
+    guard #available(iOS 16.2, *), ActivityAuthorizationInfo().areActivitiesEnabled, activities[id] == nil else {
+      return
+    }
+    let attributes = TransferActivityAttributes(device: device, incoming: incoming, title: title)
+    let state = TransferActivityAttributes.ContentState(
+      done: 0, total: total, status: status, finished: false, failed: false)
+    do {
+      activities[id] = try Activity.request(
+        attributes: attributes, content: ActivityContent(state: state, staleDate: nil))
+    } catch {
+      print("Sidekick: Live Activity: \(error)")
+    }
+  }
+
+  func update(id: String, done: Int64, total: Int64, status: String, end: Bool, failed: Bool) {
+    guard #available(iOS 16.2, *), let activity = activities[id] as? Activity<TransferActivityAttributes> else {
+      return
+    }
+    let state = TransferActivityAttributes.ContentState(
+      done: done, total: total, status: status, finished: end, failed: failed)
+    let content = ActivityContent(state: state, staleDate: nil)
+    if end {
+      activities[id] = nil
+      Task { await activity.end(content, dismissalPolicy: .after(Date().addingTimeInterval(4))) }
+    } else {
+      Task { await activity.update(content) }
     }
   }
 }

@@ -28,6 +28,8 @@
 	<string>Sidekick uses Bluetooth to find and connect to your computer when you're not on the same Wi-Fi.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Sidekick uses the camera only to pair with your computer by scanning the QR code it shows.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_sidekick-p2p._tcp</string>
