@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -19,7 +20,14 @@ class DesktopWindow with WindowListener, TrayListener {
   static bool get supported => Platform.isWindows || Platform.isMacOS;
 
   /// The size of the corner window.
-  static const popupSize = Size(360, 150);
+  static const popupSize = Size(380, 172);
+
+  /// The Mac's own window code (MainFlutterWindow.swift): it catches the red
+  /// button itself and shows the pop-up without taking the focus.
+  static const _mac = MethodChannel('sidekick/macos');
+
+  /// The Mac window's usual minimum size, lifted while it's the small pop-up.
+  static const _macMinSize = Size(420, 560);
 
   /// The request in the corner window. While it's set, the app draws only
   /// the small card (see main.dart).
@@ -40,7 +48,10 @@ class DesktopWindow with WindowListener, TrayListener {
 
   Future<void> init() async {
     await windowManager.ensureInitialized();
-    await windowManager.setPreventClose(true);
+    // Windows: window_manager catches the close button. The Mac does it in
+    // MainFlutterWindow.performClose: the plugin never got the close there,
+    // and the red button quit Sidekick.
+    if (Platform.isWindows) await windowManager.setPreventClose(true);
     windowManager.addListener(this);
     try {
       await trayManager.setIcon(
@@ -61,7 +72,20 @@ class DesktopWindow with WindowListener, TrayListener {
     } catch (e) {
       // No tray: closing the window quits, as before.
       debugPrint('Sidekick: no tray icon: $e');
-      await windowManager.setPreventClose(false);
+      if (Platform.isWindows) await windowManager.setPreventClose(false);
+      return;
+    }
+    if (Platform.isMacOS) {
+      _mac.setMethodCallHandler((call) async {
+        switch (call.method) {
+          case 'closedToMenuBar':
+            _hidden = true;
+          case 'openedFromMenuBar':
+            if (popup.value == null) _hidden = false;
+        }
+        return null;
+      });
+      await _mac.invokeMethod('setKeepInMenuBar', {'on': true});
     }
   }
 
@@ -83,6 +107,8 @@ class DesktopWindow with WindowListener, TrayListener {
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
     await windowManager.setResizable(false);
     await windowManager.setAlwaysOnTop(true);
+    // The Mac window can't usually be this small.
+    if (Platform.isMacOS) await windowManager.setMinimumSize(popupSize);
     // Never setSkipTaskbar: on Windows, window_manager only creates its
     // taskbar object in waitUntilReadyToShow (which Sidekick doesn't use),
     // so setSkipTaskbar dereferenced a null pointer and the whole app
@@ -98,8 +124,13 @@ class DesktopWindow with WindowListener, TrayListener {
         popupSize.height,
       ),
     );
-    // Without taking focus from whatever you're doing.
-    await windowManager.show(inactive: true);
+    // Without taking focus from whatever you're doing (window_manager's
+    // show always activates the app on a Mac).
+    if (Platform.isMacOS) {
+      await _mac.invokeMethod('showPopup');
+    } else {
+      await windowManager.show(inactive: true);
+    }
   }
 
   /// The corner window is finished with its request: received, declined,
@@ -114,6 +145,7 @@ class DesktopWindow with WindowListener, TrayListener {
     await windowManager.setAlwaysOnTop(false);
     await windowManager.setResizable(true);
     await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+    if (Platform.isMacOS) await windowManager.setMinimumSize(_macMinSize);
     if (_bounds case final bounds?) await windowManager.setBounds(bounds);
     _bounds = null;
     if (_openAfter) {
@@ -138,10 +170,11 @@ class DesktopWindow with WindowListener, TrayListener {
     exit(0);
   }
 
-  // Closing the window hides it; Quit is in the tray menu.
+  // Closing the window hides it; Quit is in the tray menu. (Windows: the
+  // Mac reports it as closedToMenuBar.)
   @override
   void onWindowClose() {
-    if (popup.value != null) return;
+    if (!Platform.isWindows || popup.value != null) return;
     _hidden = true;
     unawaited(windowManager.hide());
   }

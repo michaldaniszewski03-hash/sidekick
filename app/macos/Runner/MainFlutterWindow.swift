@@ -7,6 +7,29 @@ class MainFlutterWindow: NSWindow {
   private let native = SidekickNative()
   private var ble: SidekickBLE?
 
+  /// Closing hides the window to the menu bar (set from Dart once the
+  /// menu-bar icon is up). Done here, not by window_manager: its window
+  /// delegate never got the close on the Mac, so the red button quit.
+  var keepInMenuBar = false
+  private var inMenuBar = false
+
+  // The red button and Command-W.
+  override func performClose(_ sender: Any?) {
+    guard keepInMenuBar else { return super.performClose(sender) }
+    inMenuBar = true
+    orderOut(nil)
+    native.channel?.invokeMethod("closedToMenuBar", arguments: nil)
+  }
+
+  // Back on screen (the menu bar's Open Sidekick, or a click on the Dock).
+  override func makeKeyAndOrderFront(_ sender: Any?) {
+    if inMenuBar {
+      inMenuBar = false
+      native.channel?.invokeMethod("openedFromMenuBar", arguments: nil)
+    }
+    super.makeKeyAndOrderFront(sender)
+  }
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -19,6 +42,8 @@ class MainFlutterWindow: NSWindow {
     let channel = FlutterMethodChannel(
       name: "sidekick/macos", binaryMessenger: flutterViewController.engine.binaryMessenger)
     let native = self.native
+    native.window = self
+    native.channel = channel
     channel.setMethodCallHandler { call, result in native.handle(call, result: result) }
     ble = SidekickBLE.register(messenger: flutterViewController.engine.binaryMessenger)
 
@@ -30,6 +55,11 @@ class MainFlutterWindow: NSWindow {
 /// (needs the Accessibility permission).
 final class SidekickNative {
   private let input = MacInput()
+  /// Sidekick's window, for the tray: shown as the corner pop-up without
+  /// taking the focus from whatever you're doing.
+  weak var window: NSWindow?
+  /// For telling Dart the window went to / came back from the menu bar.
+  var channel: FlutterMethodChannel?
   /// Held until they finish: a player that's let go stops at once.
   private var players: [AVAudioPlayer] = []
   private var sound: NSSound?
@@ -70,6 +100,16 @@ final class SidekickNative {
     case "input":
       if let msg = call.arguments as? [String: Any] { input.handle(msg) }
       result(AXIsProcessTrusted())
+    case "setKeepInMenuBar":
+      // The menu-bar icon is up: the red button hides the window instead
+      // of quitting (Sidekick keeps running, and stays in the Dock).
+      (window as? MainFlutterWindow)?.keepInMenuBar =
+        (call.arguments as? [String: Any])?["on"] as? Bool ?? false
+      result(nil)
+    case "showPopup":
+      // In front of everything, without activating Sidekick.
+      window?.orderFrontRegardless()
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
