@@ -155,6 +155,9 @@ its biggest features and fixes, and bumps the website links (see
     26+ show, rendered live by the system (Dark, Clear, Tinted too). The
     `AppIcon.appiconset` PNGs are a pre-rendered glass look for older
     systems. Both come from `make_icons.py`; Xcode 26 (CI) builds the .icon.
+    **No shadow or edge highlight behind "sk"** (the owner's call: they
+    blurred the letters): the .icon's group shadow is `none`, and
+    `glass_tile` draws the glyph crisp.
   - The website's tab icon (`website/favicon.png`) and home-screen icon
     (`website/apple-touch-icon.png`) are the same glass "sk", also from
     `make_icons.py`.
@@ -246,6 +249,11 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.6.4
+- **Sharper app icons:** the shadow and edge highlight behind "sk" are gone
+  (Mac, iPhone, the Liquid Glass icon, the website's tab and home-screen
+  icons): they blurred the letters.
 
 ### 2.6.3
 - **Fixed: Windows crashed when a file request arrived while Sidekick was

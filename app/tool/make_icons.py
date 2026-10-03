@@ -104,7 +104,7 @@ def _glyph_mask(s: int, frac: float) -> Image.Image:
 
 def glass_tile(size: int, *, radius_frac: float = 0.0, inset_frac: float = 0.0, full_bleed: bool = False) -> Image.Image:
     """A pre-rendered Liquid Glass icon: frosted lavender, a soft sheen and
-    rim light, and a glossy "sk" with depth. Drawn at 4x, then downscaled."""
+    rim light, and a crisp "sk" (no shadow). Drawn at 4x, then downscaled."""
     s = size * 4
     inset = round(s * inset_frac)
     w = s - 2 * inset
@@ -118,19 +118,14 @@ def glass_tile(size: int, *, radius_frac: float = 0.0, inset_frac: float = 0.0, 
     sheen = sheen.filter(ImageFilter.GaussianBlur(w * 0.08))
     tile = Image.composite(Image.new("RGBA", (s, s), (255, 255, 255, 255)), tile, sheen)
 
-    # The glyph: a soft shadow under it, a vertical gradient in it, and a
-    # bright edge along its top where the light catches.
+    # The glyph: crisp, with a vertical gradient in it. No shadow and no
+    # highlight along its edges: they blurred the letters (the owner's call).
     glyph = _glyph_mask(s, MONOGRAM_FRAC * (w / s))
-    shadow = ImageChops.offset(glyph, 0, round(w * 0.025)).filter(ImageFilter.GaussianBlur(w * 0.022))
-    tile = Image.composite(Image.new("RGBA", (s, s), INK_BOTTOM + (255,)), tile, shadow.point(lambda v: v * 0.35))
     ink = _vertical(s, INK_TOP, INK_BOTTOM)
     tile = Image.composite(ink, tile, glyph)
-    below = ImageChops.offset(glyph, 0, round(w * 0.008))
-    edge = ImageChops.subtract(glyph, below).filter(ImageFilter.GaussianBlur(w * 0.002))
-    tile = Image.composite(Image.new("RGBA", (s, s), (255, 255, 255, 255)), tile, edge.point(lambda v: v * 0.55))
-    # Inner gloss on the upper half of the glyph.
+    # A faint gloss inside the upper half of the glyph.
     upper = Image.new("L", (s, s), 0)
-    ImageDraw.Draw(upper).rectangle((0, 0, s, s * 0.47), fill=70)
+    ImageDraw.Draw(upper).rectangle((0, 0, s, s * 0.47), fill=40)
     upper = upper.filter(ImageFilter.GaussianBlur(w * 0.03))
     tile = Image.composite(Image.new("RGBA", (s, s), (255, 255, 255, 255)), tile, ImageChops.multiply(glyph, upper))
 
@@ -162,7 +157,8 @@ def icon_composer() -> None:
         "groups": [
             {
                 "layers": [{"glass": True, "image-name": "sk.png", "name": "sk"}],
-                "shadow": {"kind": "layer-color", "opacity": 0.5},
+                # No shadow under the letters: it blurred them.
+                "shadow": {"kind": "none", "opacity": 0.5},
                 "translucency": {"enabled": True, "value": 0.4},
             }
         ],
