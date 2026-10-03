@@ -339,7 +339,8 @@ class PeerClient {
   /// Asks the device (over Bluetooth) to join our hotspot. Returns our
   /// addresses it can reach.
   Future<List<String>> joinHotspot(HotspotCredentials creds) async {
-    final json = await _postJson('/v1/link/join', creds.toJson(), timeout: const Duration(seconds: 60)) as Map;
+    // Long enough for an iPhone user to join it in Settings (JoinByHand).
+    final json = await _postJson('/v1/link/join', creds.toJson(), timeout: const Duration(minutes: 3)) as Map;
     return [for (final a in (json['addresses'] as List?) ?? const []) '$a'];
   }
 

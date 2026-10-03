@@ -1,3 +1,4 @@
+import '../platform/hotspot.dart';
 import 'models.dart';
 
 /// What a Sidekick QR code says. Two kinds:
@@ -38,6 +39,17 @@ sealed class PairingQr {
           port: port,
           fingerprint: fingerprint,
           secret: secret,
+          network: (q['ws'] ?? '').isEmpty || (q['wk'] ?? '').isEmpty
+              ? null
+              : HotspotCredentials(
+                  ssid: q['ws']!,
+                  passphrase: q['wk']!,
+                  security: q['wt'] ?? 'wpa2',
+                  addresses: [
+                    for (final a in (q['a'] ?? '').split(','))
+                      if (a.isNotEmpty) a,
+                  ],
+                ),
         );
       case 'pin':
         final pin = q['c'];
@@ -57,6 +69,7 @@ class InviteQr extends PairingQr {
     required this.port,
     required this.fingerprint,
     required this.secret,
+    this.network,
   });
 
   final String id;
@@ -68,6 +81,10 @@ class InviteQr extends PairingQr {
   final int port;
   final String fingerprint;
   final String secret;
+
+  /// A network the device opened because it has no Wi-Fi (Android, Windows):
+  /// the scanner joins it to pair, with no router and no Bluetooth.
+  final HotspotCredentials? network;
 
   String encode() => Uri(
     scheme: 'sidekick',
@@ -81,6 +98,7 @@ class InviteQr extends PairingQr {
       'p': '$port',
       'f': fingerprint,
       's': secret,
+      if (network case final n?) ...{'ws': n.ssid, 'wk': n.passphrase, 'wt': n.security},
     },
   ).toString();
 }

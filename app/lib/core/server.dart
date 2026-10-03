@@ -48,6 +48,13 @@ class Paired extends ServerEvent {
   final PairedDevice device;
 }
 
+/// This iPhone was asked to join a network it can't join by itself: the
+/// user joins [credentials] in Settings → Wi-Fi ([JoinByHand]).
+class JoinNetworkByHand extends ServerEvent {
+  JoinNetworkByHand(this.credentials);
+  final HotspotCredentials credentials;
+}
+
 class Unpaired extends ServerEvent {
   Unpaired(this.peerId);
   final String peerId;
@@ -223,6 +230,9 @@ class SidekickServer {
 
   /// How long an offer waits for an answer.
   static const offerTimeout = Duration(seconds: 60);
+
+  /// How long someone has to join a network in Settings ([JoinByHand]).
+  static const joinByHandTime = Duration(minutes: 2);
 
   final Map<String, TransferOffer> _offers = {};
   final Map<String, _Ticket> _tickets = {};
@@ -579,6 +589,14 @@ class SidekickServer {
     final creds = HotspotCredentials.fromJson(await _body(r));
     try {
       return _json({'addresses': await link.join(creds)});
+    } on JoinByHand catch (e) {
+      // The user joins it in Settings; we answer once they have.
+      _events.add(JoinNetworkByHand(e.credentials));
+      try {
+        return _json({'addresses': await waitForSubnet(creds.addresses, timeout: joinByHandTime)});
+      } on DirectLinkException {
+        return _error(503, "${creds.ssid} wasn't joined in time.");
+      }
     } on DirectLinkException catch (e) {
       return _error(503, e.message);
     }

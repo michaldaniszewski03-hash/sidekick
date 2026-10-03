@@ -1,5 +1,6 @@
 import AVFoundation
 import Flutter
+import NetworkExtension
 import Photos
 import UserNotifications
 import UIKit
@@ -81,6 +82,16 @@ import UIKit
           if let url = URL(string: "photos-redirect://") {
             UIApplication.shared.open(url)
           }
+          result(nil)
+        case "joinHotspot":
+          // Another device's network for a direct link (an Android phone's
+          // hotspot, a Windows PC's Wi-Fi Direct network). iOS asks "Join?".
+          let args = call.arguments as? [String: Any] ?? [:]
+          HotspotJoiner.join(
+            ssid: args["ssid"] as? String ?? "", passphrase: args["passphrase"] as? String ?? "", done: result)
+        case "leaveHotspot":
+          let ssid = (call.arguments as? [String: Any])?["ssid"] as? String ?? ""
+          NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: ssid)
           result(nil)
         default:
           result(FlutterMethodNotImplemented)
@@ -276,5 +287,35 @@ final class OfferNotifier: NSObject, UNUserNotificationCenterDelegate {
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
     completionHandler([])
+  }
+}
+
+/// Joins a Wi-Fi network by name and password (NEHotspotConfiguration). It
+/// needs Apple's Hotspot Configuration permission, which builds signed by
+/// Sidekick's developer account have (TestFlight); without it ("byHand"),
+/// Dart asks the user to join in Settings → Wi-Fi instead.
+enum HotspotJoiner {
+  static func join(ssid: String, passphrase: String, done: @escaping FlutterResult) {
+    let configuration = NEHotspotConfiguration(ssid: ssid, passphrase: passphrase, isWEP: false)
+    // Forgotten again when Sidekick leaves it or goes to the background.
+    configuration.joinOnce = true
+    NEHotspotConfigurationManager.shared.apply(configuration) { error in
+      DispatchQueue.main.async {
+        guard let error = error as NSError? else { return done(nil) }
+        guard error.domain == NEHotspotConfigurationErrorDomain else {
+          return done(FlutterError(code: "byHand", message: error.localizedDescription, details: nil))
+        }
+        switch NEHotspotConfigurationError(rawValue: error.code) {
+        case .alreadyAssociated:
+          done(nil)
+        case .userDenied:
+          done(FlutterError(code: "denied", message: "You chose not to join \(ssid).", details: nil))
+        case .invalidSSID, .invalidWPAPassphrase:
+          done(FlutterError(code: "invalid", message: "The other device's network looks wrong.", details: nil))
+        default:
+          done(FlutterError(code: "byHand", message: error.localizedDescription, details: nil))
+        }
+      }
+    }
   }
 }

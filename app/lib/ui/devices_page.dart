@@ -8,6 +8,7 @@ import '../core/bluetooth.dart';
 import '../core/models.dart';
 import '../core/pairing_qr.dart';
 import 'bluetooth_pairing.dart';
+import 'direct_wifi.dart';
 import 'qr_pairing.dart';
 import 'widgets.dart';
 
@@ -447,6 +448,8 @@ class _PairedCardState extends State<_PairedCard> {
         ? 'Setting up direct Wi-Fi…'
         : state.viaDirectWifi(device.id)
         ? 'Connected via direct Wi-Fi'
+        : state.viaDirectLinkOnly(device.id)
+        ? 'Nearby · sends over direct Wi-Fi'
         : state.viaBluetooth(device.id)
         ? 'Connected via Bluetooth'
         : (online ? 'Connected' : 'Offline');
@@ -455,7 +458,7 @@ class _PairedCardState extends State<_PairedCard> {
         ? Icons.file_download_outlined
         : reset
         ? Icons.error_outline_rounded
-        : state.viaDirectWifi(device.id)
+        : state.viaDirectWifi(device.id) || state.viaDirectLinkOnly(device.id)
         ? Icons.wifi_tethering_rounded
         : state.viaBluetooth(device.id)
         ? Icons.bluetooth_connected_rounded
@@ -566,11 +569,18 @@ class _PairedCardState extends State<_PairedCard> {
                       : Row(
                           children: [
                             Expanded(
-                              child: FilledButton.icon(
-                                onPressed: online ? _pickAndSend : null,
-                                icon: const Icon(Icons.send_rounded, size: 18),
-                                label: const Text('Send files'),
-                              ),
+                              // Out of reach with Bluetooth off: offer to find it nearby.
+                              child: !online && AppState.bluetoothSupported && !state.bluetoothOn
+                                  ? FilledButton.tonalIcon(
+                                      onPressed: () => askToTurnOnBluetooth(context, state, device.name),
+                                      icon: const Icon(Icons.bluetooth_searching_rounded, size: 18),
+                                      label: const Text('Find nearby'),
+                                    )
+                                  : FilledButton.icon(
+                                      onPressed: online ? _pickAndSend : null,
+                                      icon: const Icon(Icons.send_rounded, size: 18),
+                                      label: const Text('Send files'),
+                                    ),
                             ),
                             if (caps?.files ?? true) ...[
                               const SizedBox(width: 8),

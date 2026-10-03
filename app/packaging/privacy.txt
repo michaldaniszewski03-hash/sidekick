@@ -80,9 +80,13 @@ PERMISSIONS, AND WHY
   location.
 - Accessibility (Mac and Android): only so a paired device can move the
   pointer and type, when you allow it.
-- Wi-Fi hotspot (Android): for a direct link to your computer when there's
-  no shared Wi-Fi. Its name and password go to the paired computer over
-  encrypted Bluetooth, and nowhere else.
+- Direct Wi-Fi: when two devices share no Wi-Fi, one opens a small
+  private Wi-Fi network (an Android phone's hotspot, or a Windows PC's
+  Wi-Fi Direct network) and the other joins it (Android and iPhone ask
+  you first). The network's name and
+  password go only to the other device: over encrypted Bluetooth, or in
+  the QR code shown on screen. It shares no mobile data, and closes when
+  you're done.
 - Firewall (Windows): the installer lets Sidekick accept connections from
   devices on private networks, and from the local subnet on public networks
   (for the direct link). Uninstalling removes these rules.

@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
 import '../core/models.dart';
+import 'direct_wifi.dart';
 
 IconData platformIcon(DevicePlatform platform) => switch (platform) {
   DevicePlatform.windows => Icons.desktop_windows_outlined,
@@ -567,10 +568,15 @@ class OfflineBanner extends StatelessWidget {
           Expanded(
             child: Text(
               "${device.name} isn't reachable. Make sure Sidekick is open on it, and that both devices are on the same "
-              'Wi-Fi or have Bluetooth on.',
+              'Wi-Fi or have Bluetooth on in Sidekick (it finds the other device, then sets up a direct Wi-Fi link).',
               style: TextStyle(color: scheme.onErrorContainer),
             ),
           ),
+          if (AppState.bluetoothSupported && !state.bluetoothOn)
+            TextButton(
+              onPressed: () => askToTurnOnBluetooth(context, state, device.name),
+              child: const Text('Turn on Bluetooth'),
+            ),
         ],
       ),
     );

@@ -11,6 +11,7 @@ import '../platform/gallery.dart';
 import '../platform/notifications.dart';
 import '../platform/sound.dart';
 import 'devices_page.dart';
+import 'direct_wifi.dart';
 import 'files_page.dart';
 import 'qr_pairing.dart';
 import 'remote_page.dart';
@@ -48,6 +49,10 @@ class _ShellState extends State<Shell> {
       state.notices.listen(_showNotice),
       state.transferOffers.listen(_showOffer),
       state.sends.listen(_showSend),
+      // iPhone: a network to join by hand for a direct link.
+      state.manualJoins.listen((join) {
+        if (mounted) unawaited(showManualJoin(context, join));
+      }),
     ];
     _lifecycle = AppLifecycleListener(onResume: state.resumed);
     // The first time this device pairs with an iPhone: it can't be controlled.

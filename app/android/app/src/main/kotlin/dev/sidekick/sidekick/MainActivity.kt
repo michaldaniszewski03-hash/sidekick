@@ -10,7 +10,12 @@ import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.MediaScannerConnection
 import android.media.MediaPlayer
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
+import android.net.wifi.WifiNetworkSpecifier
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Environment
@@ -38,6 +43,8 @@ class MainActivity : FlutterActivity() {
 
     private var multicastLock: WifiManager.MulticastLock? = null
     private var hotspot: WifiManager.LocalOnlyHotspotReservation? = null
+    /** Another device's hotspot this phone joined (see joinHotspot). */
+    private var joined: ConnectivityManager.NetworkCallback? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -54,6 +61,16 @@ class MainActivity : FlutterActivity() {
                         "stopHotspot" -> {
                             hotspot?.close()
                             hotspot = null
+                            result.success(null)
+                        }
+                        "joinHotspot" -> joinHotspot(
+                            call.argument<String>("ssid") ?: "",
+                            call.argument<String>("passphrase") ?: "",
+                            call.argument<String>("security") ?: "wpa2",
+                            result,
+                        )
+                        "leaveHotspot" -> {
+                            leaveHotspot()
                             result.success(null)
                         }
                         "permissions" -> result.success(permissions())
@@ -161,6 +178,7 @@ class MainActivity : FlutterActivity() {
         }
         hotspot?.close()
         hotspot = null
+        leaveHotspot()
         multicastLock?.release()
         multicastLock = null
         super.onDestroy()
@@ -230,6 +248,75 @@ class MainActivity : FlutterActivity() {
             result.error("permission", "Turn on Location, then try again.", null)
         } catch (e: IllegalStateException) {
             result.error("hotspot", "A hotspot is already open.", null)
+        }
+    }
+
+    /**
+     * Joins another device's hotspot (an Android phone's, or a Windows PC's
+     * Wi-Fi Direct network) for a direct link. Android asks the user once
+     * ("Connect to device?"). The whole app then uses that network (Dart's
+     * sockets too) until [leaveHotspot]: it has no internet, but it's where
+     * the other device is.
+     */
+    private fun joinHotspot(ssid: String, passphrase: String, security: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            result.error("join", "Joining another device's Wi-Fi needs Android 10 or newer.", null)
+            return
+        }
+        leaveHotspot()
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val specifier = WifiNetworkSpecifier.Builder().setSsid(ssid).apply {
+            if (security == "wpa3") setWpa3Passphrase(passphrase) else setWpa2Passphrase(passphrase)
+        }.build()
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .setNetworkSpecifier(specifier)
+            .build()
+        val main = Handler(Looper.getMainLooper())
+        var answered = false
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                connectivity.bindProcessToNetwork(network)
+                main.post {
+                    if (!answered) {
+                        answered = true
+                        result.success(null)
+                    }
+                }
+            }
+
+            override fun onUnavailable() {
+                main.post {
+                    if (!answered) {
+                        answered = true
+                        result.error("join", "Couldn't join $ssid. Is Wi-Fi turned on?", null)
+                    }
+                }
+            }
+
+            override fun onLost(network: Network) {
+                connectivity.bindProcessToNetwork(null)
+            }
+        }
+        joined = callback
+        try {
+            connectivity.requestNetwork(request, callback, 60_000)
+        } catch (e: RuntimeException) {
+            joined = null
+            result.error("join", "Couldn't join $ssid: ${e.message}", null)
+        }
+    }
+
+    private fun leaveHotspot() {
+        val callback = joined ?: return
+        joined = null
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        connectivity.bindProcessToNetwork(null)
+        try {
+            connectivity.unregisterNetworkCallback(callback)
+        } catch (e: IllegalArgumentException) {
+            // Already gone.
         }
     }
 

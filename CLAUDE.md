@@ -232,6 +232,29 @@ its biggest features and fixes, and bumps the website links (see
     A mismatch is refused as "Pairing keys don't match" and the app shows
     "Pair again"; a failed decrypt with the same key means a damaged packet.
     Every refusal is written to the receiver's Bluetooth log.
+- **Direct Wi-Fi for every other pair** (`platform/hotspot.dart`
+  `DirectLink`, the owner's call: "make it work for everything"): one
+  device opens a small network and the other joins. Opens: Android
+  (local-only hotspot), Windows (Wi-Fi Direct "legacy" network through
+  PowerShell's WinRT, `-EncodedCommand`; no native code). Joins: Android
+  10+ (`WifiNetworkSpecifier`, asks once; `bindProcessToNetwork` so Dart's
+  sockets use it), Windows (netsh), Mac (networksetup), iPhone
+  (`NEHotspotConfiguration`, needs `Runner.entitlements`' Hotspot
+  Configuration, which only signed builds have; otherwise `JoinByHand`:
+  the iPhone shows the name and password to join in Settings,
+  `ui/direct_wifi.dart`). `directLinkHost` decides who opens it (Android,
+  then Windows; two of a kind: the smaller id), tested in
+  `test/direct_link_test.dart`. How the two find each other:
+  - Bluetooth (the doorbell): a paired device seen over Bluetooth but on no
+    shared network is `viaDirectLinkOnly`; sending or Remote sets up the
+    link first, even when both are on (different) Wi-Fi networks:
+    Bluetooth then never carries the files. Bluetooth is still off by
+    default; an unreachable device's card offers "Find nearby", which asks
+    to turn it on (`askToTurnOnBluetooth`).
+  - A QR code: with no Wi-Fi, an Android phone or PC showing its code opens
+    its network first and puts it in the code (`ws`, `wk`, `wt`); the
+    scanning phone joins it and pairs (`_reachInviteNetwork`).
+  Over Bluetooth (both off Wi-Fi), transfers over 1 MB switch to the link.
 - **Direct Wi-Fi between iPhones and Macs** (no router, no Bluetooth):
   Apple's peer-to-peer Wi-Fi (AWDL, AirDrop's link), through the Network
   framework (`includePeerToPeer`). `SidekickP2P.swift` (identical in
@@ -286,6 +309,23 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.8.0
+- **Direct Wi-Fi between any two devices, no router needed:** Android ↔
+  Android, iPhone ↔ Android, iPhone ↔ Windows, Windows ↔ Mac, Windows ↔
+  Windows and Android ↔ computers (iPhone ↔ Mac already had Apple's link).
+  An Android phone opens a private network, or a Windows PC a Wi-Fi Direct
+  one, and the other device joins it; files and Remote then go at Wi-Fi
+  speed instead of over Bluetooth.
+- **Works on different Wi-Fi networks too:** Bluetooth only finds the other
+  device and hands over the network's name and password.
+- **Find nearby:** a device that can't be reached offers to turn on
+  Bluetooth to find it.
+- **Pair with no Wi-Fi and no Bluetooth:** with no Wi-Fi, an Android phone
+  or PC puts a private network in its QR code; the phone that scans it
+  joins and pairs.
+- iPhones join by themselves where the build allows it; otherwise they show
+  the network's name and password to join in Settings → Wi-Fi.
 
 ### 2.7.1
 - **Fixed: the Mac's red close button quit Sidekick** (2.6.6 and 2.7.0).

@@ -126,6 +126,14 @@ class NearbyDevice {
 }
 
 /// A one-off message for the snackbar.
+/// The user is asked to join [credentials] in Settings → Wi-Fi (an iPhone
+/// can't join it by itself); [done] completes once it has, or gave up.
+class ManualJoin {
+  ManualJoin(this.credentials, this.done);
+  final HotspotCredentials credentials;
+  final Future<void> done;
+}
+
 class Notice {
   Notice(this.message, {this.revealPath, this.inGallery = false, this.galleryUri});
   final String message;
@@ -302,6 +310,18 @@ class AppState extends ChangeNotifier {
   /// A pairing finished (either direction).
   Stream<PairedDevice> get pairedEvents => _pairedEvents.stream;
   Stream<Notice> get notices => _notices.stream;
+
+  final _manualJoins = StreamController<ManualJoin>.broadcast();
+
+  /// Networks to join by hand in Settings (iPhone; see [ManualJoin]).
+  Stream<ManualJoin> get manualJoins => _manualJoins.stream;
+
+  /// Asks the user to join [c] in Settings and waits until they have.
+  Future<List<String>> _joinByHand(HotspotCredentials c) {
+    final joined = waitForSubnet(c.addresses, timeout: SidekickServer.joinByHandTime);
+    _manualJoins.add(ManualJoin(c, joined.then<void>((_) {}, onError: (Object _) {})));
+    return joined;
+  }
 
   Timer? _presenceTimer;
   Timer? _scanTimer;
@@ -779,7 +799,20 @@ class AppState extends ChangeNotifier {
   bool viaBluetooth(String id) =>
       !reachableViaWifi(id) && reachableViaBluetooth(id) && _bluetoothAllowed(_bleSeen[id]?.info);
 
-  bool isOnline(String id) => reachableViaWifi(id) || viaBluetooth(id);
+  /// Nearby over Bluetooth but on another network (or none) where Bluetooth
+  /// mustn't carry files (Wi-Fi first): Bluetooth only rings the doorbell,
+  /// and sending sets up a direct Wi-Fi link first.
+  bool viaDirectLinkOnly(String id) {
+    final d = _paired[id];
+    return d != null &&
+        !reachableViaWifi(id) &&
+        !viaBluetooth(id) &&
+        reachableViaBluetooth(id) &&
+        bluetooth != null &&
+        canConnectDirect(d);
+  }
+
+  bool isOnline(String id) => reachableViaWifi(id) || viaBluetooth(id) || viaDirectLinkOnly(id);
 
   PairedDevice? get selected {
     final d = pairedById(selectedId);
@@ -800,9 +833,15 @@ class AppState extends ChangeNotifier {
     if (viaDirectWifi(d.id)) {
       return PeerClient(host: _loopback, port: _p2pPorts[d.id]!, token: d.token, fingerprint: d.fingerprint);
     }
+    if (!viaBluetooth(d.id)) return PeerClient.forDevice(d);
+    return _bleClientFor(d) ?? PeerClient.forDevice(d);
+  }
+
+  /// [d] over Bluetooth, if it's been seen there.
+  PeerClient? _bleClientFor(PairedDevice d) {
     final sighting = _bleSeen[d.id];
     final bt = bluetooth;
-    if (sighting == null || bt == null || !viaBluetooth(d.id)) return PeerClient.forDevice(d);
+    if (sighting == null || bt == null) return null;
     // Paired again since (new key or token): the cached client would seal
     // with the old key, and the other device would refuse everything.
     final cached = _bleClients[d.id];
@@ -828,11 +867,18 @@ class AppState extends ChangeNotifier {
 
   /// Whether this device and [d] can set up a direct Wi-Fi link: an
   /// Android phone opens a hotspot, a Windows PC or Mac joins it.
-  bool canConnectDirect(PairedDevice d) {
-    final peerHosts = d.platform == DevicePlatform.android;
-    final peerJoins = d.platform == DevicePlatform.windows || d.platform == DevicePlatform.macos;
-    return (directLink.canHost && peerJoins) || (directLink.canJoin && peerHosts);
-  }
+  bool canConnectDirect(PairedDevice d) => _weHost(d) != null;
+
+  /// Who opens the network for a direct link with [d]: this device (true),
+  /// [d] (false), or neither can (null).
+  bool? _weHost(PairedDevice d) => directLinkHost(
+    mine: me.platform,
+    theirs: d.platform,
+    myId: id,
+    theirId: d.id,
+    canHost: directLink.canHost,
+    canJoin: directLink.canJoin,
+  );
 
   /// Makes [d] reachable over Wi-Fi if it's only nearby over Bluetooth, by
   /// setting up a direct link. True when Wi-Fi works afterwards.
@@ -841,7 +887,7 @@ class AppState extends ChangeNotifier {
       _keepDirect(d);
       return Future.value(true);
     }
-    if (!viaBluetooth(d.id) || !canConnectDirect(d)) return Future.value(false);
+    if (!reachableViaBluetooth(d.id) || bluetooth == null || !canConnectDirect(d)) return Future.value(false);
     final pending = _directConnecting[d.id];
     if (pending != null) return pending;
     final attempt = _directConnecting[d.id] = _connectDirect(d);
@@ -853,16 +899,21 @@ class AppState extends ChangeNotifier {
   }
 
   Future<bool> _connectDirect(PairedDevice d) async {
-    final ble = clientFor(d);
+    final ble = _bleClientFor(d);
+    if (ble == null) return false;
     final port = _bleSeen[d.id]?.info.port ?? d.lastPort;
     List<String> candidates;
     try {
-      if (directLink.canHost) {
+      if (_weHost(d) == true) {
         final creds = await directLink.host();
         candidates = await ble.joinHotspot(creds);
       } else {
         final creds = await ble.startHotspot();
-        await directLink.join(creds);
+        try {
+          await directLink.join(creds);
+        } on JoinByHand {
+          await _joinByHand(creds);
+        }
         candidates = creds.addresses;
       }
     } catch (e) {
@@ -893,7 +944,12 @@ class AppState extends ChangeNotifier {
   void _keepDirect(PairedDevice d) {
     final timer = _directIdle[d.id];
     if (timer == null && !_directConnecting.containsKey(d.id)) return; // Not a direct link.
-    timer?.cancel();
+    _armDirectIdle(d);
+  }
+
+  /// [d] is reached over a direct link: close it after a quiet spell.
+  void _armDirectIdle(PairedDevice d) {
+    _directIdle[d.id]?.cancel();
     _directIdle[d.id] = Timer(const Duration(minutes: 3), () {
       if (transfers.any((t) => t.state == TransferState.running && t.deviceName == d.name) ||
           activeRemoteSessions.isNotEmpty) {
@@ -918,14 +974,15 @@ class AppState extends ChangeNotifier {
   /// Before a big transfer or remote control over Bluetooth, try to switch
   /// to a direct Wi-Fi link. Small things just go over Bluetooth.
   Future<PeerClient> _clientForTransfer(PairedDevice d, int bytes) async {
-    if (viaBluetooth(d.id) && bytes > directLinkThreshold) await connectDirect(d);
+    // On another network (Bluetooth may not carry it): always direct Wi-Fi.
+    if (viaDirectLinkOnly(d.id) || (viaBluetooth(d.id) && bytes > directLinkThreshold)) await connectDirect(d);
     if (_directIdle.containsKey(d.id)) _keepDirect(d);
     return clientFor(d);
   }
 
   /// Bigger transfers than this set up a direct Wi-Fi link when they'd
   /// otherwise crawl over Bluetooth.
-  static const directLinkThreshold = 2 * 1024 * 1024;
+  static const directLinkThreshold = 1024 * 1024;
 
   // Bluetooth can report dozens of advertisements a second; redraw at most
   // four times a second so the app stays responsive.
@@ -1163,6 +1220,36 @@ class AppState extends ChangeNotifier {
     wifi: info.wifi,
   );
 
+  /// Joins the network in a QR code and finds the device on it.
+  Future<PeerClient?> _reachInviteNetwork(InviteQr qr, HotspotCredentials network) async {
+    try {
+      try {
+        await directLink.join(network);
+      } on JoinByHand {
+        await _joinByHand(network);
+      }
+    } on DirectLinkException catch (e) {
+      _notices.add(Notice("Couldn't join ${qr.name}'s Wi-Fi: $e"));
+      return null;
+    }
+    for (var attempt = 0; attempt < 8; attempt++) {
+      for (final host in network.addresses) {
+        try {
+          final client = PeerClient(host: host, port: qr.port, fingerprint: qr.fingerprint);
+          final info = await client.info(timeout: const Duration(seconds: 2));
+          if (info.id == qr.id) {
+            _onFound(info);
+            _joinedForInvite = qr.id;
+            return client;
+          }
+        } catch (_) {}
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    await directLink.leave();
+    return null;
+  }
+
   /// Pairing by QR code with an iPhone or Mac that isn't on this network:
   /// over [p2p], if it's in reach.
   Future<PeerClient?> _reachInviteDirect(InviteQr qr) async {
@@ -1214,17 +1301,54 @@ class AppState extends ChangeNotifier {
   /// code to type. Close it with [cancelInvite].
   ({PairingInvite invite, String qr}) createInvite() {
     final invite = server.createInvite();
+    final network = _qrNetwork;
     final qr = InviteQr(
       id: id,
       name: name,
       platform: me.platform,
-      addresses: lan,
+      addresses: lan.isEmpty && network != null ? network.addresses : lan,
       port: server.port == 0 ? sidekickPort : server.port,
       fingerprint: identity.fingerprint,
       secret: invite.secret,
+      network: lan.isEmpty ? network : null,
     );
     return (invite: invite, qr: qr.encode());
   }
+
+  /// A network this device opened while showing its QR code with no Wi-Fi
+  /// (Android, Windows): its name and password go in the code, so a phone
+  /// that scans it joins and pairs with no router and no Bluetooth.
+  HotspotCredentials? _qrNetwork;
+  int _qrScreens = 0;
+
+  /// A QR code screen opened. True once a network is open for it (then
+  /// make the code again: [createInvite] includes it).
+  Future<bool> openQrNetwork() async {
+    _qrScreens++;
+    if (_qrNetwork != null) return true;
+    if (wifiConnected || !directLink.canHost) return false;
+    try {
+      final network = await directLink.host();
+      if (_qrScreens == 0) return false;
+      _qrNetwork = network;
+      return true;
+    } on DirectLinkException catch (e) {
+      debugPrint('Sidekick: no network for the QR code: $e');
+      return false;
+    }
+  }
+
+  /// The QR code screen closed. A device that paired over its network keeps
+  /// it while in use (the direct link's idle timer closes it after).
+  void closeQrNetwork() {
+    if (_qrScreens > 0) _qrScreens--;
+    if (_qrScreens > 0 || _qrNetwork == null) return;
+    _qrNetwork = null;
+    if (_directIdle.isEmpty) unawaited(directLink.stopHosting());
+  }
+
+  /// The id of the device whose QR network this one joined to pair.
+  String? _joinedForInvite;
 
   void cancelInvite(PairingInvite invite) => server.cancelInvite(invite);
 
@@ -1233,12 +1357,16 @@ class AppState extends ChangeNotifier {
   /// over Bluetooth when it's out of the network's reach.
   Future<PairedDevice> pairWithInvite(InviteQr qr) async {
     if (qr.id == id) throw SidekickException("That's this device's own QR code. Scan it with the other device.");
+    _joinedForInvite = null;
     final client = await _reachInvite(qr);
     final target = await client.requestPairing(me, myFingerprint: identity.fingerprint, invite: true);
     if (target.device.id != qr.id || target.fingerprint != qr.fingerprint) {
       throw SidekickException("That device doesn't match the QR code. Show a new code and scan again.");
     }
-    return _finishPairing(client, target, qr.secret);
+    final device = await _finishPairing(client, target, qr.secret);
+    // On its network now: stay while in use, then go back.
+    if (_joinedForInvite == device.id) _armDirectIdle(device);
+    return device;
   }
 
   Future<PeerClient> _reachInvite(InviteQr qr) async {
@@ -1266,6 +1394,12 @@ class AppState extends ChangeNotifier {
       }
       final client = await found.future;
       if (client != null) return client;
+    }
+    // It opened a network for the code (no Wi-Fi there): join it.
+    final network = qr.network;
+    if (network != null && directLink.canJoin) {
+      final joined = await _reachInviteNetwork(qr, network);
+      if (joined != null) return joined;
     }
     // An iPhone or Mac nearby but on no shared network: Apple's direct link.
     final direct = await _reachInviteDirect(qr);
@@ -1314,6 +1448,9 @@ class AppState extends ChangeNotifier {
     // Paired over Apple's direct link: that local address is no use later.
     if (d.lastAddress == _loopback) d.lastAddress = null;
     _paired[d.id] = d;
+    // Paired over the network this device opened for its QR code: keep it
+    // open while in use.
+    if (_qrNetwork != null && !wifiConnected) _armDirectIdle(d);
     // Paired over Bluetooth there's no IP yet; Wi-Fi discovery fills it in.
     if (d.lastAddress != null) _lastContact[d.id] = DateTime.now();
     selectedId ??= d.id;
@@ -1347,6 +1484,9 @@ class AppState extends ChangeNotifier {
         _pairRequests.add(request);
       case InviteScanned(:final device):
         _inviteScans.add(device);
+      case JoinNetworkByHand(:final credentials):
+        final joined = waitForSubnet(credentials.addresses, timeout: SidekickServer.joinByHandTime);
+        _manualJoins.add(ManualJoin(credentials, joined.then<void>((_) {}, onError: (Object _) {})));
       case TransferOffered(:final offer):
         _offers.add(offer);
       case Paired(:final device):

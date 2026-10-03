@@ -113,6 +113,16 @@ class _MyQrDialogState extends State<_MyQrDialog> {
   void initState() {
     super.initState();
     _scheduleRenew();
+    // No Wi-Fi here (Android, Windows): open a network for the scanner and
+    // put it in the code.
+    unawaited(
+      widget.state.openQrNetwork().then((opened) {
+        if (!opened || !mounted || _pairing != null) return;
+        widget.state.cancelInvite(_code.invite);
+        setState(() => _code = widget.state.createInvite());
+        _scheduleRenew();
+      }),
+    );
     _subs = [
       widget.state.inviteScans.listen((d) {
         if (mounted) setState(() => _pairing = d);
@@ -145,6 +155,7 @@ class _MyQrDialogState extends State<_MyQrDialog> {
       unawaited(s.cancel());
     }
     widget.state.cancelInvite(_code.invite);
+    widget.state.closeQrNetwork();
     super.dispose();
   }
 
