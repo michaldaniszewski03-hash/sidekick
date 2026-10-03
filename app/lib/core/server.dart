@@ -48,6 +48,12 @@ class Paired extends ServerEvent {
   final PairedDevice device;
 }
 
+/// A paired device pinged this one: play a loud sound, to find it.
+class Pinged extends ServerEvent {
+  Pinged(this.from);
+  final TrustedPeer from;
+}
+
 /// This iPhone was asked to join a network it can't join by itself: the
 /// user joins [credentials] in Settings → Wi-Fi ([JoinByHand]).
 class JoinNetworkByHand extends ServerEvent {
@@ -343,6 +349,7 @@ class SidekickServer {
       ..post('/v1/pair/start', _pairStart)
       ..post('/v1/pair/confirm', _pairConfirm)
       ..post('/v1/unpair', _authed(_unpair))
+      ..post('/v1/ping', _authed(_ping))
       ..get('/v1/fs/roots', _authed(_roots, (p) => p.files))
       ..get('/v1/fs/list', _authed(_list, (p) => p.files))
       ..get('/v1/fs/download', _authed(_download, (p) => p.files))
@@ -563,6 +570,11 @@ class SidekickServer {
     final peer = _peer(r);
     trust.remove(peer.id);
     _events.add(Unpaired(peer.id));
+    return _json({'ok': true});
+  }
+
+  Response _ping(Request r) {
+    _events.add(Pinged(_peer(r)));
     return _json({'ok': true});
   }
 

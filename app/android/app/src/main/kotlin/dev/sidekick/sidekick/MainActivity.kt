@@ -88,7 +88,7 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
                         "playSound" -> {
-                            call.argument<String>("path")?.let { playSound(it) }
+                            call.argument<String>("path")?.let { playSound(it, call.argument<Boolean>("loud") == true) }
                             result.success(null)
                         }
                         "saveToGallery" -> saveToGallery(
@@ -344,7 +344,7 @@ class MainActivity : FlutterActivity() {
 
     /** Sidekick's sounds (startup, a request, accepted, declined), on the
      *  media volume: the "system sounds" volume is muted on many phones. */
-    private fun playSound(path: String) {
+    private fun playSound(path: String, loud: Boolean = false) {
         val player = MediaPlayer()
         players.add(player)
         fun done(mp: MediaPlayer) {
@@ -354,7 +354,9 @@ class MainActivity : FlutterActivity() {
         try {
             player.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    // A ping goes on the alarm volume: heard even with the
+                    // phone on silent, like Find My Device.
+                    .setUsage(if (loud) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build(),
             )

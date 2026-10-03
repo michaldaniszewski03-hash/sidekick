@@ -87,6 +87,7 @@ flutter:
     - assets/sounds/request.wav
     - assets/sounds/accept.wav
     - assets/sounds/decline.wav
+    - assets/sounds/ping.wav
     - assets/tray/tray.ico
     - assets/tray/tray_mac.png
 

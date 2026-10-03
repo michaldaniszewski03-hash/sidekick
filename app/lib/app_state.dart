@@ -316,6 +316,22 @@ class AppState extends ChangeNotifier {
   /// Networks to join by hand in Settings (iPhone; see [ManualJoin]).
   Stream<ManualJoin> get manualJoins => _manualJoins.stream;
 
+  final _pings = StreamController<TrustedPeer>.broadcast();
+
+  /// A paired device pinged this one (it should play a loud sound).
+  Stream<TrustedPeer> get pings => _pings.stream;
+
+  /// The Ping button: makes [d] play a loud sound, to find it.
+  Future<void> ping(PairedDevice d) async {
+    try {
+      await (await _clientForTransfer(d, 0)).ping();
+      _notices.add(Notice('Pinged ${d.name}'));
+    } catch (e) {
+      _noteFailure(d, e);
+      _notices.add(Notice("Couldn't ping ${d.name}: ${_withUpdateHint(d, e)}"));
+    }
+  }
+
   /// Asks the user to join [c] in Settings and waits until they have.
   Future<List<String>> _joinByHand(HotspotCredentials c) {
     final joined = waitForSubnet(c.addresses, timeout: SidekickServer.joinByHandTime);
@@ -1484,6 +1500,8 @@ class AppState extends ChangeNotifier {
         _pairRequests.add(request);
       case InviteScanned(:final device):
         _inviteScans.add(device);
+      case Pinged(:final from):
+        _pings.add(from);
       case JoinNetworkByHand(:final credentials):
         final joined = waitForSubnet(credentials.addresses, timeout: SidekickServer.joinByHandTime);
         _manualJoins.add(ManualJoin(credentials, joined.then<void>((_) {}, onError: (Object _) {})));

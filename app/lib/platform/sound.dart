@@ -29,7 +29,12 @@ Future<void> playAcceptSound() => _play('accept');
 /// A request was declined (tapped here, or the other device's answer).
 Future<void> playDeclineSound() => _play('decline');
 
-Future<void> _play(String name) async {
+/// Another device pinged this one: loud, and on Android on the alarm
+/// volume, so it's heard even on silent. Plays whatever Settings → Sound
+/// says: someone asked for it.
+Future<void> playPingSound() => _play('ping', loud: true);
+
+Future<void> _play(String name, {bool loud = false}) async {
   try {
     final path = await _soundFile(name);
     if (Platform.isMacOS) {
@@ -43,7 +48,7 @@ Future<void> _play(String name) async {
     } else if (Platform.isIOS) {
       await const MethodChannel('sidekick/ios').invokeMethod('playSound', {'path': path});
     } else if (Platform.isAndroid) {
-      await const MethodChannel('sidekick/android').invokeMethod('playSound', {'path': path});
+      await const MethodChannel('sidekick/android').invokeMethod('playSound', {'path': path, 'loud': loud});
     }
   } catch (e) {
     // No sound, no problem; but say why in the log.

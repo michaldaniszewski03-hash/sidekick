@@ -89,6 +89,12 @@ abstract final class OfferNotifications {
     );
   }
 
+  /// [from] pinged this phone while Sidekick isn't on screen.
+  static void showPing(String from) {
+    if (!supported || WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) return;
+    _call('offerDone', {'id': 'ping', 'title': 'Ping from $from', 'body': 'Open Sidekick to stop the sound'});
+  }
+
   static void _call(String method, Map<String, Object?> args) =>
       unawaited(_channel.invokeMethod(method, args).catchError((Object e) => debugPrint('Sidekick: $method: $e')));
 }

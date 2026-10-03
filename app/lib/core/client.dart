@@ -329,6 +329,9 @@ class PeerClient {
 
   Future<void> unpair() => _postJson('/v1/unpair', const {});
 
+  /// Makes the device play a loud sound (the Ping button).
+  Future<void> ping() => _postJson('/v1/ping', const {});
+
   // ------------------------------------------------------------ direct link
 
   /// Asks the device (over Bluetooth) to open a hotspot for us.
