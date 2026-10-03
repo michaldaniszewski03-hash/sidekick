@@ -20,6 +20,7 @@ import 'core/pairing_qr.dart';
 import 'core/server.dart';
 import 'core/trust.dart';
 import 'platform/android.dart';
+import 'platform/apple_p2p.dart';
 import 'platform/device_name.dart';
 import 'platform/files.dart';
 import 'platform/gallery.dart';
@@ -246,6 +247,23 @@ class AppState extends ChangeNotifier {
   /// Devices we're setting up a direct link with right now.
   Set<String> get connectingDirect => _directConnecting.keys.toSet();
 
+  /// Apple's peer-to-peer Wi-Fi (iPhone and Mac, the link AirDrop uses):
+  /// reaches another iPhone or Mac with no shared network, at Wi-Fi speed
+  /// and with no Bluetooth.
+  final p2p = AppleP2P.forCurrentPlatform();
+
+  /// Devices reached over [p2p]: the local port leading to each, when it
+  /// last answered, and what it said about itself.
+  final Map<String, int> _p2pPorts = {};
+  final Map<String, DateTime> _p2pContact = {};
+  final Map<String, DeviceInfo> _p2pInfo = {};
+  final Set<String> _p2pReaching = {};
+
+  /// Screens pairing over [p2p] right now (it looks for devices meanwhile).
+  int _p2pPairing = 0;
+
+  static const _loopback = '127.0.0.1';
+
   final _pairRequests = StreamController<PairingRequest>.broadcast();
   final _offers = StreamController<TransferOffer>.broadcast();
   final _sends = StreamController<OutgoingSend>.broadcast();
@@ -442,6 +460,10 @@ class AppState extends ChangeNotifier {
     );
     server.events.listen(_onServerEvent);
     await _startServer();
+    if (p2p.supported) {
+      p2p.peers.addListener(_onP2pPeers);
+      unawaited(p2p.start(id: id, port: server.port));
+    }
 
     discovery = Discovery(self: () => me);
     discovery.found.listen(_onFound);
@@ -557,6 +579,8 @@ class AppState extends ChangeNotifier {
     }
     directLink.stopHosting();
     directLink.leave();
+    p2p.peers.removeListener(_onP2pPeers);
+    p2p.stop();
     bluetooth?.stop();
     discovery.stop();
     server.stop();
@@ -650,6 +674,11 @@ class AppState extends ChangeNotifier {
       for (final n in _nearby.values)
         if (n.lastSeen.isAfter(cutoff) && !_paired.containsKey(n.info.id)) n.info.id: n.info,
     };
+    // In reach over Apple's direct link: reached through its local port.
+    for (final MapEntry(key: id, value: info) in _p2pInfo.entries) {
+      final port = _p2pPorts[id];
+      if (port != null && !_paired.containsKey(id) && !wifi.containsKey(id)) wifi[id] = _throughBridge(info, port);
+    }
     final bleCutoff = DateTime.now().subtract(const Duration(seconds: 60));
     return [
       ...wifi.values,
@@ -660,10 +689,13 @@ class AppState extends ChangeNotifier {
 
   PairedDevice? pairedById(String? id) => id == null ? null : _paired[id];
 
+  /// What [id] last said about itself, however we heard it.
+  DeviceInfo? _seen(String id) => _nearby[id]?.info ?? _p2pInfo[id] ?? _bleSeen[id]?.info;
+
   /// [d] now presents a different certificate than it paired with (it was
   /// reset or reinstalled), so it has to be paired again.
   DeviceInfo? needsRepair(PairedDevice d) {
-    final seen = _nearby[d.id]?.info ?? _bleSeen[d.id]?.info;
+    final seen = _seen(d.id);
     final fp = seen?.fingerprint;
     if (fp != null && fp != d.fingerprint) return seen;
     // Found out the hard way: a connection was refused for a new certificate.
@@ -676,12 +708,12 @@ class AppState extends ChangeNotifier {
   final Set<String> _identityChanged = {};
 
   /// The Sidekick release [d] runs, if it says (2.1.3 and later do).
-  String? appVersionOf(PairedDevice d) => (_nearby[d.id]?.info ?? _bleSeen[d.id]?.info)?.app;
+  String? appVersionOf(PairedDevice d) => (_seen(d.id))?.app;
 
   /// [d] runs an older Sidekick than this device (or one too old to say
   /// which): the two may not understand each other fully until it updates.
   bool runsOlderApp(PairedDevice d) {
-    final seen = _nearby[d.id]?.info ?? _bleSeen[d.id]?.info;
+    final seen = _seen(d.id);
     if (seen == null || appVersion.isEmpty) return false;
     final theirs = seen.app;
     return theirs == null || compareVersions(theirs, appVersion) < 0;
@@ -715,13 +747,25 @@ class AppState extends ChangeNotifier {
   String securityCodeFor(PairedDevice d) => securityCode(identity.fingerprint, d.fingerprint);
 
   /// Capabilities the device last announced, if we've seen it.
-  Capabilities? capabilitiesOf(String id) => _nearby[id]?.info.capabilities ?? _bleSeen[id]?.info.capabilities;
+  Capabilities? capabilitiesOf(String id) => _seen(id)?.capabilities;
 
-  /// Reachable over the local network (fast, all features).
-  bool reachableViaWifi(String id) {
+  /// Reachable over Wi-Fi (fast, all features): the local network, or
+  /// Apple's direct link when there's no shared one.
+  bool reachableViaWifi(String id) => _onLan(id) || _viaP2p(id);
+
+  /// Answered on the local network lately.
+  bool _onLan(String id) {
     final t = _lastContact[id];
     return t != null && DateTime.now().difference(t) < const Duration(seconds: 25);
   }
+
+  bool _viaP2p(String id) {
+    final t = _p2pContact[id];
+    return t != null && _p2pPorts.containsKey(id) && DateTime.now().difference(t) < const Duration(seconds: 25);
+  }
+
+  /// Reached over Apple's direct Wi-Fi link, not a shared network.
+  bool viaDirectWifi(String id) => !_onLan(id) && _viaP2p(id);
 
   /// Seen over Bluetooth in the last minute.
   bool reachableViaBluetooth(String id) {
@@ -753,6 +797,9 @@ class AppState extends ChangeNotifier {
   /// Wi-Fi when the device is reachable there; otherwise Bluetooth if it's
   /// nearby; otherwise Wi-Fi again (which fails with a helpful message).
   PeerClient clientFor(PairedDevice d) {
+    if (viaDirectWifi(d.id)) {
+      return PeerClient(host: _loopback, port: _p2pPorts[d.id]!, token: d.token, fingerprint: d.fingerprint);
+    }
     final sighting = _bleSeen[d.id];
     final bt = bluetooth;
     if (sighting == null || bt == null || !viaBluetooth(d.id)) return PeerClient.forDevice(d);
@@ -988,6 +1035,7 @@ class AppState extends ChangeNotifier {
           await server.stop();
           await _startServer(port: port == 0 ? sidekickPort : port);
         }
+        if (p2p.supported) unawaited(p2p.start(id: id, port: server.port));
         await _restartDiscovery();
         unawaited(_checkPresence());
       } finally {
@@ -1016,7 +1064,7 @@ class AppState extends ChangeNotifier {
     await _checkWifi();
     await Future.wait([
       for (final d in _paired.values)
-        if (!reachableViaWifi(d.id) && d.lastAddress != null)
+        if (!_onLan(d.id) && d.lastAddress != null)
           PeerClient(host: d.lastAddress!, port: d.lastPort)
               .info(timeout: const Duration(seconds: 2))
               .then((info) {
@@ -1024,8 +1072,115 @@ class AppState extends ChangeNotifier {
               })
               .catchError((_) {}),
     ]);
+    await _checkP2p();
     // Also refreshes online dots and drops stale nearby devices.
     notifyListeners();
+  }
+
+  // ------------------------------------------------- Apple's direct Wi-Fi
+
+  int _p2pTick = 0;
+
+  static bool _isApple(DevicePlatform p) => p == DevicePlatform.ios || p == DevicePlatform.macos;
+
+  /// Looks for devices over [p2p] while it could help (no network here, a
+  /// paired iPhone or Mac isn't on it, or pairing), and checks the ones
+  /// reached still answer.
+  Future<void> _checkP2p() async {
+    if (!p2p.supported) return;
+    // Looking takes some of the Wi-Fi radio's time, so while on Wi-Fi it
+    // looks for a paired iPhone or Mac that's away 10 s a minute, and stays
+    // on only while one is reached (the link needs it) or while pairing.
+    _p2pTick++;
+    final away = _paired.values.any((d) => _isApple(d.platform) && !_onLan(d.id));
+    final wanted = _p2pPairing > 0 || _p2pPorts.isNotEmpty || !wifiConnected || (away && _p2pTick % 6 == 0);
+    await p2p.browse(wanted);
+    await Future.wait([
+      for (final MapEntry(key: peerId, value: port) in [..._p2pPorts.entries])
+        PeerClient(host: _loopback, port: port)
+            .info(timeout: const Duration(seconds: 3))
+            .then((info) {
+              if (info.id != peerId) throw StateError('another device');
+              _p2pContact[peerId] = DateTime.now();
+              _p2pInfo[peerId] = info;
+            })
+            .catchError((Object _) {
+              _forgetP2p(peerId);
+            }),
+    ]);
+    _onP2pPeers();
+  }
+
+  /// The devices in reach over [p2p] changed.
+  void _onP2pPeers() {
+    final inReach = p2p.peers.value;
+    var changed = false;
+    for (final peerId in [..._p2pPorts.keys]) {
+      if (!inReach.contains(peerId)) changed |= _forgetP2p(peerId);
+    }
+    for (final peerId in inReach) {
+      if (!_p2pPorts.containsKey(peerId) && !_onLan(peerId)) unawaited(_reachP2p(peerId));
+    }
+    if (changed) notifyListeners();
+  }
+
+  bool _forgetP2p(String peerId) {
+    _p2pContact.remove(peerId);
+    _p2pInfo.remove(peerId);
+    return _p2pPorts.remove(peerId) != null;
+  }
+
+  /// Opens the way to [peerId] and checks it's that device.
+  Future<void> _reachP2p(String peerId) async {
+    if (!_p2pReaching.add(peerId)) return;
+    try {
+      final port = await p2p.connect(peerId);
+      if (port == null) return;
+      final info = await PeerClient(host: _loopback, port: port).info(timeout: const Duration(seconds: 4));
+      if (info.id != peerId) return;
+      _p2pPorts[peerId] = port;
+      _p2pContact[peerId] = DateTime.now();
+      _p2pInfo[peerId] = info;
+      notifyListeners();
+    } catch (_) {
+      // Not this time; the next check tries again.
+    } finally {
+      _p2pReaching.remove(peerId);
+    }
+  }
+
+  /// [info] as reached through the local port [port] of [p2p].
+  static DeviceInfo _throughBridge(DeviceInfo info, int port) => DeviceInfo(
+    id: info.id,
+    name: info.name,
+    platform: info.platform,
+    port: port,
+    capabilities: info.capabilities,
+    address: _loopback,
+    version: info.version,
+    fingerprint: info.fingerprint,
+    app: info.app,
+    wifi: info.wifi,
+  );
+
+  /// Pairing by QR code with an iPhone or Mac that isn't on this network:
+  /// over [p2p], if it's in reach.
+  Future<PeerClient?> _reachInviteDirect(InviteQr qr) async {
+    if (!p2p.supported) return null;
+    _p2pPairing++;
+    try {
+      await p2p.browse(true);
+      // Found, then reached ([_onP2pPeers] does that as soon as it shows up).
+      for (var i = 0; i < 28 && !_p2pPorts.containsKey(qr.id); i++) {
+        if (i == 20 && !p2p.peers.value.contains(qr.id)) return null;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      final port = _p2pPorts[qr.id];
+      // Only the device whose certificate is in the QR code.
+      return port == null ? null : PeerClient(host: _loopback, port: port, fingerprint: qr.fingerprint);
+    } finally {
+      _p2pPairing--;
+    }
   }
 
   /// Adds a device by IP, for networks where discovery doesn't work.
@@ -1112,6 +1267,9 @@ class AppState extends ChangeNotifier {
       final client = await found.future;
       if (client != null) return client;
     }
+    // An iPhone or Mac nearby but on no shared network: Apple's direct link.
+    final direct = await _reachInviteDirect(qr);
+    if (direct != null) return direct;
     // Both on Wi-Fi (the code lists its network addresses): Wi-Fi only.
     if (wifiConnected && qr.addresses.isNotEmpty) {
       throw SidekickException("Can't reach ${qr.name}. Connect both devices to the same Wi-Fi, then scan again.");
@@ -1153,6 +1311,8 @@ class AppState extends ChangeNotifier {
   }
 
   void _addPaired(PairedDevice d) {
+    // Paired over Apple's direct link: that local address is no use later.
+    if (d.lastAddress == _loopback) d.lastAddress = null;
     _paired[d.id] = d;
     // Paired over Bluetooth there's no IP yet; Wi-Fi discovery fills it in.
     if (d.lastAddress != null) _lastContact[d.id] = DateTime.now();

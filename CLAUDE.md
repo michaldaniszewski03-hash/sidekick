@@ -228,6 +228,21 @@ its biggest features and fixes, and bumps the website links (see
     A mismatch is refused as "Pairing keys don't match" and the app shows
     "Pair again"; a failed decrypt with the same key means a damaged packet.
     Every refusal is written to the receiver's Bluetooth log.
+- **Direct Wi-Fi between iPhones and Macs** (no router, no Bluetooth):
+  Apple's peer-to-peer Wi-Fi (AWDL, AirDrop's link), through the Network
+  framework (`includePeerToPeer`). `SidekickP2P.swift` (identical in
+  ios/Runner and macos/Runner, like SidekickBLE) advertises
+  `_sidekick-p2p._tcp` named after the device id and hands each incoming
+  connection to the device's own server on 127.0.0.1; `connect` gives a
+  127.0.0.1 port that leads to another device. Sidekick's HTTPS (pinned
+  certificate) goes through untouched. Dart: `platform/apple_p2p.dart`;
+  `AppState` (`_checkP2p`, `viaDirectWifi`, `clientFor`) uses it only when
+  the device isn't on the same network (`_onLan`). Looking for devices
+  costs Wi-Fi time, so on Wi-Fi it looks 10 s a minute while a paired
+  iPhone/Mac is away, and stays on only while one is reached, while
+  pairing (QR code: `_reachInviteDirect`), or with no Wi-Fi at all. The
+  server never records 127.0.0.1 as a device's address (`_remoteAddress`).
+  Both Info.plists list the service in `NSBonjourServices`.
 - Pairing is SPAKE2 with either the 6-digit code or a QR invite's secret
   (`PairingInvite`: 5 minutes, one device, closed with the dialog). The
   scanner only talks to the address that presents the QR code's
@@ -267,6 +282,13 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.7.0
+- **Direct Wi-Fi between iPhones and Macs, no router needed:** iPhone ↔
+  Mac, iPhone ↔ iPhone and Mac ↔ Mac find each other and send at Wi-Fi
+  speed over Apple's peer-to-peer Wi-Fi (the link AirDrop uses), with no
+  shared network and no Bluetooth. Pairing by QR code works over it too.
+  The device card says "Connected via direct Wi-Fi".
 
 ### 2.6.6
 - **The Mac keeps Sidekick in the menu bar:** the red close button no

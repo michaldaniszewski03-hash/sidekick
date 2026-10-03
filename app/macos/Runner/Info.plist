@@ -29,8 +29,12 @@
 	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Sidekick uses Bluetooth to find and connect to your phone when you're not on the same Wi-Fi.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_sidekick-p2p._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Sidekick finds and talks to your other devices on this network.</string>
+	<string>Sidekick finds and talks to your other devices, on this network or directly when there is none.</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>NSHumanReadableCopyright</key>

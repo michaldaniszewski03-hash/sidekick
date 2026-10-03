@@ -34,6 +34,12 @@ features it offers, and (over Bluetooth) whether it's on Wi-Fi. Anyone on
 the same network or within Bluetooth range can see this announcement. It
 contains no files and no other personal content.
 
+On iPhone and Mac, Sidekick also announces its random device ID over
+Apple's peer-to-peer Wi-Fi (the link AirDrop uses), so two Apple devices
+can reach each other with no shared network. Apple devices within Wi-Fi
+range can see that ID; anything sent over the link is encrypted, like on
+your network.
+
 On Windows and Mac, closing Sidekick's window keeps it running in the tray
 (the menu bar on a Mac), so your devices can still reach it; choose Quit
 there to stop it. On Android, a small "Ready to receive" notification shows

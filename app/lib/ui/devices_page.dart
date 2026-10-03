@@ -445,6 +445,8 @@ class _PairedCardState extends State<_PairedCard> {
         ? 'Pair again'
         : state.connectingDirect.contains(device.id)
         ? 'Setting up direct Wi-Fi…'
+        : state.viaDirectWifi(device.id)
+        ? 'Connected via direct Wi-Fi'
         : state.viaBluetooth(device.id)
         ? 'Connected via Bluetooth'
         : (online ? 'Connected' : 'Offline');
@@ -453,6 +455,8 @@ class _PairedCardState extends State<_PairedCard> {
         ? Icons.file_download_outlined
         : reset
         ? Icons.error_outline_rounded
+        : state.viaDirectWifi(device.id)
+        ? Icons.wifi_tethering_rounded
         : state.viaBluetooth(device.id)
         ? Icons.bluetooth_connected_rounded
         : online

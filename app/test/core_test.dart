@@ -122,6 +122,33 @@ void main() {
     return PeerClient.forDevice(result.device);
   }
 
+  test("through Apple's direct link (a relay on 127.0.0.1): pairs, and no address is kept", () async {
+    // What SidekickP2P.swift does: every connection to the relay's port is
+    // carried, byte for byte, to the other device's server.
+    final relay = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    relay.listen((incoming) async {
+      final server = await Socket.connect(InternetAddress.loopbackIPv4, pc.server.port);
+      unawaited(incoming.cast<List<int>>().pipe(server).catchError((_) {}));
+      unawaited(server.cast<List<int>>().pipe(incoming).catchError((_) {}));
+    });
+    addTearDown(relay.close);
+    final through = PeerClient(host: '127.0.0.1', port: relay.port, fingerprint: pc.identity.fingerprint);
+    expect((await through.info()).id, pc.id);
+
+    final requested = pc.server.events.only<PairRequested>().first;
+    final paired = pc.server.events.only<Paired>().first;
+    final target = await through.requestPairing(phone.info, myFingerprint: phone.identity.fingerprint);
+    final result = await through.confirmPairing(
+      myId: phone.id,
+      myFingerprint: phone.identity.fingerprint,
+      target: target,
+      pin: (await requested).request.pin,
+    );
+    expect(result.device.id, pc.id);
+    // 127.0.0.1 would lead the PC back to itself, not to the phone.
+    expect((await paired).device.lastAddress, isNull);
+  });
+
   test('info works without pairing', () async {
     final info = await pc.anonymous().info();
     expect(info.id, pc.id);

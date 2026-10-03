@@ -10,6 +10,7 @@ import UIKit
   private let sounds = Sounds()
   private let offers = OfferNotifier()
   private var ble: SidekickBLE?
+  private var p2p: SidekickP2P?
 
   override func application(
     _ application: UIApplication,
@@ -88,6 +89,7 @@ import UIKit
     }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SidekickBLE") {
       ble = SidekickBLE.register(messenger: registrar.messenger())
+      p2p = SidekickP2P.register(messenger: registrar.messenger())
     }
   }
 }

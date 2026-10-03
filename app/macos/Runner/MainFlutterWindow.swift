@@ -7,6 +7,7 @@ import FlutterMacOS
 class MainFlutterWindow: NSWindow {
   private let native = SidekickNative()
   private var ble: SidekickBLE?
+  private var p2p: SidekickP2P?
 
   /// Closing hides the window to the menu bar (set from Dart once the
   /// menu-bar icon is up). Done here, not by window_manager: its window
@@ -47,6 +48,7 @@ class MainFlutterWindow: NSWindow {
     native.channel = channel
     channel.setMethodCallHandler { call, result in native.handle(call, result: result) }
     ble = SidekickBLE.register(messenger: flutterViewController.engine.binaryMessenger)
+    p2p = SidekickP2P.register(messenger: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

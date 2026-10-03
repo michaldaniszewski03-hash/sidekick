@@ -395,8 +395,13 @@ class SidekickServer {
 
   static TrustedPeer _peer(Request r) => r.context[_peerKey] as TrustedPeer;
 
-  static String? _remoteAddress(Request r) =>
-      (r.context['shelf.io.connection_info'] as HttpConnectionInfo?)?.remoteAddress.address;
+  /// Where a request came from. Not for connections from this device itself:
+  /// those were carried here by Apple's direct link (SidekickP2P.swift), and
+  /// 127.0.0.1 is no way back to the other device.
+  static String? _remoteAddress(Request r) {
+    final address = (r.context['shelf.io.connection_info'] as HttpConnectionInfo?)?.remoteAddress;
+    return address == null || address.isLoopback ? null : address.address;
+  }
 
   // -------------------------------------------------------------- pairing
 
