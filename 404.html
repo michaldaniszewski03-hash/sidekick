@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found · Sidekick</title>
+<!-- Served for any missing address, so every link here is absolute (/…).
+     System fonts only, like privacy.html: it loads nothing from anyone else. -->
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" sizes="64x64" href="/website/favicon.png">
+<link rel="apple-touch-icon" href="/website/apple-touch-icon.png">
+<style>
+:root {
+  --h: 290;
+  --primary: oklch(0.50 0.16 var(--h));
+  --on-primary: oklch(0.99 0.01 var(--h));
+  --primary-container: oklch(0.91 0.06 var(--h));
+  --on-primary-container: oklch(0.30 0.10 var(--h));
+  --tertiary: oklch(0.55 0.15 calc(var(--h) + 60));
+  --surface: oklch(0.985 0.006 var(--h));
+  --surface-container: oklch(0.950 0.012 var(--h));
+  --surface-container-high: oklch(0.925 0.016 var(--h));
+  --on-surface: oklch(0.22 0.012 var(--h));
+  --on-surface-variant: oklch(0.43 0.020 var(--h));
+  --outline-variant: oklch(0.85 0.015 var(--h));
+  --error: oklch(0.55 0.19 25);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --primary: oklch(0.80 0.10 var(--h));
+    --on-primary: oklch(0.25 0.09 var(--h));
+    --primary-container: oklch(0.38 0.12 var(--h));
+    --on-primary-container: oklch(0.92 0.05 var(--h));
+    --tertiary: oklch(0.80 0.10 calc(var(--h) + 60));
+    --surface: oklch(0.17 0.010 var(--h));
+    --surface-container: oklch(0.22 0.014 var(--h));
+    --surface-container-high: oklch(0.26 0.016 var(--h));
+    --on-surface: oklch(0.92 0.010 var(--h));
+    --on-surface-variant: oklch(0.78 0.020 var(--h));
+    --outline-variant: oklch(0.36 0.020 var(--h));
+    --error: oklch(0.75 0.14 25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --primary: oklch(0.80 0.10 var(--h));
+  --on-primary: oklch(0.25 0.09 var(--h));
+  --primary-container: oklch(0.38 0.12 var(--h));
+  --on-primary-container: oklch(0.92 0.05 var(--h));
+  --tertiary: oklch(0.80 0.10 calc(var(--h) + 60));
+  --surface: oklch(0.17 0.010 var(--h));
+  --surface-container: oklch(0.22 0.014 var(--h));
+  --surface-container-high: oklch(0.26 0.016 var(--h));
+  --on-surface: oklch(0.92 0.010 var(--h));
+  --on-surface-variant: oklch(0.78 0.020 var(--h));
+  --outline-variant: oklch(0.36 0.020 var(--h));
+  --error: oklch(0.75 0.14 25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+  background: var(--surface); color: var(--on-surface);
+  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--primary); text-underline-offset: 3px; }
+.wrap { width: 100%; max-width: 760px; margin: 0 auto; padding: 0 16px; }
+header { padding: 28px 0 8px; }
+.brand { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; font-weight: 700; font-size: 20px; }
+.brand img { width: 44px; height: 44px; border-radius: 12px; }
+main { flex: 1; display: grid; place-items: center; padding: 24px 0 56px; }
+.center { text-align: center; }
+
+/* The "sk" tile searching, like the app's radar. */
+.radar { position: relative; width: 168px; height: 168px; margin: 0 auto 8px; display: grid; place-items: center; }
+.radar img { position: relative; z-index: 1; width: 96px; height: 96px; border-radius: 26px;
+  box-shadow: 0 14px 40px color-mix(in oklab, var(--primary) 35%, transparent); }
+.radar i {
+  position: absolute; inset: 36px; border-radius: 50%; border: 2px solid var(--primary);
+  opacity: 0; animation: ping 2.4s cubic-bezier(.2, .6, .3, 1) infinite;
+}
+.radar i:nth-child(2) { animation-delay: .8s; }
+.radar i:nth-child(3) { animation-delay: 1.6s; }
+@keyframes ping { 0% { transform: scale(.7); opacity: .6; } 100% { transform: scale(1.9); opacity: 0; } }
+
+.code {
+  margin: 0; font-size: clamp(76px, 18vw, 132px); font-weight: 800; line-height: 1; letter-spacing: -.04em;
+  background: linear-gradient(120deg, var(--primary), var(--tertiary));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+h1 { font-size: clamp(26px, 5vw, 34px); line-height: 1.2; letter-spacing: -.015em; margin: 14px 0 8px; }
+.lede { color: var(--on-surface-variant); margin: 0 auto; max-width: 30em; }
+
+/* Like the app's Accept/Decline card, for a page that never arrived. */
+.card {
+  margin: 28px auto 0; max-width: 460px; padding: 18px; text-align: left;
+  border-radius: 28px; background: var(--surface-container-high);
+}
+.card .top { display: flex; align-items: center; gap: 12px; }
+.badge {
+  flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--primary), var(--tertiary)); color: var(--on-primary);
+}
+.badge svg { width: 24px; height: 24px; }
+.card b { display: block; font-size: 16px; line-height: 1.3; }
+.card small { display: block; font-size: 13px; color: var(--on-surface-variant); }
+.chip {
+  display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 14px;
+  border-radius: 16px; background: var(--surface); font-size: 14px;
+}
+.chip svg { flex: none; width: 20px; height: 20px; color: var(--on-surface-variant); }
+.chip code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.chip .no { flex: none; font-size: 12px; font-weight: 700; color: var(--error); }
+.actions { display: flex; gap: 10px; margin-top: 16px; }
+.btn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px;
+  padding: 0 20px; border-radius: 24px; font-weight: 650; font-size: 15px; text-decoration: none; white-space: nowrap;
+  transition: transform .15s ease, box-shadow .2s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.btn svg { width: 18px; height: 18px; }
+.filled { background: var(--primary); color: var(--on-primary);
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--primary) 30%, transparent); }
+.tonal { background: var(--primary-container); color: var(--on-primary-container); }
+footer { padding: 20px 0 32px; border-top: 1px solid var(--outline-variant); color: var(--on-surface-variant); font-size: 15px; }
+footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+@media (prefers-reduced-motion: reduce) {
+  .radar i { animation: none; opacity: .25; transform: scale(1.3); }
+  .btn { transition: none; }
+}
+@media (max-width: 420px) { .actions { flex-direction: column; } }
+</style>
+<script>
+// The light/dark choice and color from the download page, if any.
+try {
+  const t = localStorage.getItem('sidekick-theme');
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  const h = localStorage.getItem('sidekick-hue');
+  if (h && /^\d+$/.test(h)) document.documentElement.style.setProperty('--h', h);
+} catch (e) {}
+</script>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/"><img src="/website/apple-touch-icon.png" alt=""><span>Sidekick</span></a>
+  </div>
+</header>
+
+<main>
+  <div class="wrap center">
+    <div class="radar" aria-hidden="true">
+      <i></i><i></i><i></i>
+      <img src="/website/apple-touch-icon.png" alt="">
+    </div>
+    <p class="code" aria-hidden="true">404</p>
+    <h1>This page isn't on any of your devices.</h1>
+    <p class="lede">Sidekick looked everywhere it could. The link may be old, or the page was never sent.</p>
+
+    <div class="card" role="group" aria-label="Page not found">
+      <div class="top">
+        <span class="badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </span>
+        <span>
+          <b>Nothing to accept here</b>
+          <small>This address didn't lead anywhere</small>
+        </span>
+      </div>
+      <div class="chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+        <code id="path">/</code>
+        <span class="no">Not found</span>
+      </div>
+      <div class="actions">
+        <a class="btn filled" href="/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>
+          Back to Sidekick
+        </a>
+        <a class="btn tonal" href="/#download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+          Download
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="/">Sidekick</a>
+    <a href="/privacy.html">Privacy</a>
+  </div>
+</footer>
+<script>
+// Shows the address that wasn't found (as text, never as HTML).
+let path = location.pathname;
+try { path = decodeURIComponent(path); } catch (e) {}
+document.getElementById('path').textContent = path || '/';
+</script>
+</body>
+</html>

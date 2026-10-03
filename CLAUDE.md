@@ -134,6 +134,9 @@ its biggest features and fixes, and bumps the website links (see
   receiving and an iPhone sending, made from the ad render frames
   (`tool/ad_frames_test.dart`), transparent so the page's colors show.
   There is no Media anywhere on the site (removed with the feature).
+- `404.html` (top of the repo): the not-found page, for any missing
+  address, so every link in it is absolute (`/…`). Same look and theme
+  choice as the site, system fonts only, like `privacy.html`.
 - Website sounds (`website/sounds/`, copies of the owner's MP3s): the
   request sound when the demo phone asks, accept / decline on its buttons,
   accept on a download; only after a click; the speaker button in the top
