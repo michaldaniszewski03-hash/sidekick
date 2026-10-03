@@ -1,0 +1,64 @@
+# Uploads the website to sk.dankor.digital (cyber_Folks) over FTPS whenever
+# its files change, the same files the owner used to upload with FileZilla.
+#
+# Needs four repository secrets (Settings -> Secrets and variables ->
+# Actions); until they exist, this skips without failing:
+#   FTP_SERVER    the FTP host, as in FileZilla
+#   FTP_USERNAME  the FTP user
+#   FTP_PASSWORD  its password
+#   FTP_DIR       the subdomain's folder on the server, ending in "/"
+#                 (the folder index.html is in, as FileZilla shows it)
+name: Website
+
+on:
+  push:
+    branches: [claude/sidekick-app-architecture-8ilytw]
+    paths: [index.html, privacy.html, 404.html, .htaccess, website/**, .github/workflows/website.yml]
+  workflow_dispatch:
+
+# One upload at a time; a newer one waits instead of cancelling a half-done upload.
+concurrency:
+  group: website
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the FTP secrets
+        id: check
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_DIR: ${{ secrets.FTP_DIR }}
+        run: |
+          if [ -z "$FTP_SERVER" ] || [ -z "$FTP_DIR" ]; then
+            echo "::notice::No FTP_SERVER / FTP_DIR secrets yet: not uploading."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ok == 'true'
+
+      # Only the website, never the app's source.
+      - name: Collect the site
+        if: steps.check.outputs.ok == 'true'
+        run: |
+          mkdir site
+          cp index.html privacy.html 404.html .htaccess site/
+          cp -r website site/
+
+      # Uploads only what changed since the last upload (it keeps a small
+      # .ftp-deploy-sync-state.json on the server) and never deletes files
+      # it didn't upload.
+      - name: Upload over FTPS
+        if: steps.check.outputs.ok == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./site/
+          server-dir: ${{ secrets.FTP_DIR }}

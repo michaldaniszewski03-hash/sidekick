@@ -9,7 +9,10 @@ download page (`index.html` at the top of the repo; its images live in
 `website/` and it links them as `/website/…`). The owner hosts it at
 https://sk.dankor.digital on cyber_Folks (LiteSpeed), uploading with
 FileZilla: `index.html`, `privacy.html`, `404.html`, `.htaccess` and
-`website/` go in the subdomain's root folder.
+`website/` go in the subdomain's root folder. `.github/workflows/website.yml`
+uploads exactly those over FTPS whenever they change on the branch, once
+the owner adds the secrets `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD` and
+`FTP_DIR` (it skips until then). Never put the FTP login anywhere else.
 
 **Every change must work on all four platforms.**
 
