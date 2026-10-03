@@ -3,6 +3,8 @@ package dev.sidekick.sidekick
 import android.Manifest
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -43,11 +45,24 @@ class MainActivity : FlutterActivity() {
 
     private var multicastLock: WifiManager.MulticastLock? = null
     private var hotspot: WifiManager.LocalOnlyHotspotReservation? = null
+    /** Tells Dart when something is copied (Settings → Share clipboard). */
+    private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+
     /** Another device's hotspot this phone joined (see joinHotspot). */
     private var joined: ConnectivityManager.NetworkCallback? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Its own channel: notifications.dart answers on sidekick/android.
+        val clipboardChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/clipboard")
+        clipboardChannel.setMethodCallHandler { call, result ->
+            if (call.method == "watch") {
+                watchClipboard(clipboardChannel, call.argument<Boolean>("on") == true)
+                result.success(null)
+            } else {
+                result.notImplemented()
+            }
+        }
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/android")
         channel = ch
         ch.setMethodCallHandler { call, result ->
@@ -179,6 +194,8 @@ class MainActivity : FlutterActivity() {
         hotspot?.close()
         hotspot = null
         leaveHotspot()
+        clipboardListener?.let { getSystemService(ClipboardManager::class.java).removePrimaryClipChangedListener(it) }
+        clipboardListener = null
         multicastLock?.release()
         multicastLock = null
         super.onDestroy()
@@ -249,6 +266,26 @@ class MainActivity : FlutterActivity() {
         } catch (e: IllegalStateException) {
             result.error("hotspot", "A hotspot is already open.", null)
         }
+    }
+
+    /**
+     * Calls Dart with `changed` when something is copied. Android only does
+     * that while Sidekick is on screen (and only lets it read the clipboard
+     * then). Content marked sensitive (passwords, Android 13+) says so, and
+     * is never shared.
+     */
+    private fun watchClipboard(channel: MethodChannel, on: Boolean) {
+        val clipboard = getSystemService(ClipboardManager::class.java)
+        clipboardListener?.let { clipboard.removePrimaryClipChangedListener(it) }
+        clipboardListener = null
+        if (!on) return
+        val listener = ClipboardManager.OnPrimaryClipChangedListener {
+            val extras = clipboard.primaryClipDescription?.extras
+            val sensitive = Build.VERSION.SDK_INT >= 33 && extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true
+            channel.invokeMethod("changed", mapOf("sensitive" to sensitive))
+        }
+        clipboard.addPrimaryClipChangedListener(listener)
+        clipboardListener = listener
     }
 
     /**

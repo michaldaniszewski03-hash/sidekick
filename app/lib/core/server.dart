@@ -48,6 +48,13 @@ class Paired extends ServerEvent {
   final PairedDevice device;
 }
 
+/// A paired device copied [text]: it goes into this device's clipboard.
+class ClipboardReceived extends ServerEvent {
+  ClipboardReceived(this.from, this.text);
+  final TrustedPeer from;
+  final String text;
+}
+
 /// A paired device pinged this one: play a loud sound, to find it.
 class Pinged extends ServerEvent {
   Pinged(this.from);
@@ -208,7 +215,9 @@ class SidekickServer {
     DirectLink? link,
     Future<bool> Function()? inputReady,
     bool Function()? askBeforeReceiving,
+    bool Function()? shareClipboard,
   }) : askBeforeReceiving = askBeforeReceiving ?? (() => true),
+       shareClipboard = shareClipboard ?? (() => true),
        inputReady = inputReady ?? (() async => input.supported),
        permissions = permissions ?? (() => const Permissions()),
        link = link ?? NoDirectLink();
@@ -233,6 +242,12 @@ class SidekickServer {
 
   /// Whether files sent here wait for the user to accept them.
   final bool Function() askBeforeReceiving;
+
+  /// Settings → Share clipboard: what paired devices copy lands here.
+  final bool Function() shareClipboard;
+
+  /// The most text a clipboard may carry (Bluetooth can take it too).
+  static const maxClipboard = 256 * 1024;
 
   /// How long an offer waits for an answer.
   static const offerTimeout = Duration(seconds: 60);
@@ -350,6 +365,7 @@ class SidekickServer {
       ..post('/v1/pair/confirm', _pairConfirm)
       ..post('/v1/unpair', _authed(_unpair))
       ..post('/v1/ping', _authed(_ping))
+      ..post('/v1/clipboard', _authed(_clipboard))
       ..get('/v1/fs/roots', _authed(_roots, (p) => p.files))
       ..get('/v1/fs/list', _authed(_list, (p) => p.files))
       ..get('/v1/fs/download', _authed(_download, (p) => p.files))
@@ -570,6 +586,15 @@ class SidekickServer {
     final peer = _peer(r);
     trust.remove(peer.id);
     _events.add(Unpaired(peer.id));
+    return _json({'ok': true});
+  }
+
+  Future<Response> _clipboard(Request r) async {
+    if (!shareClipboard()) return _error(403, 'Clipboard sharing is turned off on ${self().name}');
+    final text = (await _body(r))['text'];
+    if (text is! String || text.isEmpty) return _error(400, 'No text');
+    if (text.length > maxClipboard) return _error(413, 'Too much text for the clipboard');
+    _events.add(ClipboardReceived(_peer(r), text));
     return _json({'ok': true});
   }
 

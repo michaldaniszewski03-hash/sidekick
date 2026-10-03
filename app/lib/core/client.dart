@@ -329,6 +329,9 @@ class PeerClient {
 
   Future<void> unpair() => _postJson('/v1/unpair', const {});
 
+  /// Puts [text] in the device's clipboard.
+  Future<void> sendClipboard(String text) => _postJson('/v1/clipboard', {'text': text});
+
   /// Makes the device play a loud sound (the Ping button).
   Future<void> ping() => _postJson('/v1/ping', const {});
 

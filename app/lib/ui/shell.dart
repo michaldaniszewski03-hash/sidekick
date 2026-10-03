@@ -12,6 +12,7 @@ import '../platform/notifications.dart';
 import '../platform/sound.dart';
 import 'devices_page.dart';
 import 'direct_wifi.dart';
+import 'ping.dart';
 import 'files_page.dart';
 import 'qr_pairing.dart';
 import 'remote_page.dart';
@@ -49,6 +50,10 @@ class _ShellState extends State<Shell> {
       state.notices.listen(_showNotice),
       state.transferOffers.listen(_showOffer),
       state.sends.listen(_showSend),
+      // Another device pinged this one: loud, and who.
+      state.pings.listen((from) {
+        if (mounted) unawaited(showPinged(context, from));
+      }),
       // iPhone: a network to join by hand for a direct link.
       state.manualJoins.listen((join) {
         if (mounted) unawaited(showManualJoin(context, join));

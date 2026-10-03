@@ -149,6 +149,22 @@ void main() {
     expect((await paired).device.lastAddress, isNull);
   });
 
+  test('clipboard and ping: only from paired devices', () async {
+    final client = await pair();
+    final copied = pc.server.events.only<ClipboardReceived>().first;
+    await client.sendClipboard('https://sk.dankor.digital');
+    expect((await copied).text, 'https://sk.dankor.digital');
+    expect((await copied).from.id, phone.id);
+
+    final pinged = pc.server.events.only<Pinged>().first;
+    await client.ping();
+    expect((await pinged).from.id, phone.id);
+
+    // Not paired: refused.
+    await expectLater(pc.anonymous().sendClipboard('x'), throwsA(isA<SidekickException>()));
+    await expectLater(pc.anonymous().ping(), throwsA(isA<SidekickException>()));
+  });
+
   test('info works without pairing', () async {
     final info = await pc.anonymous().info();
     expect(info.id, pc.id);

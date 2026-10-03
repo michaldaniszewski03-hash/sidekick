@@ -276,6 +276,24 @@ its biggest features and fixes, and bumps the website links (see
   certificate fingerprint, and falls back to Bluetooth. Camera: iOS
   `NSCameraUsageDescription`; Android's permission comes from the plugin.
   The Mac has no camera permission (it never scans).
+- **Shared clipboard** (`platform/clipboard.dart` `ClipboardWatcher`,
+  `/v1/clipboard`, Settings → Share clipboard, on by default; text only, up
+  to 256 KB): what's copied here goes to every paired device in reach (same
+  network, Apple's link, or Bluetooth where allowed; never opens a network
+  for it), and what they send lands in this clipboard ("Copied from …").
+  Windows polls `GetClipboardSequenceNumber` (FFI), the Mac
+  `NSPasteboard.changeCount` (`clipboardState`), Android listens
+  (`sidekick/clipboard`, only while on screen: Android's rule). The iPhone
+  never reads by itself (iOS asks "Allow Paste?"): the card's Clipboard
+  button sends it (works on every platform). Never shared: Windows
+  `ExcludeClipboardContentFromMonitorProcessing` / `Clipboard Viewer
+  Ignore`, Mac `ConcealedType` / `TransientType`, Android 13
+  `EXTRA_IS_SENSITIVE`. `_lastClip` stops echoes.
+- **Ping** (`/v1/ping`, the card's Ping button): the other device plays
+  `ping.wav` three times (`tool/make_ping.py`; Android on the alarm volume,
+  heard on silent; whatever Settings → Sound says) and shows "Ping from …"
+  with Stop (`ui/ping.dart`); in the tray the window opens, a phone in the
+  background gets a notification.
 - Devices announce their release (`DeviceInfo.app`, "2.2.0"); a paired card
   shows "Update Sidekick on it" when the other device runs an older one.
 - **iPhones can't be controlled** (Apple allows no app to): Remote on an
@@ -309,6 +327,16 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.9.0
+- **Shared clipboard on every device:** copy on one, paste on the other.
+  Windows, Mac and Android send what you copy by themselves (Android while
+  Sidekick is open); on an iPhone tap Clipboard on the device card. What
+  arrives goes straight into the clipboard. Passwords from password
+  managers are never shared. Settings → Share clipboard turns it off.
+- **Ping:** a Ping button on each device card makes the other device play
+  a loud sound (heard even on silent on Android) and say who pinged, to
+  find it or get someone's attention.
 
 ### 2.8.0
 - **Direct Wi-Fi between any two devices, no router needed:** Android ↔

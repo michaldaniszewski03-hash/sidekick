@@ -99,6 +99,17 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: state.askBeforeReceiving,
                         onChanged: state.setAskBeforeReceiving,
                       ),
+                      SwitchListTile(
+                        secondary: const IconTile(Icons.content_paste_rounded, tone: TileTone.secondary),
+                        title: const Text('Share clipboard'),
+                        subtitle: Text(
+                          hostIsIOS
+                              ? 'Receive what your devices copy; send yours with Clipboard'
+                              : 'Copy on one device, paste on the other',
+                        ),
+                        value: state.shareClipboard,
+                        onChanged: state.setShareClipboard,
+                      ),
                       // One switch for every sound Sidekick makes.
                       SwitchListTile(
                         secondary: IconTile(state.sound ? Icons.volume_up_rounded : Icons.volume_off_rounded),

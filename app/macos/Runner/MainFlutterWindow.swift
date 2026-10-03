@@ -121,6 +121,13 @@ final class SidekickNative {
       (window as? MainFlutterWindow)?.keepInMenuBar =
         (call.arguments as? [String: Any])?["on"] as? Bool ?? false
       result(nil)
+    case "clipboardState":
+      // Polled to notice copies (Settings → Share clipboard). Password
+      // managers mark theirs concealed or transient: never shared.
+      let pasteboard = NSPasteboard.general
+      let types = pasteboard.types?.map(\.rawValue) ?? []
+      let concealed = types.contains("org.nspasteboard.ConcealedType") || types.contains("org.nspasteboard.TransientType")
+      result(["count": pasteboard.changeCount, "concealed": concealed])
     case "hideToMenuBar":
       (window as? MainFlutterWindow)?.hideToMenuBar()
       result(nil)

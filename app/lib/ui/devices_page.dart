@@ -566,39 +566,63 @@ class _PairedCardState extends State<_PairedCard> {
                             label: const Text('Pair again'),
                           ),
                         )
-                      : Row(
+                      : Column(
                           children: [
-                            Expanded(
-                              // Out of reach with Bluetooth off: offer to find it nearby.
-                              child: !online && AppState.bluetoothSupported && !state.bluetoothOn
-                                  ? FilledButton.tonalIcon(
-                                      onPressed: () => askToTurnOnBluetooth(context, state, device.name),
-                                      icon: const Icon(Icons.bluetooth_searching_rounded, size: 18),
-                                      label: const Text('Find nearby'),
-                                    )
-                                  : FilledButton.icon(
-                                      onPressed: online ? _pickAndSend : null,
-                                      icon: const Icon(Icons.send_rounded, size: 18),
-                                      label: const Text('Send files'),
-                                    ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  // Out of reach with Bluetooth off: offer to find it nearby.
+                                  child: !online && AppState.bluetoothSupported && !state.bluetoothOn
+                                      ? FilledButton.tonalIcon(
+                                          onPressed: () => askToTurnOnBluetooth(context, state, device.name),
+                                          icon: const Icon(Icons.bluetooth_searching_rounded, size: 18),
+                                          label: const Text('Find nearby'),
+                                        )
+                                      : FilledButton.icon(
+                                          onPressed: online ? _pickAndSend : null,
+                                          icon: const Icon(Icons.send_rounded, size: 18),
+                                          label: const Text('Send files'),
+                                        ),
+                                ),
+                                if (caps?.files ?? true) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton.filledTonal(
+                                    tooltip: 'Browse files',
+                                    onPressed: () => _open(1),
+                                    icon: const Icon(Icons.folder_open_outlined),
+                                  ),
+                                ],
+                                // An iPhone can't be controlled (Apple doesn't allow it).
+                                if ((caps?.input ?? true) && device.platform != DevicePlatform.ios) ...[
+                                  const SizedBox(width: 4),
+                                  IconButton.filledTonal(
+                                    tooltip: 'Remote control',
+                                    onPressed: () => _open(2),
+                                    icon: const Icon(Icons.mouse_outlined),
+                                  ),
+                                ],
+                              ],
                             ),
-                            if (caps?.files ?? true) ...[
-                              const SizedBox(width: 8),
-                              IconButton.filledTonal(
-                                tooltip: 'Browse files',
-                                onPressed: () => _open(1),
-                                icon: const Icon(Icons.folder_open_outlined),
-                              ),
-                            ],
-                            // An iPhone can't be controlled (Apple doesn't allow it).
-                            if ((caps?.input ?? true) && device.platform != DevicePlatform.ios) ...[
-                              const SizedBox(width: 4),
-                              IconButton.filledTonal(
-                                tooltip: 'Remote control',
-                                onPressed: () => _open(2),
-                                icon: const Icon(Icons.mouse_outlined),
-                              ),
-                            ],
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: online ? () => state.sendClipboard(device) : null,
+                                    icon: const Icon(Icons.content_paste_go_rounded, size: 18),
+                                    label: const Text('Clipboard'),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: online ? () => state.ping(device) : null,
+                                    icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                                    label: const Text('Ping'),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                 ),

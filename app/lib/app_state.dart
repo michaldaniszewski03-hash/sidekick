@@ -21,6 +21,7 @@ import 'core/server.dart';
 import 'core/trust.dart';
 import 'platform/android.dart';
 import 'platform/apple_p2p.dart';
+import 'platform/clipboard.dart';
 import 'platform/device_name.dart';
 import 'platform/files.dart';
 import 'platform/gallery.dart';
@@ -285,6 +286,14 @@ class AppState extends ChangeNotifier {
   /// Ask before accepting files sent to this device (Settings → Files).
   bool askBeforeReceiving = true;
 
+  /// Settings → Share clipboard (on by default): what you copy here goes to
+  /// paired devices nearby, and what they copy lands here.
+  bool shareClipboard = true;
+  ClipboardWatcher? _clipboard;
+
+  /// The text last copied here or received, so it never goes round in a loop.
+  String? _lastClip;
+
   /// Sidekick's sounds, all of them (Settings → Sound): opening, a request
   /// arriving, and a request being accepted or declined.
   bool sound = true;
@@ -373,6 +382,7 @@ class AppState extends ChangeNotifier {
     pureBlack = _prefs.getBool('pureBlack') ?? false;
     keepRunning = _prefs.getBool('keepRunning') ?? true;
     askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
+    shareClipboard = _prefs.getBool('shareClipboard') ?? true;
     // One switch since 2.4.1; before, two (off if either was off).
     sound =
         _prefs.getBool('sound') ??
@@ -493,6 +503,7 @@ class AppState extends ChangeNotifier {
       link: directLink,
       inputReady: _inputReady,
       askBeforeReceiving: () => askBeforeReceiving,
+      shareClipboard: () => shareClipboard,
     );
     server.events.listen(_onServerEvent);
     await _startServer();
@@ -520,6 +531,7 @@ class AppState extends ChangeNotifier {
     // Off unless turned on (Settings → Bluetooth): Wi-Fi by default, and no
     // Bluetooth permission prompt at start.
     if (bluetoothOn) _startBluetooth();
+    if (shareClipboard) _watchClipboard();
 
     if (Platform.isMacOS) {
       // Coming back from System Settings doesn't always count as "resumed".
@@ -615,6 +627,7 @@ class AppState extends ChangeNotifier {
     }
     directLink.stopHosting();
     directLink.leave();
+    _stopClipboard();
     p2p.peers.removeListener(_onP2pPeers);
     p2p.stop();
     bluetooth?.stop();
@@ -1500,6 +1513,8 @@ class AppState extends ChangeNotifier {
         _pairRequests.add(request);
       case InviteScanned(:final device):
         _inviteScans.add(device);
+      case ClipboardReceived(:final from, :final text):
+        unawaited(_receivedClipboard(from, text));
       case Pinged(:final from):
         _pings.add(from);
       case JoinNetworkByHand(:final credentials):
@@ -1772,6 +1787,79 @@ class AppState extends ChangeNotifier {
     welcomed = true;
     _prefs.setBool('welcomed', true);
     notifyListeners();
+  }
+
+  void setShareClipboard(bool value) {
+    shareClipboard = value;
+    _prefs.setBool('shareClipboard', value);
+    value ? _watchClipboard() : _stopClipboard();
+    notifyListeners();
+  }
+
+  void _watchClipboard() {
+    if (!ClipboardWatcher.automatic || _clipboard != null) return;
+    _clipboard = ClipboardWatcher(_copiedHere)..start();
+  }
+
+  void _stopClipboard() {
+    _clipboard?.stop();
+    _clipboard = null;
+  }
+
+  /// Something was copied here: off it goes to the paired devices in reach
+  /// (on the same network, Apple's direct link, or Bluetooth where allowed;
+  /// never worth opening a network for).
+  void _copiedHere(String text) {
+    if (!shareClipboard || text == _lastClip || text.length > SidekickServer.maxClipboard) return;
+    _lastClip = text;
+    for (final d in _paired.values) {
+      if (reachableViaWifi(d.id) || viaBluetooth(d.id)) {
+        unawaited(clientFor(d).sendClipboard(text).catchError((Object e) => debugPrint('Sidekick: clipboard: $e')));
+      }
+    }
+  }
+
+  /// The Send clipboard button: what's in this device's clipboard goes to
+  /// [d]. The iPhone's way (it never reads the clipboard by itself: iOS asks
+  /// "Allow Paste?" each time, unless allowed in Settings → Sidekick).
+  Future<void> sendClipboard(PairedDevice d) async {
+    final String? text;
+    try {
+      text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    } catch (_) {
+      _notices.add(Notice("Couldn't read the clipboard."));
+      return;
+    }
+    if (text == null || text.trim().isEmpty) {
+      _notices.add(Notice('Nothing to send: copy some text first.'));
+      return;
+    }
+    if (text.length > SidekickServer.maxClipboard) {
+      _notices.add(Notice('Too much text for the clipboard. Send it as a file instead.'));
+      return;
+    }
+    try {
+      await (await _clientForTransfer(d, 0)).sendClipboard(text);
+      _lastClip = text;
+      _notices.add(Notice('Clipboard sent to ${d.name}'));
+    } catch (e) {
+      _noteFailure(d, e);
+      _notices.add(Notice("Couldn't send the clipboard to ${d.name}: ${_withUpdateHint(d, e)}"));
+    }
+  }
+
+  Future<void> _receivedClipboard(TrustedPeer from, String text) async {
+    if (!shareClipboard) return;
+    _lastClip = text;
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+    } catch (e) {
+      debugPrint('Sidekick: setting the clipboard: $e');
+      return;
+    }
+    final line = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final preview = line.length > 60 ? '${line.substring(0, 57)}…' : line;
+    _notices.add(Notice('Copied from ${from.name}: $preview'));
   }
 
   void setAskBeforeReceiving(bool value) {
