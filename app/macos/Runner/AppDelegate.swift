@@ -3,8 +3,10 @@ import FlutterMacOS
 
 @main
 class AppDelegate: FlutterAppDelegate {
+  // With the menu-bar icon up, closing the window never quits Sidekick:
+  // only Quit Sidekick there (or Command-Q) does.
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    return true
+    return !sender.windows.contains { ($0 as? MainFlutterWindow)?.keepInMenuBar == true }
   }
 
   // Closed to the menu bar, a click on the Dock icon brings the window back.

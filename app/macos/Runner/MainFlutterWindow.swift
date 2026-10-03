@@ -9,18 +9,30 @@ class MainFlutterWindow: NSWindow {
   private var ble: SidekickBLE?
   private var p2p: SidekickP2P?
 
-  /// Closing hides the window to the menu bar (set from Dart once the
-  /// menu-bar icon is up). Done here, not by window_manager: its window
-  /// delegate never got the close on the Mac, so the red button quit.
+  /// Closing hides the window to the menu bar (set from Dart at start);
+  /// only Quit Sidekick (or Command-Q) quits. Caught
+  /// at every step, since a close reaches the window more than one way: here
+  /// (performClose and close), window_manager's delegate (Dart then calls
+  /// hideToMenuBar), and AppDelegate never quits after the last window.
   var keepInMenuBar = false
   private var inMenuBar = false
+
+  /// Hidden, still running and receiving, still in the Dock.
+  func hideToMenuBar() {
+    inMenuBar = true
+    orderOut(nil)
+    native.channel?.invokeMethod("closedToMenuBar", arguments: nil)
+  }
 
   // The red button and Command-W.
   override func performClose(_ sender: Any?) {
     guard keepInMenuBar else { return super.performClose(sender) }
-    inMenuBar = true
-    orderOut(nil)
-    native.channel?.invokeMethod("closedToMenuBar", arguments: nil)
+    hideToMenuBar()
+  }
+
+  override func close() {
+    guard keepInMenuBar else { return super.close() }
+    hideToMenuBar()
   }
 
   // Back on screen (the menu bar's Open Sidekick, or a click on the Dock).
@@ -108,6 +120,9 @@ final class SidekickNative {
       // of quitting (Sidekick keeps running, and stays in the Dock).
       (window as? MainFlutterWindow)?.keepInMenuBar =
         (call.arguments as? [String: Any])?["on"] as? Bool ?? false
+      result(nil)
+    case "hideToMenuBar":
+      (window as? MainFlutterWindow)?.hideToMenuBar()
       result(nil)
     case "showPopup":
       // In front of everything, without activating Sidekick: it fades in,

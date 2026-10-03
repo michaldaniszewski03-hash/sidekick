@@ -48,11 +48,29 @@ class DesktopWindow with WindowListener, TrayListener {
 
   Future<void> init() async {
     await windowManager.ensureInitialized();
-    // Windows: window_manager catches the close button. The Mac does it in
-    // MainFlutterWindow.performClose: the plugin never got the close there,
-    // and the red button quit Sidekick.
-    if (Platform.isWindows) await windowManager.setPreventClose(true);
+    // The close button hides the window instead (onWindowClose).
+    await windowManager.setPreventClose(true);
     windowManager.addListener(this);
+    // The Mac also catches the red button itself (MainFlutterWindow) and
+    // never quits after the last window: 2.6.6 and 2.7.0 still quit on it.
+    // Set first, needing no menu-bar icon: Sidekick stays in the Dock, and
+    // a click there always brings the window back.
+    if (Platform.isMacOS) {
+      _mac.setMethodCallHandler((call) async {
+        switch (call.method) {
+          case 'closedToMenuBar':
+            _hidden = true;
+          case 'openedFromMenuBar':
+            if (popup.value == null) _hidden = false;
+        }
+        return null;
+      });
+      try {
+        await _mac.invokeMethod('setKeepInMenuBar', {'on': true});
+      } catch (e) {
+        debugPrint('Sidekick: keep in menu bar: $e');
+      }
+    }
     try {
       await trayManager.setIcon(
         Platform.isWindows ? 'assets/tray/tray.ico' : 'assets/tray/tray_mac.png',
@@ -70,22 +88,10 @@ class DesktopWindow with WindowListener, TrayListener {
       );
       trayManager.addListener(this);
     } catch (e) {
-      // No tray: closing the window quits, as before.
+      // No tray icon. Windows has no other way back: closing quits, as
+      // before. (The Mac still has its Dock icon.)
       debugPrint('Sidekick: no tray icon: $e');
       if (Platform.isWindows) await windowManager.setPreventClose(false);
-      return;
-    }
-    if (Platform.isMacOS) {
-      _mac.setMethodCallHandler((call) async {
-        switch (call.method) {
-          case 'closedToMenuBar':
-            _hidden = true;
-          case 'openedFromMenuBar':
-            if (popup.value == null) _hidden = false;
-        }
-        return null;
-      });
-      await _mac.invokeMethod('setKeepInMenuBar', {'on': true});
     }
   }
 
@@ -186,13 +192,13 @@ class DesktopWindow with WindowListener, TrayListener {
     exit(0);
   }
 
-  // Closing the window hides it; Quit is in the tray menu. (Windows: the
-  // Mac reports it as closedToMenuBar.)
+  // Closing the window hides it; Quit is in the tray menu. (On the Mac,
+  // when MainFlutterWindow didn't catch it first.)
   @override
   void onWindowClose() {
-    if (!Platform.isWindows || popup.value != null) return;
+    if (popup.value != null) return;
     _hidden = true;
-    unawaited(windowManager.hide());
+    unawaited(Platform.isMacOS ? _mac.invokeMethod('hideToMenuBar') : windowManager.hide());
   }
 
   // Shown some other way (on a Mac, clicking the Dock icon).

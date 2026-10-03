@@ -88,10 +88,14 @@ its biggest features and fixes, and bumps the website links (see
   replacements.
 - `platform/desktop_window.dart` (Windows, Mac; `window_manager`,
   `tray_manager` 0.5.x: 0.6+ is a native-library rewrite): closing the
-  window hides it to the tray / menu bar (Open, Quit). On the Mac
-  `MainFlutterWindow.performClose` does it (window_manager never got the
-  red button there, and Sidekick quit); Sidekick stays in the Dock with its
-  dot (the owner's call). The pop-up is shown with `orderFrontRegardless`
+  window hides it to the tray / menu bar (Open, Quit). On the Mac the
+  close is caught at every step, because 2.6.6 and 2.7.0 still quit on the
+  red button: `MainFlutterWindow` (`performClose` and `close` →
+  `hideToMenuBar`), window_manager's prevent-close (`onWindowClose` →
+  `hideToMenuBar`), and `AppDelegate` never quits after the last window
+  while `keepInMenuBar` is on. It's set at start, before the tray icon (the
+  Dock icon always brings the window back). Only Quit Sidekick or ⌘Q quits.
+  Sidekick stays in the Dock with its dot (the owner's call). The pop-up is shown with `orderFrontRegardless`
   (no focus taken), the window's minimum size lifted while it's up. A
   request then shows [CornerPopup] instead of the app (main.dart `_withCornerPopup`),
   the window put back afterwards. While hidden, animations are paused.
@@ -282,6 +286,12 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.7.1
+- **Fixed: the Mac's red close button quit Sidekick** (2.6.6 and 2.7.0).
+  Now it only hides the window: Sidekick keeps running in the menu bar and
+  the Dock, still receiving (requests pop up in the corner), until Quit
+  Sidekick in the menu bar (or ⌘Q).
 
 ### 2.7.0
 - **Direct Wi-Fi between iPhones and Macs, no router needed:** iPhone ↔
