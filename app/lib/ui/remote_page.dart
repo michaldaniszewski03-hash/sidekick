@@ -33,9 +33,85 @@ class RemotePage extends StatelessWidget {
       feature: 'remote control',
       icon: Icons.mouse_outlined,
       onGoToDevices: onGoToDevices,
-      builder: (context, device) => _Remote(key: ValueKey(device.id), state: state, device: device),
+      builder: (context, device) => device.platform == DevicePlatform.ios
+          ? _IphoneCantBeControlled(key: ValueKey(device.id), state: state, device: device)
+          : _Remote(key: ValueKey(device.id), state: state, device: device),
     ),
   );
+}
+
+/// Shown once, the first time this device meets an iPhone (paired with it,
+/// or picked it in Remote): Apple doesn't let any app control an iPhone.
+Future<void> showIphoneRemoteNotice(BuildContext context, AppState state, String name) async {
+  if (state.iphoneRemoteNoticeSeen) return;
+  state.markIphoneRemoteNoticeSeen();
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      icon: const Icon(Icons.phone_iphone_rounded),
+      title: const Text("iPhones can't be controlled"),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: Text(
+          "Apple doesn't let any app move the pointer or type on an iPhone, so $name can't be controlled "
+          'from here. Everything else works: send files both ways, and use the iPhone as a touchpad and '
+          'keyboard for your computer.',
+          textAlign: TextAlign.center,
+        ),
+      ),
+      actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Got it'))],
+    ),
+  );
+}
+
+/// Remote on an iPhone: no touchpad or keyboard (it can't be controlled),
+/// just why, and the picker to choose another device.
+class _IphoneCantBeControlled extends StatefulWidget {
+  const _IphoneCantBeControlled({super.key, required this.state, required this.device});
+  final AppState state;
+  final PairedDevice device;
+
+  @override
+  State<_IphoneCantBeControlled> createState() => _IphoneCantBeControlledState();
+}
+
+class _IphoneCantBeControlledState extends State<_IphoneCantBeControlled> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(showIphoneRemoteNotice(context, widget.state, widget.device.name));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return PageFrame(
+      title: 'Remote',
+      subtitle: widget.device.name,
+      actions: [DevicePicker(state: widget.state)],
+      child: Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(28)),
+        child: Column(
+          children: [
+            const GradientBadge(icon: Icons.phone_iphone_rounded, size: 64),
+            const SizedBox(height: 16),
+            Text("iPhones can't be controlled", style: text.titleLarge, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text(
+              "Apple doesn't let any app move the pointer or type on an iPhone. Use ${widget.device.name} as "
+              'the remote instead: open Sidekick on it and pick this device in its Remote tab.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 enum _Conn { connecting, connected, failed }

@@ -576,7 +576,8 @@ class _PairedCardState extends State<_PairedCard> {
                                 icon: const Icon(Icons.folder_open_outlined),
                               ),
                             ],
-                            if (caps?.input ?? true) ...[
+                            // An iPhone can't be controlled (Apple doesn't allow it).
+                            if ((caps?.input ?? true) && device.platform != DevicePlatform.ios) ...[
                               const SizedBox(width: 4),
                               IconButton.filledTonal(
                                 tooltip: 'Remote control',

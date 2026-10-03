@@ -262,6 +262,15 @@ class AppState extends ChangeNotifier {
   /// Sidekick's sounds, all of them (Settings → Sound): opening, a request
   /// arriving, and a request being accepted or declined.
   bool sound = true;
+
+  /// The one-time "iPhones can't be controlled" note has been shown.
+  bool iphoneRemoteNoticeSeen = false;
+
+  void markIphoneRemoteNoticeSeen() {
+    iphoneRemoteNoticeSeen = true;
+    _prefs.setBool('iphoneRemoteNotice', true);
+  }
+
   final _pairedEvents = StreamController<PairedDevice>.broadcast();
   final _inviteScans = StreamController<DeviceInfo>.broadcast();
   final _notices = StreamController<Notice>.broadcast();
@@ -316,6 +325,7 @@ class AppState extends ChangeNotifier {
         ((_prefs.getBool('startupSound') ?? true) && (_prefs.getBool('requestSound') ?? true));
     welcomed = _prefs.getBool('welcomed') ?? false;
     bluetoothOn = _prefs.getBool('bluetooth') ?? false;
+    iphoneRemoteNoticeSeen = _prefs.getBool('iphoneRemoteNotice') ?? false;
     permissions = Permissions(files: _prefs.getBool('allowFiles') ?? true, input: _prefs.getBool('allowInput') ?? true);
     _receiveDir = _prefs.getString('receiveDir');
     selectedId = _prefs.getString('selectedId');

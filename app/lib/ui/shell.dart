@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
+import '../core/models.dart';
 import '../core/server.dart';
 import '../core/trust.dart';
 import '../platform/desktop_window.dart';
@@ -49,6 +50,14 @@ class _ShellState extends State<Shell> {
       state.sends.listen(_showSend),
     ];
     _lifecycle = AppLifecycleListener(onResume: state.resumed);
+    // The first time this device pairs with an iPhone: it can't be controlled.
+    _subs.add(
+      state.pairedEvents.listen((d) {
+        if (d.platform == DevicePlatform.ios && !state.iphoneRemoteNoticeSeen && mounted) {
+          unawaited(showIphoneRemoteNotice(context, state, d.name));
+        }
+      }),
+    );
     // Phones: requests while Sidekick is in the background become notifications.
     unawaited(OfferNotifications.init());
   }

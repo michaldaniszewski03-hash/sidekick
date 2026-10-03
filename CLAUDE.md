@@ -223,6 +223,11 @@ its biggest features and fixes, and bumps the website links (see
   The Mac has no camera permission (it never scans).
 - Devices announce their release (`DeviceInfo.app`, "2.2.0"); a paired card
   shows "Update Sidekick on it" when the other device runs an older one.
+- **iPhones can't be controlled** (Apple allows no app to): Remote on an
+  iPhone shows only why (`_IphoneCantBeControlled`, no input session, no
+  touchpad), iPhone device cards have no Remote shortcut, and a one-time
+  pop-up says so the first time a device pairs with or picks an iPhone
+  (`showIphoneRemoteNotice`, pref `iphoneRemoteNotice`).
 - There is no Media feature (removed in 2.2.0: iPhones can't control other
   apps' playback). Don't bring it back.
   - iPhone and Mac use native CoreBluetooth, not the plugin: the plugin
@@ -249,6 +254,13 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.6.5
+- **Remote on an iPhone** no longer shows a touchpad that can't work: it
+  says iPhones can't be controlled (Apple doesn't allow it) and to use the
+  iPhone as the remote instead. A one-time pop-up explains it the first
+  time a device pairs with or picks an iPhone; iPhone cards have no Remote
+  shortcut.
 
 ### 2.6.4
 - **Sharper app icons:** the shadow and edge highlight behind "sk" are gone
