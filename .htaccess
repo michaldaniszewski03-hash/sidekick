@@ -8,3 +8,11 @@ ErrorDocument 404 /404.html
 # No folder listings (e.g. /website/): those show the 404 page too.
 Options -Indexes
 ErrorDocument 403 /404.html
+
+# Not in search results yet: every file (pages, images, sounds) tells search
+# engines not to list it. robots.txt lets the big ones read this, and keeps
+# every other bot out. To be found on Google, remove this, robots.txt and
+# the robots tags in the pages.
+<IfModule mod_headers.c>
+  Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex"
+</IfModule>

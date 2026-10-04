@@ -8,8 +8,8 @@ One Flutter app for **Windows, macOS, Android and iOS** (`app/`), plus a
 download page (`index.html` at the top of the repo; its images live in
 `website/` and it links them as `/website/…`). The owner hosts it at
 https://sk.dankor.digital on cyber_Folks (LiteSpeed), uploading with
-FileZilla: `index.html`, `privacy.html`, `404.html`, `.htaccess` and
-`website/` go in the subdomain's root folder. `.github/workflows/website.yml`
+FileZilla: `index.html`, `privacy.html`, `404.html`, `.htaccess`,
+`robots.txt` and `website/` go in the subdomain's root folder. `.github/workflows/website.yml`
 uploads exactly those over FTPS whenever they change on the branch, once
 the owner adds the secrets `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD` and
 `FTP_DIR` (it skips until then). Never put the FTP login anywhere else.
@@ -159,6 +159,12 @@ its biggest features and fixes, and bumps the website links (see
   server show it for every wrong address, keeping the address and a real
   404 status (no redirect); folder listings are off and show it too. Same look and theme
   choice as the site, system fonts only, like `privacy.html`.
+- **The site stays out of search results** (the owner's call: not yet):
+  `noindex` in every page's `<meta name="robots">` and in the
+  `X-Robots-Tag` header `.htaccess` puts on every file; `robots.txt` lets
+  Google, Bing, DuckDuckGo, Apple and Yandex read the pages (they must, to
+  see the noindex) and keeps every other bot out. Remove all three to be
+  found.
 - Website sounds (`website/sounds/`, copies of the owner's MP3s): the
   request sound when the demo phone asks, accept / decline on its buttons,
   accept on a download; only after a click; the speaker button in the top

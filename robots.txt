@@ -1,0 +1,17 @@
+# Sidekick's website isn't meant to be found in search yet.
+#
+# The search engines below may read the pages, so they see "noindex" on every
+# one (in the pages and in the X-Robots-Tag header from .htaccess) and leave
+# them out of their results. A page they couldn't read could still show up
+# as a bare link if someone linked to it.
+User-agent: Googlebot
+User-agent: Googlebot-Image
+User-agent: Bingbot
+User-agent: DuckDuckBot
+User-agent: Applebot
+User-agent: YandexBot
+Allow: /
+
+# Every other bot (AI crawlers, scrapers, SEO tools): keep out.
+User-agent: *
+Disallow: /
