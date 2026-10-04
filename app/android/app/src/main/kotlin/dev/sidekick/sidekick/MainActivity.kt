@@ -56,11 +56,21 @@ class MainActivity : FlutterActivity() {
         // Its own channel: notifications.dart answers on sidekick/android.
         val clipboardChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/clipboard")
         clipboardChannel.setMethodCallHandler { call, result ->
-            if (call.method == "watch") {
-                watchClipboard(clipboardChannel, call.argument<Boolean>("on") == true)
-                result.success(null)
-            } else {
-                result.notImplemented()
+            when (call.method) {
+                "watch" -> {
+                    watchClipboard(clipboardChannel, call.argument<Boolean>("on") == true)
+                    result.success(null)
+                }
+                // When the clipboard last changed, without reading it (no
+                // "pasted from your clipboard" toast): checked on return to
+                // Sidekick, for copies made in other apps meanwhile.
+                "stamp" -> {
+                    val description = getSystemService(ClipboardManager::class.java).primaryClipDescription
+                    val sensitive = Build.VERSION.SDK_INT >= 33 &&
+                        description?.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true
+                    result.success(mapOf("stamp" to (description?.timestamp ?: 0L), "sensitive" to sensitive))
+                }
+                else -> result.notImplemented()
             }
         }
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/android")

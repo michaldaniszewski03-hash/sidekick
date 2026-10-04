@@ -3,8 +3,8 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:ffi/ffi.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 /// Notices what you copy on this device, to share it with paired devices
 /// (Settings → Share clipboard). Only text, and never what a password
@@ -16,24 +16,34 @@ import 'package:flutter/services.dart';
 /// * Mac: `NSPasteboard.changeCount` (`clipboardState` on `sidekick/macos`);
 ///   skips `org.nspasteboard.ConcealedType` / `TransientType`.
 /// * Android: the clipboard's change listener (`sidekick/clipboard`), which
-///   Android only calls while Sidekick is on screen; skips content marked
-///   sensitive (Android 13+).
-/// * iPhone: never by itself: reading the clipboard makes iOS ask "Allow
-///   Paste?". The Send clipboard button does it instead ([automatic] false).
+///   Android only calls while Sidekick is on screen, and on coming back to
+///   Sidekick the clipboard's timestamp (`stamp`, read without the "pasted
+///   from your clipboard" toast) for copies made meanwhile; skips content
+///   marked sensitive (Android 13+). Android lets no app read it in the
+///   background.
+/// * iPhone: `UIPasteboard.changeCount` (`clipboardState` on `sidekick/ios`,
+///   no prompt), checked every second while Sidekick is on screen; iOS lets
+///   no app read the clipboard in the background, and asks "Allow Paste?"
+///   for each read unless Settings → Sidekick → Paste from Other Apps is
+///   Allow.
 class ClipboardWatcher {
   ClipboardWatcher(this.onCopied);
 
   /// Called with the text just copied here.
   final void Function(String text) onCopied;
 
-  /// Shares what you copy by itself (everything but iPhone).
-  static bool get automatic => Platform.isWindows || Platform.isMacOS || Platform.isAndroid;
+  /// Shares what you copy by itself.
+  static bool get automatic => Platform.isWindows || Platform.isMacOS || Platform.isAndroid || Platform.isIOS;
 
   static const _mac = MethodChannel('sidekick/macos');
   static const _android = MethodChannel('sidekick/clipboard');
+  static const _ios = MethodChannel('sidekick/ios');
 
   Timer? _timer;
   int? _lastCount;
+  AppLifecycleListener? _lifecycle;
+
+  static bool get _onScreen => WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
 
   void start() {
     if (_timer != null) return;
@@ -51,14 +61,21 @@ class ClipboardWatcher {
         return null;
       });
       unawaited(_android.invokeMethod<void>('watch', {'on': true}).catchError((Object _) {}));
+      unawaited(_androidStamp().then((s) => _lastCount ??= s?.stamp));
+      _lifecycle = AppLifecycleListener(onResume: () => unawaited(_checkAndroid()));
       // A placeholder so stop() knows it's running.
       _timer = Timer(Duration.zero, () {});
+    } else if (Platform.isIOS) {
+      unawaited(_iosState().then((s) => _lastCount ??= s?.count));
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) => _checkIos());
     }
   }
 
   void stop() {
     _timer?.cancel();
     _timer = null;
+    _lifecycle?.dispose();
+    _lifecycle = null;
     if (Platform.isAndroid) {
       _android.setMethodCallHandler(null);
       unawaited(_android.invokeMethod<void>('watch', {'on': false}).catchError((Object _) {}));
@@ -78,6 +95,43 @@ class ClipboardWatcher {
     if (state == null || state.count == _lastCount) return;
     _lastCount = state.count;
     if (!state.concealed) await _read();
+  }
+
+  /// Copied in another app while Sidekick was in the background.
+  Future<void> _checkAndroid() async {
+    final s = await _androidStamp();
+    if (s == null || s.stamp == 0 || s.stamp == _lastCount) return;
+    _lastCount = s.stamp;
+    if (!s.sensitive) await _read();
+  }
+
+  static Future<({int stamp, bool sensitive})?> _androidStamp() async {
+    try {
+      final s = await _android.invokeMapMethod<String, Object?>('stamp');
+      if (s == null) return null;
+      return (stamp: (s['stamp'] as num?)?.toInt() ?? 0, sensitive: s['sensitive'] == true);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _checkIos() async {
+    // In the background iOS hands out nothing; on screen it's checked.
+    if (!_onScreen) return;
+    final s = await _iosState();
+    if (s == null || s.count == _lastCount) return;
+    _lastCount = s.count;
+    if (s.hasText) await _read();
+  }
+
+  static Future<({int count, bool hasText})?> _iosState() async {
+    try {
+      final s = await _ios.invokeMapMethod<String, Object?>('clipboardState');
+      if (s == null) return null;
+      return (count: (s['count'] as num?)?.toInt() ?? 0, hasText: s['hasText'] == true);
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<({int count, bool concealed})?> _macState() async {
@@ -120,4 +174,12 @@ abstract final class _Win {
   static int sequence() => _sequence();
 
   static bool concealed() => _secret.any((f) => f != 0 && _available(f) != 0);
+}
+
+/// iPhone: Sidekick's page in Settings, where Paste from Other Apps → Allow
+/// stops iOS asking "Allow Paste?" each time.
+Future<void> openIosAppSettings() async {
+  try {
+    await const MethodChannel('sidekick/ios').invokeMethod<void>('openSettings');
+  } catch (_) {}
 }

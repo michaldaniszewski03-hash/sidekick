@@ -10,6 +10,8 @@
     <!-- A small "Ready to receive" notification keeps Sidekick running in the
          background; file requests show as notifications with Accept/Decline. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Keeps Wi-Fi awake while Sidekick runs in the background (SidekickService). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

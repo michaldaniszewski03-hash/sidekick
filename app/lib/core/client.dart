@@ -117,16 +117,31 @@ class PeerClient {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     try {
-      final req = await _http.openUrl(method, _uri(path, query)).timeout(timeout);
-      if (token != null) req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      if (json != null) {
-        req.headers.contentType = ContentType.json;
-        req.write(jsonEncode(json));
+      // A connection kept from earlier can turn out dead (the other device
+      // slept, its server restarted, Wi-Fi blinked): one more try on a fresh
+      // one. Always for reads; for anything else only if the request never
+      // went out, so nothing happens twice.
+      for (var attempt = 0; ; attempt++) {
+        var sent = false;
+        try {
+          final req = await _http.openUrl(method, _uri(path, query)).timeout(timeout);
+          if (token != null) req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+          if (json != null) {
+            req.headers.contentType = ContentType.json;
+            req.write(jsonEncode(json));
+          }
+          sent = true;
+          final res = await req.close().timeout(timeout);
+          if (res.statusCode >= 400) throw await _failure(res);
+          _noteTls(res);
+          return res;
+        } on SocketException {
+          if (attempt > 0 || (sent && method != 'GET')) rethrow;
+        } on HttpException {
+          if (attempt > 0 || (sent && method != 'GET')) rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 300));
       }
-      final res = await req.close().timeout(timeout);
-      if (res.statusCode >= 400) throw await _failure(res);
-      _noteTls(res);
-      return res;
     } on HandshakeException {
       throw _tlsFailure();
     } on TlsException {

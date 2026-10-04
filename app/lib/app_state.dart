@@ -294,6 +294,23 @@ class AppState extends ChangeNotifier {
   /// The text last copied here or received, so it never goes round in a loop.
   String? _lastClip;
 
+  /// What was last copied here, still on its way to devices that were out
+  /// of reach (or failed) when it was copied: delivered when they're back,
+  /// for a few minutes ([_clipFor]).
+  String? _clipPending;
+  DateTime _clipAt = DateTime(0);
+  final Set<String> _clipDelivered = {};
+  final Set<String> _clipSending = {};
+  static const _clipFor = Duration(minutes: 3);
+
+  /// iPhone: the one-time tip on stopping "Allow Paste?" was shown.
+  bool pasteTipSeen = false;
+
+  void markPasteTipSeen() {
+    pasteTipSeen = true;
+    _prefs.setBool('iosPasteTip', true);
+  }
+
   /// Sidekick's sounds, all of them (Settings → Sound): opening, a request
   /// arriving, and a request being accepted or declined.
   bool sound = true;
@@ -399,6 +416,7 @@ class AppState extends ChangeNotifier {
     keepRunning = _prefs.getBool('keepRunning') ?? true;
     askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
     shareClipboard = _prefs.getBool('shareClipboard') ?? true;
+    pasteTipSeen = _prefs.getBool('iosPasteTip') ?? false;
     // One switch since 2.4.1; before, two (off if either was off).
     sound =
         _prefs.getBool('sound') ??
@@ -1084,8 +1102,10 @@ class AppState extends ChangeNotifier {
         ..info = info
         ..lastSeen = DateTime.now();
     }
+    final wasAway = !reachableViaWifi(info.id);
     _lastContact[info.id] = DateTime.now();
     final pairedDevice = _paired[info.id];
+    if (wasAway && pairedDevice != null) _deliverClip();
     if (pairedDevice != null &&
         (pairedDevice.lastAddress != info.address ||
             pairedDevice.lastPort != info.port ||
@@ -1176,6 +1196,7 @@ class AppState extends ChangeNotifier {
               .catchError((_) {}),
     ]);
     await _checkP2p();
+    _deliverClip();
     // Also refreshes online dots and drops stale nearby devices.
     notifyListeners();
   }
@@ -1831,14 +1852,43 @@ class AppState extends ChangeNotifier {
 
   /// Something was copied here: off it goes to the paired devices in reach
   /// (on the same network, Apple's direct link, or Bluetooth where allowed;
-  /// never worth opening a network for).
+  /// never worth opening a network for), and to the others when they're
+  /// back within a few minutes.
   void _copiedHere(String text) {
     if (!shareClipboard || text == _lastClip || text.length > SidekickServer.maxClipboard) return;
     _lastClip = text;
+    _clipPending = text;
+    _clipAt = DateTime.now();
+    _clipDelivered.clear();
+    _deliverClip();
+  }
+
+  /// Sends the pending clipboard to every paired device in reach that
+  /// doesn't have it yet. Called on a copy, when a device shows up, and
+  /// every few seconds (a failed send is tried again).
+  void _deliverClip() {
+    final text = _clipPending;
+    if (text == null || !shareClipboard) return;
+    if (DateTime.now().difference(_clipAt) > _clipFor) {
+      _clipPending = null;
+      return;
+    }
     for (final d in _paired.values) {
-      if (reachableViaWifi(d.id) || viaBluetooth(d.id)) {
-        unawaited(clientFor(d).sendClipboard(text).catchError((Object e) => debugPrint('Sidekick: clipboard: $e')));
-      }
+      if (_clipDelivered.contains(d.id) || _clipSending.contains(d.id)) continue;
+      if (!reachableViaWifi(d.id) && !viaBluetooth(d.id)) continue;
+      _clipSending.add(d.id);
+      unawaited(
+        clientFor(d)
+            .sendClipboard(text)
+            .then((_) => _clipDelivered.add(d.id))
+            .catchError((Object e) {
+              // Turned off there, or a release without it: don't keep trying.
+              if (e is SidekickException && (e.status == 403 || e.status == 404)) _clipDelivered.add(d.id);
+              debugPrint('Sidekick: clipboard to ${d.name}: $e');
+              return false;
+            })
+            .whenComplete(() => _clipSending.remove(d.id)),
+      );
     }
   }
 
@@ -1874,6 +1924,8 @@ class AppState extends ChangeNotifier {
   Future<void> _receivedClipboard(TrustedPeer from, String text) async {
     if (!shareClipboard) return;
     _lastClip = text;
+    // Newer than anything copied here that's still on its way.
+    _clipPending = null;
     try {
       await Clipboard.setData(ClipboardData(text: text));
     } catch (e) {

@@ -154,6 +154,36 @@ class OfferActionReceiver : BroadcastReceiver() {
 class SidekickService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * Keeps Wi-Fi fully awake while Sidekick runs in the background: with the
+     * screen off, Android lets Wi-Fi doze, and paired devices lose the phone
+     * (missed announcements, slow or dropped connections).
+     */
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+        // High performance, not low latency: the low-latency lock only works
+        // while the app is on screen, and this is for when it isn't.
+        @Suppress("DEPRECATION")
+        val mode = android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        wifiLock = wifi.createWifiLock(mode, "sidekick:connected").apply {
+            setReferenceCounted(false)
+            try {
+                acquire()
+            } catch (e: SecurityException) {
+                // No WAKE_LOCK permission: works, just less steadily.
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        wifiLock?.let { if (it.isHeld) it.release() }
+        wifiLock = null
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val n = Notifications.status(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

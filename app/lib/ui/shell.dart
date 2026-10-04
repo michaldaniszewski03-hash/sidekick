@@ -6,6 +6,7 @@ import '../app_state.dart';
 import '../core/models.dart';
 import '../core/server.dart';
 import '../core/trust.dart';
+import '../platform/clipboard.dart';
 import '../platform/desktop_window.dart';
 import '../platform/gallery.dart';
 import '../platform/live_activity.dart';
@@ -19,6 +20,7 @@ import 'qr_pairing.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
 import 'transfer_screens.dart';
+import 'widgets.dart';
 
 class Shell extends StatefulWidget {
   const Shell({super.key, required this.state});
@@ -71,6 +73,12 @@ class _ShellState extends State<Shell> {
     );
     // Phones: requests while Sidekick is in the background become notifications.
     unawaited(OfferNotifications.init());
+    // iPhone, once: how to stop iOS asking "Allow Paste?" for every copy.
+    if (hostIsIOS && state.shareClipboard && !state.pasteTipSeen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showPasteTip());
+      });
+    }
   }
 
   @override
@@ -83,6 +91,27 @@ class _ShellState extends State<Shell> {
   }
 
   void _go(int index) => setState(() => _index = index);
+
+  Future<void> _showPasteTip() async {
+    state.markPasteTipSeen();
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.content_paste_go_rounded),
+        title: const Text('Your clipboard, on every device'),
+        content: const Text(
+          'What you copy goes to your other devices by itself while Sidekick is open (iOS lets no app read the '
+          'clipboard in the background).\n\niOS asks "Allow Paste?" each time, unless you set Sidekick → '
+          'Paste from Other Apps → Allow in Settings.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Later')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Open Settings')),
+        ],
+      ),
+    );
+    if (open == true) await openIosAppSettings();
+  }
 
   void _showOffer(TransferOffer offer) {
     // iPhone: the progress on the Lock Screen and in the Dynamic Island.

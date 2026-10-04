@@ -55,10 +55,12 @@ them with a 6-digit code or a QR code. Paired devices can then:
   permission on the Mac and Android, which you grant yourself;
 - share your clipboard: text you copy goes to your paired devices nearby,
   and what they copy lands in yours (turn it off in Settings under "Share
-  clipboard"). Windows, Mac and Android send what you copy by themselves
-  (Android only while Sidekick is open); an iPhone only when you tap
-  Clipboard. What password managers mark as secret is never sent, and
-  Sidekick keeps no copy;
+  clipboard"). Every device sends what you copy by itself; Android and
+  iPhone only while Sidekick is open (they let no app read the clipboard in
+  the background), and an iPhone asks "Allow Paste?" unless you allow it
+  in Settings. A copy is delivered to a device that's out of reach when
+  it's back, for a few minutes. What password managers mark as secret is
+  never sent, and Sidekick keeps no copy;
 - ping your device: it rings until you tap Found It! on it (on Android at
   alarm volume, so you hear it on silent).
 You can unpair a device at any time.
@@ -88,6 +90,9 @@ PERMISSIONS, AND WHY
   location.
 - Accessibility (Mac and Android): only so a paired device can move the
   pointer and type, when you allow it.
+- Keep Wi-Fi awake (Android): while Sidekick runs in the background, so
+  your devices can still reach the phone with its screen off. It asks for
+  nothing and reads nothing.
 - Direct Wi-Fi: when two devices share no Wi-Fi, one opens a small
   private Wi-Fi network (an Android phone's hotspot, or a Windows PC's
   Wi-Fi Direct network) and the other joins it (Android and iPhone ask

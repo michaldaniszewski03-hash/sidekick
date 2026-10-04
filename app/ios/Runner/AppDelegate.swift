@@ -45,6 +45,16 @@ import UIKit
             sounds.play(path)
           }
           result(nil)
+        case "clipboardState":
+          // Noticing copies without reading them (reading asks "Allow
+          // Paste?" unless allowed in Settings → Sidekick).
+          result(["count": UIPasteboard.general.changeCount, "hasText": UIPasteboard.general.hasStrings])
+        case "openSettings":
+          // Sidekick's own page in Settings (Paste from Other Apps is there).
+          if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+          }
+          result(nil)
         case "loopSound":
           // The Ping ringtone, on repeat until "stopLoop" (Found It).
           if let path = (call.arguments as? [String: Any])?["path"] as? String {

@@ -289,9 +289,17 @@ its biggest features and fixes, and bumps the website links (see
   for it), and what they send lands in this clipboard ("Copied from …").
   Windows polls `GetClipboardSequenceNumber` (FFI), the Mac
   `NSPasteboard.changeCount` (`clipboardState`), Android listens
-  (`sidekick/clipboard`, only while on screen: Android's rule). The iPhone
-  never reads by itself (iOS asks "Allow Paste?"): the card's Clipboard
-  button sends it (works on every platform). Never shared: Windows
+  (`sidekick/clipboard`, only while on screen: Android's rule) and on
+  coming back checks the clip's timestamp (`stamp`, no toast), the iPhone
+  checks `UIPasteboard.changeCount` every second while on screen
+  (`clipboardState` on `sidekick/ios`; iOS hands out nothing in the
+  background, and asks "Allow Paste?" per read unless Settings → Sidekick →
+  Paste from Other Apps is Allow: a one-time tip and a Settings row open
+  that page, `openSettings`). Automatic everywhere (the owner's call: no
+  tapping); the card's Clipboard button still sends by hand. A copy
+  waits for devices out of reach (`_clipPending`, 3 minutes) and goes when
+  they're back (`_deliverClip` on `_onFound` and every presence check), so
+  failed sends retry too; 403/404 (off there, old release) stop it. Never shared: Windows
   `ExcludeClipboardContentFromMonitorProcessing` / `Clipboard Viewer
   Ignore`, Mac `ConcealedType` / `TransientType`, Android 13
   `EXTRA_IS_SENSITIVE`. `_lastClip` stops echoes.
@@ -320,6 +328,12 @@ its biggest features and fixes, and bumps the website links (see
   already being pinged" (`showAlreadyPinged`). In the tray the window
   opens; a phone in the background gets a notification. Plays whatever
   Settings → Sound says.
+- **Steady connections:** Android's `SidekickService` holds a high-perf
+  Wi-Fi lock (`WAKE_LOCK`) so Wi-Fi doesn't doze with the screen off; the
+  Mac holds a `latencyCritical` activity (`MainFlutterWindow.awake`) so App
+  Nap doesn't throttle it in the menu bar; `PeerClient._send` retries once
+  on a dead kept-alive connection (always for GET, otherwise only if the
+  request never went out).
 - Devices announce their release (`DeviceInfo.app`, "2.2.0"); a paired card
   shows "Update Sidekick on it" when the other device runs an older one.
 - **iPhones can't be controlled** (Apple allows no app to): Remote on an
@@ -353,6 +367,15 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.11.0
+- **The clipboard shares itself, on every device:** copy, and it's on your
+  other devices. iPhone too (while Sidekick is open: iOS allows no more);
+  a one-time tip shows how to stop iOS asking "Allow Paste?". A copy made
+  while a device is out of reach gets there when it's back.
+- **Steadier connections:** Android keeps Wi-Fi awake while Sidekick runs
+  in the background, the Mac no longer naps Sidekick in the menu bar, and
+  a request that hits a dropped connection is tried again by itself.
 
 ### 2.10.1
 - **Ping rings your ringtone until "Found It!":** the pinged device plays

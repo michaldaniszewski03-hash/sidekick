@@ -9,6 +9,13 @@ class MainFlutterWindow: NSWindow {
   private var ble: SidekickBLE?
   private var p2p: SidekickP2P?
 
+  /// Keeps App Nap away: hidden in the menu bar, macOS would otherwise slow
+  /// Sidekick's timers and network down, and paired devices would lose it
+  /// or wait seconds for an answer. The Mac still sleeps as usual.
+  private let awake = ProcessInfo.processInfo.beginActivity(
+    options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+    reason: "Sidekick stays reachable for your paired devices")
+
   /// Closing hides the window to the menu bar (set from Dart at start);
   /// only Quit Sidekick (or Command-Q) quits. Caught
   /// at every step, since a close reaches the window more than one way: here

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../app_state.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
+import '../platform/clipboard.dart';
 import 'permissions.dart';
 import 'theme_chooser.dart';
 import 'widgets.dart';
@@ -102,14 +103,22 @@ class _SettingsPageState extends State<SettingsPage> {
                       SwitchListTile(
                         secondary: const IconTile(Icons.content_paste_rounded, tone: TileTone.secondary),
                         title: const Text('Share clipboard'),
-                        subtitle: Text(
-                          hostIsIOS
-                              ? 'Receive what your devices copy; send yours with Clipboard'
-                              : 'Copy on one device, paste on the other',
-                        ),
+                        subtitle: const Text('Copy on one device, paste on the other'),
                         value: state.shareClipboard,
                         onChanged: state.setShareClipboard,
                       ),
+                      // iOS asks "Allow Paste?" for every read unless allowed.
+                      if (hostIsIOS && state.shareClipboard)
+                        ListTile(
+                          leading: const IconTile(Icons.content_paste_search_rounded, tone: TileTone.secondary),
+                          title: const Text('Stop "Allow Paste?" asking'),
+                          subtitle: const Text('Paste from Other Apps → Allow'),
+                          trailing: IconButton.filledTonal(
+                            tooltip: 'Open Settings',
+                            onPressed: openIosAppSettings,
+                            icon: const Icon(Icons.open_in_new_rounded),
+                          ),
+                        ),
                       // One switch for every sound Sidekick makes.
                       SwitchListTile(
                         secondary: IconTile(state.sound ? Icons.volume_up_rounded : Icons.volume_off_rounded),
