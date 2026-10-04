@@ -50,8 +50,12 @@ class Node {
       input: input,
       receiveDir: () async => p.join(home.path, 'Received'),
       permissions: () => permissions,
+      ringing: () => ringing,
     );
   }
+
+  /// A ping is ringing here (until Found It).
+  bool ringing = false;
 
   final String id;
   final String name;
@@ -159,6 +163,12 @@ void main() {
     final pinged = pc.server.events.only<Pinged>().first;
     await client.ping();
     expect((await pinged).from.id, phone.id);
+
+    // Still ringing (no Found It yet): another ping is refused.
+    pc.ringing = true;
+    await expectLater(client.ping(), throwsA(isA<SidekickException>().having((e) => e.status, 'status', 409)));
+    pc.ringing = false;
+    await client.ping();
 
     // Not paired: refused.
     await expectLater(pc.anonymous().sendClipboard('x'), throwsA(isA<SidekickException>()));

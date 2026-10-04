@@ -15,6 +15,10 @@ PlaySound and iPhone system sounds can't play MP3. Each sound is:
   newfilesendrequest.mp3  -> assets/sounds/request.wav  (Accept/Decline card appears)
   filerequest_accept.mp3  -> assets/sounds/accept.wav   (a request is accepted)
   filerequest_deny.mp3    -> assets/sounds/decline.wav  (a request is declined)
+  ping_ringtone.mp3       -> assets/sounds/ping.wav     (the Ping ringtone, looped
+                                                         until "Found It!": kept
+                                                         whole and as loud as it
+                                                         goes, peaks at -1 dBFS)
 """
 
 import wave
@@ -31,7 +35,11 @@ SOUNDS = {
     "newfilesendrequest.mp3": "request.wav",
     "filerequest_accept.mp3": "accept.wav",
     "filerequest_deny.mp3": "decline.wav",
+    "ping_ringtone.mp3": "ping.wav",
 }
+
+# Rings on repeat: not trimmed (its rhythm makes the loop), and loud.
+LOOPED = {"ping_ringtone.mp3"}
 TARGET_RMS_DB = -20.0  # loudness of the audible part
 PEAK_DB = -1.0
 
@@ -45,6 +53,11 @@ def prepare(src: Path, dst: Path) -> None:
         str(src), output_format=miniaudio.SampleFormat.FLOAT32, nchannels=2, sample_rate=RATE
     )
     audio = np.frombuffer(decoded.samples, dtype=np.float32).reshape(-1, 2).astype(np.float64)
+    if src.name in LOOPED:
+        gain = 10 ** (PEAK_DB / 20) / float(np.abs(audio).max())
+        write(dst, audio * gain)
+        print(f"{src.name:26} -> {dst.name:12} {len(audio) / RATE:.2f} s, looped, peak {PEAK_DB:.1f} dBFS")
+        return
 
     # Trim, relative to the sound's own peak: the lead-in silence (from the
     # first moment within 45 dB of the peak, less 5 ms) and the tail once it
@@ -70,16 +83,20 @@ def prepare(src: Path, dst: Path) -> None:
         gain *= 10 ** ((PEAK_DB - db(peak)) / 20)
     audio *= gain
 
+    write(dst, audio)
+    print(
+        f"{src.name:26} -> {dst.name:12} {len(audio) / RATE:.2f} s, "
+        f"rms {db(rms * gain):.1f} dBFS, peak {db(float(np.abs(audio).max())):.1f} dBFS"
+    )
+
+
+def write(dst: Path, audio: np.ndarray) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with wave.open(str(dst), "wb") as w:
         w.setnchannels(2)
         w.setsampwidth(2)
         w.setframerate(RATE)
         w.writeframes((np.clip(audio, -1, 1) * 32767).astype("<i2").tobytes())
-    print(
-        f"{src.name:26} -> {dst.name:12} {len(audio) / RATE:.2f} s, "
-        f"rms {db(rms * gain):.1f} dBFS, peak {db(float(np.abs(audio).max())):.1f} dBFS"
-    )
 
 
 def main() -> None:

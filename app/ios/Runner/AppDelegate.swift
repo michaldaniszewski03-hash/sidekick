@@ -45,6 +45,15 @@ import UIKit
             sounds.play(path)
           }
           result(nil)
+        case "loopSound":
+          // The Ping ringtone, on repeat until "stopLoop" (Found It).
+          if let path = (call.arguments as? [String: Any])?["path"] as? String {
+            sounds.loop(path)
+          }
+          result(nil)
+        case "stopLoop":
+          sounds.stopLoop()
+          result(nil)
         case "saveToGallery":
           // A received photo or video, moved into Photos.
           let args = call.arguments as? [String: Any]
@@ -137,6 +146,28 @@ final class Sounds {
     players.append(player)
     player.prepareToPlay()
     player.play()
+  }
+
+  /// The Ping ringtone: on repeat, at full volume, through the silent
+  /// switch (the playback category), until [stopLoop].
+  private var ringtone: AVAudioPlayer?
+
+  func loop(_ path: String) {
+    stopLoop()
+    let session = AVAudioSession.sharedInstance()
+    try? session.setCategory(.playback, options: [.mixWithOthers])
+    try? session.setActive(true)
+    guard let player = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path)) else { return }
+    player.numberOfLoops = -1
+    player.volume = 1
+    player.prepareToPlay()
+    player.play()
+    ringtone = player
+  }
+
+  func stopLoop() {
+    ringtone?.stop()
+    ringtone = nil
   }
 }
 

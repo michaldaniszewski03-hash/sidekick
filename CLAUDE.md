@@ -309,11 +309,17 @@ its biggest features and fixes, and bumps the website links (see
   `NSSupportsLiveActivities` is on in Info.plist. When adding objects to
   the .pbxproj by hand, use IDs nothing else has (2.7.0's first push reused
   the app icon's and Xcode called the project damaged).
-- **Ping** (`/v1/ping`, the card's Ping button): the other device plays
-  `ping.wav` three times (`tool/make_ping.py`; Android on the alarm volume,
-  heard on silent; whatever Settings → Sound says) and shows "Ping from …"
-  with Stop (`ui/ping.dart`); in the tray the window opens, a phone in the
-  background gets a notification.
+- **Ping** (`/v1/ping`, the card's Ping button): the other device rings
+  the owner's ringtone (`tool/sounds/ping_ringtone.mp3` → `ping.wav`, kept
+  whole and loud by `prepare_sounds.py`) **on repeat until Found It!** on
+  it (`ui/ping.dart`, `AppState.ringingFrom` / `foundIt`). Looping is native:
+  `loopSound` / `stopLoop` on the Mac, iPhone (playback category: through
+  the silent switch) and Android (alarm volume: heard on silent) channels,
+  PlaySound with `SND_LOOP` on Windows. One ping at a time: while it rings,
+  the server answers another with 409 and the sender shows "This device is
+  already being pinged" (`showAlreadyPinged`). In the tray the window
+  opens; a phone in the background gets a notification. Plays whatever
+  Settings → Sound says.
 - Devices announce their release (`DeviceInfo.app`, "2.2.0"); a paired card
   shows "Update Sidekick on it" when the other device runs an older one.
 - **iPhones can't be controlled** (Apple allows no app to): Remote on an
@@ -347,6 +353,13 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.10.1
+- **Ping rings your ringtone until "Found It!":** the pinged device plays
+  the owner's ringtone on repeat (loud; on Android heard even on silent)
+  until someone taps Found It! on it.
+- **Fixed: one press, one ping.** Pinging a device that's already ringing
+  says "This device is already being pinged" instead of ringing again.
 
 ### 2.10.0
 - **Live Activities on iPhone:** a transfer's progress on the Lock Screen

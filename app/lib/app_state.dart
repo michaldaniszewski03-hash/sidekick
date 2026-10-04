@@ -327,18 +327,34 @@ class AppState extends ChangeNotifier {
 
   final _pings = StreamController<TrustedPeer>.broadcast();
 
-  /// A paired device pinged this one (it should play a loud sound).
+  /// A paired device pinged this one: it rings until Found It ([foundIt]).
   Stream<TrustedPeer> get pings => _pings.stream;
 
-  /// The Ping button: makes [d] play a loud sound, to find it.
-  Future<void> ping(PairedDevice d) async {
+  /// Who's pinging this device while its ringtone plays; another ping is
+  /// refused until Found It.
+  TrustedPeer? ringingFrom;
+
+  /// Found It: the ringtone stops, and the device can be pinged again.
+  void foundIt() {
+    ringingFrom = null;
+    unawaited(stopPingRingtone());
+    notifyListeners();
+  }
+
+  /// The Ping button: [d] rings until someone taps Found It on it. False if
+  /// it's already ringing (from this device or another): one ping at a time.
+  Future<bool> ping(PairedDevice d) async {
     try {
       await (await _clientForTransfer(d, 0)).ping();
-      _notices.add(Notice('Pinged ${d.name}'));
-    } catch (e) {
+      _notices.add(Notice('Pinging ${d.name}'));
+    } on SidekickException catch (e) {
+      if (e.status == 409) return false;
       _noteFailure(d, e);
       _notices.add(Notice("Couldn't ping ${d.name}: ${_withUpdateHint(d, e)}"));
+    } catch (e) {
+      _notices.add(Notice("Couldn't ping ${d.name}: ${_withUpdateHint(d, e)}"));
     }
+    return true;
   }
 
   /// Asks the user to join [c] in Settings and waits until they have.
@@ -504,6 +520,7 @@ class AppState extends ChangeNotifier {
       inputReady: _inputReady,
       askBeforeReceiving: () => askBeforeReceiving,
       shareClipboard: () => shareClipboard,
+      ringing: () => ringingFrom != null,
     );
     server.events.listen(_onServerEvent);
     await _startServer();
@@ -1516,7 +1533,13 @@ class AppState extends ChangeNotifier {
       case ClipboardReceived(:final from, :final text):
         unawaited(_receivedClipboard(from, text));
       case Pinged(:final from):
-        _pings.add(from);
+        // One at a time (the server refuses more, but two can cross).
+        if (ringingFrom == null) {
+          ringingFrom = from;
+          unawaited(startPingRingtone());
+          _pings.add(from);
+          notifyListeners();
+        }
       case JoinNetworkByHand(:final credentials):
         final joined = waitForSubnet(credentials.addresses, timeout: SidekickServer.joinByHandTime);
         _manualJoins.add(ManualJoin(credentials, joined.then<void>((_) {}, onError: (Object _) {})));

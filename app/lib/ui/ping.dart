@@ -3,30 +3,38 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../app_state.dart';
 import '../core/models.dart';
 import '../platform/desktop_window.dart';
 import '../platform/notifications.dart';
-import '../platform/sound.dart';
 import 'widgets.dart';
 
-/// Another device pinged this one: a loud ping, three times (about 5 s),
-/// and a card saying who, with Stop. In the tray, the window opens for it;
-/// on a phone in the background, a notification says who.
-Future<void> showPinged(BuildContext context, TrustedPeer from) async {
-  final repeats = Timer.periodic(const Duration(milliseconds: 1700), (t) {
-    if (t.tick < 3) unawaited(playPingSound());
-    if (t.tick >= 2) t.cancel();
-  });
-  unawaited(playPingSound());
+/// Another device pinged this one: the ringtone plays on repeat (AppState
+/// starts it) until Found It here. In the tray the window opens for it; on
+/// a phone in the background a notification says who.
+Future<void> showPinged(BuildContext context, AppState state, TrustedPeer from) async {
   OfferNotifications.showPing(from.name);
   if (DesktopWindow.supported) await DesktopWindow.instance.open();
-  if (!context.mounted) return repeats.cancel();
+  if (!context.mounted) return state.foundIt();
   await showDialog<void>(
     context: context,
-    builder: (context) => _PingDialog(from: from),
+    // Only Found It stops it.
+    barrierDismissible: false,
+    builder: (context) => PopScope(canPop: false, child: _PingDialog(from: from)),
   );
-  repeats.cancel();
+  state.foundIt();
 }
+
+/// The Ping button found the device already ringing.
+Future<void> showAlreadyPinged(BuildContext context, String name) => showDialog<void>(
+  context: context,
+  builder: (context) => AlertDialog(
+    icon: const Icon(Icons.notifications_active_rounded),
+    title: const Text('This device is already being pinged'),
+    content: Text('$name keeps ringing until someone taps Found It on it.'),
+    actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+  ),
+);
 
 class _PingDialog extends StatefulWidget {
   const _PingDialog({required this.from});
@@ -71,20 +79,27 @@ class _PingDialogState extends State<_PingDialog> with SingleTickerProviderState
           ),
           const SizedBox(height: 12),
           Text(
-            'Ping from ${widget.from.name}',
+            '${widget.from.name} is pinging you',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(
-            'It wanted to find this device, or to get your attention.',
+            'It keeps ringing until you tap Found It.',
             textAlign: TextAlign.center,
             style: TextStyle(color: scheme.onSurfaceVariant),
           ),
         ],
       ),
       actionsAlignment: MainAxisAlignment.center,
-      actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Stop'))],
+      actions: [
+        FilledButton.icon(
+          onPressed: () => Navigator.pop(context),
+          style: FilledButton.styleFrom(minimumSize: const Size(200, 52)),
+          icon: const Icon(Icons.check_circle_rounded),
+          label: const Text('Found It!'),
+        ),
+      ],
     );
   }
 }

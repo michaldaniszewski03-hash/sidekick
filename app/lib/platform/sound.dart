@@ -29,12 +29,51 @@ Future<void> playAcceptSound() => _play('accept');
 /// A request was declined (tapped here, or the other device's answer).
 Future<void> playDeclineSound() => _play('decline');
 
-/// Another device pinged this one: loud, and on Android on the alarm
-/// volume, so it's heard even on silent. Plays whatever Settings → Sound
-/// says: someone asked for it.
-Future<void> playPingSound() => _play('ping', loud: true);
+/// Another device pinged this one: the ringtone (the owner's, ping.wav) on
+/// repeat until [stopPingRingtone] (Found It). Loud, and on Android on the
+/// alarm volume, so it's heard even on silent. Plays whatever Settings →
+/// Sound says: someone asked for it.
+Future<void> startPingRingtone() async {
+  try {
+    final path = await _soundFile('ping');
+    if (Platform.isWindows) {
+      const sndAsync = 0x0001, sndNoDefault = 0x0002, sndLoop = 0x0008, sndFilename = 0x00020000;
+      _windowsPlaySound(
+        _windowsPaths[path] ??= path.toNativeUtf16(),
+        0,
+        sndFilename | sndAsync | sndLoop | sndNoDefault,
+      );
+    } else if (_channel case final channel?) {
+      await channel.invokeMethod<void>('loopSound', {'path': path});
+    }
+  } catch (e) {
+    debugPrint('Sidekick: ping ringtone failed: $e');
+  }
+}
 
-Future<void> _play(String name, {bool loud = false}) async {
+/// Found It: the ringtone stops.
+Future<void> stopPingRingtone() async {
+  try {
+    if (Platform.isWindows) {
+      _windowsPlaySound(nullptr, 0, 0);
+    } else if (_channel case final channel?) {
+      await channel.invokeMethod<void>('stopLoop');
+    }
+  } catch (e) {
+    debugPrint('Sidekick: stopping the ping ringtone failed: $e');
+  }
+}
+
+/// The platform channel with `loopSound` / `stopLoop` (not Windows).
+MethodChannel? get _channel => Platform.isMacOS
+    ? const MethodChannel('sidekick/macos')
+    : Platform.isIOS
+    ? const MethodChannel('sidekick/ios')
+    : Platform.isAndroid
+    ? const MethodChannel('sidekick/android')
+    : null;
+
+Future<void> _play(String name) async {
   try {
     final path = await _soundFile(name);
     if (Platform.isMacOS) {
@@ -48,7 +87,7 @@ Future<void> _play(String name, {bool loud = false}) async {
     } else if (Platform.isIOS) {
       await const MethodChannel('sidekick/ios').invokeMethod('playSound', {'path': path});
     } else if (Platform.isAndroid) {
-      await const MethodChannel('sidekick/android').invokeMethod('playSound', {'path': path, 'loud': loud});
+      await const MethodChannel('sidekick/android').invokeMethod('playSound', {'path': path});
     }
   } catch (e) {
     // No sound, no problem; but say why in the log.
@@ -85,9 +124,10 @@ typedef _PlaySoundDart = int Function(Pointer<Utf16> sound, int module, int flag
 /// reading the name after the call returns.
 final Map<String, Pointer<Utf16>> _windowsPaths = {};
 
+final _windowsPlaySound = DynamicLibrary.open('winmm.dll')
+    .lookupFunction<_PlaySoundNative, _PlaySoundDart>('PlaySoundW');
+
 void _playOnWindows(String path) {
   const sndAsync = 0x0001, sndNoDefault = 0x0002, sndFilename = 0x00020000;
-  final playSound = DynamicLibrary.open('winmm.dll').lookupFunction<_PlaySoundNative, _PlaySoundDart>('PlaySoundW');
-  final name = _windowsPaths[path] ??= path.toNativeUtf16();
-  playSound(name, 0, sndFilename | sndAsync | sndNoDefault);
+  _windowsPlaySound(_windowsPaths[path] ??= path.toNativeUtf16(), 0, sndFilename | sndAsync | sndNoDefault);
 }

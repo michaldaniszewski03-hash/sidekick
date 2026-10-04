@@ -216,7 +216,9 @@ class SidekickServer {
     Future<bool> Function()? inputReady,
     bool Function()? askBeforeReceiving,
     bool Function()? shareClipboard,
+    bool Function()? ringing,
   }) : askBeforeReceiving = askBeforeReceiving ?? (() => true),
+       ringing = ringing ?? (() => false),
        shareClipboard = shareClipboard ?? (() => true),
        inputReady = inputReady ?? (() async => input.supported),
        permissions = permissions ?? (() => const Permissions()),
@@ -245,6 +247,10 @@ class SidekickServer {
 
   /// Settings → Share clipboard: what paired devices copy lands here.
   final bool Function() shareClipboard;
+
+  /// A ping is ringing here until someone taps Found It: another one is
+  /// refused (409), and the device that sent it says so.
+  final bool Function() ringing;
 
   /// The most text a clipboard may carry (Bluetooth can take it too).
   static const maxClipboard = 256 * 1024;
@@ -599,6 +605,7 @@ class SidekickServer {
   }
 
   Response _ping(Request r) {
+    if (ringing()) return _error(409, '${self().name} is already being pinged');
     _events.add(Pinged(_peer(r)));
     return _json({'ok': true});
   }

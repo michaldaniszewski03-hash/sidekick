@@ -59,8 +59,8 @@ them with a 6-digit code or a QR code. Paired devices can then:
   (Android only while Sidekick is open); an iPhone only when you tap
   Clipboard. What password managers mark as secret is never sent, and
   Sidekick keeps no copy;
-- ping your device: it plays a loud sound (on Android at alarm volume, so
-  you hear it on silent).
+- ping your device: it rings until you tap Found It! on it (on Android at
+  alarm volume, so you hear it on silent).
 You can unpair a device at any time.
 
 Encryption. Everything between paired devices is encrypted: over Wi-Fi with

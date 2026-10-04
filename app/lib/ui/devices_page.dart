@@ -9,6 +9,7 @@ import '../core/models.dart';
 import '../core/pairing_qr.dart';
 import 'bluetooth_pairing.dart';
 import 'direct_wifi.dart';
+import 'ping.dart';
 import 'qr_pairing.dart';
 import 'widgets.dart';
 
@@ -413,6 +414,11 @@ class _PairedCardState extends State<_PairedCard> {
     widget.onOpen(tab);
   }
 
+  Future<void> _ping() async {
+    final rang = await state.ping(device);
+    if (!rang && mounted) await showAlreadyPinged(context, device.name);
+  }
+
   Future<void> _pickAndSend() async {
     final files = await pickFilesToSend(context, title: 'Send to ${device.name}');
     if (files.isNotEmpty) await state.sendFiles(device, files);
@@ -616,7 +622,7 @@ class _PairedCardState extends State<_PairedCard> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: OutlinedButton.icon(
-                                    onPressed: online ? () => state.ping(device) : null,
+                                    onPressed: online ? _ping : null,
                                     icon: const Icon(Icons.notifications_active_outlined, size: 18),
                                     label: const Text('Ping'),
                                   ),

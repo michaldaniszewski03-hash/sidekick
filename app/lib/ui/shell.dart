@@ -53,7 +53,7 @@ class _ShellState extends State<Shell> {
       state.sends.listen(_showSend),
       // Another device pinged this one: loud, and who.
       state.pings.listen((from) {
-        if (mounted) unawaited(showPinged(context, from));
+        if (mounted) unawaited(showPinged(context, state, from));
       }),
       // iPhone: a network to join by hand for a direct link.
       state.manualJoins.listen((join) {

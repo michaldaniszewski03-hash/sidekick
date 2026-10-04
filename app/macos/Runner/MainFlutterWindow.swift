@@ -78,6 +78,8 @@ final class SidekickNative {
   /// Held until they finish: a player that's let go stops at once.
   private var players: [AVAudioPlayer] = []
   private var sound: NSSound?
+  /// The Ping ringtone, on repeat until Found It.
+  private var ringtone: AVAudioPlayer?
 
   /// Sidekick's sounds: AVAudioPlayer, or NSSound if that can't open the file.
   private func play(_ path: String) -> Bool {
@@ -112,6 +114,24 @@ final class SidekickNative {
         return
       }
       result(play(path))
+    case "loopSound":
+      // Rings until "stopLoop" (the Ping card's Found It).
+      ringtone?.stop()
+      ringtone = nil
+      if let path = (call.arguments as? [String: Any])?["path"] as? String,
+        let player = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
+      {
+        player.numberOfLoops = -1
+        player.volume = 1
+        player.prepareToPlay()
+        player.play()
+        ringtone = player
+      }
+      result(ringtone != nil)
+    case "stopLoop":
+      ringtone?.stop()
+      ringtone = nil
+      result(nil)
     case "input":
       if let msg = call.arguments as? [String: Any] { input.handle(msg) }
       result(AXIsProcessTrusted())
