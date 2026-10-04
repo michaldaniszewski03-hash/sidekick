@@ -6,31 +6,36 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
+import 'platform/autoload.dart';
 import 'platform/desktop_window.dart';
 import 'platform/sound.dart';
 import 'ui/corner_popup.dart';
 import 'ui/shell.dart';
 import 'ui/startup.dart';
+import 'ui/tray_panel.dart';
 import 'ui/welcome.dart';
 
-Future<void> main() async {
+Future<void> main([List<String> args = const []]) async {
+  AutoLoad.args = args;
   WidgetsFlutterBinding.ensureInitialized();
   _catchErrors();
   try {
     // Windows and Mac: closing the window keeps Sidekick in the tray.
     if (DesktopWindow.supported) {
       try {
-        await DesktopWindow.instance.init();
+        await DesktopWindow.instance.init(startHidden: AutoLoad.launchedHidden);
       } catch (e) {
         debugPrint('Sidekick: no tray: $e');
       }
     }
     final state = await AppState.load();
     await state.start();
-    runApp(SidekickApp(state: state, splash: true));
+    // Started at login (Auto-load): quietly, in the tray.
+    final quiet = AutoLoad.launchedHidden;
+    runApp(SidekickApp(state: state, splash: !quiet));
     // Its own call, not part of the animation: with "Reduce motion" on
     // there's no animation, but the chime still plays.
-    if (state.sound) unawaited(playStartupSound());
+    if (state.sound && !quiet) unawaited(playStartupSound());
   } catch (error) {
     // Never a blank window: say what went wrong and offer to try again.
     runApp(_StartupFailed(error: error, retry: main));
@@ -275,21 +280,34 @@ class SidekickApp extends StatelessWidget {
   /// In the tray, a request shows only the small corner card; the rest of
   /// the app stays as it was, not drawn and not animating.
   Widget _withCornerPopup(BuildContext context, Widget? child) => ListenableBuilder(
-    listenable: Listenable.merge([DesktopWindow.instance.popup, DesktopWindow.instance.hidden]),
+    listenable: Listenable.merge([
+      DesktopWindow.instance.popup,
+      DesktopWindow.instance.hidden,
+      DesktopWindow.instance.panel,
+    ]),
     builder: (context, _) {
       final offer = DesktopWindow.instance.popup.value;
+      final panel = DesktopWindow.instance.panel.value && offer == null;
       return Stack(
         fit: StackFit.expand,
         children: [
           Offstage(
-            offstage: offer != null,
+            offstage: offer != null || panel,
             // In the tray nothing's on screen: no animations ticking away.
             child: TickerMode(
-              enabled: offer == null && !DesktopWindow.instance.hidden.value,
+              enabled: offer == null && !panel && !DesktopWindow.instance.hidden.value,
               child: child ?? const SizedBox(),
             ),
           ),
           if (offer != null) CornerPopup(offer: offer, onDone: DesktopWindow.instance.popupDone, sounds: state.sound),
+          // Its own navigator: tooltips and its dialogs need one.
+          if (panel)
+            Navigator(
+              onGenerateRoute: (_) => PageRouteBuilder<void>(
+                pageBuilder: (_, _, _) => TrayPanel(state: state),
+                transitionDuration: Duration.zero,
+              ),
+            ),
         ],
       );
     },

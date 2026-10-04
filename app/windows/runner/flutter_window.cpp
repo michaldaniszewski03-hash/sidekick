@@ -1,5 +1,6 @@
 #include "flutter_window.h"
 
+#include <cwchar>
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
@@ -27,8 +28,13 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
+  // Started at login (Auto-load, "--hidden"): straight to the tray, the
+  // window never shown.
+  const wchar_t* command_line = ::GetCommandLineW();
+  const bool hidden =
+      command_line != nullptr && std::wcsstr(command_line, L"--hidden") != nullptr;
+  flutter_controller_->engine()->SetNextFrameCallback([&, hidden]() {
+    if (!hidden) this->Show();
   });
 
   // Flutter can complete the first frame before the "show window" callback is

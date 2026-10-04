@@ -21,6 +21,7 @@ import 'core/server.dart';
 import 'core/trust.dart';
 import 'platform/android.dart';
 import 'platform/apple_p2p.dart';
+import 'platform/autoload.dart';
 import 'platform/clipboard.dart';
 import 'platform/device_name.dart';
 import 'platform/files.dart';
@@ -286,6 +287,17 @@ class AppState extends ChangeNotifier {
   /// Ask before accepting files sent to this device (Settings → Files).
   bool askBeforeReceiving = true;
 
+  /// Settings → Auto-load (Windows, Mac; on by default): starts at login,
+  /// in the tray.
+  bool autoLoad = true;
+
+  void setAutoLoad(bool value) {
+    autoLoad = value;
+    _prefs.setBool('autoLoad', value);
+    unawaited(AutoLoad.apply(value));
+    notifyListeners();
+  }
+
   /// Settings → Share clipboard (on by default): what you copy here goes to
   /// paired devices nearby, and what they copy lands here.
   bool shareClipboard = true;
@@ -416,6 +428,7 @@ class AppState extends ChangeNotifier {
     keepRunning = _prefs.getBool('keepRunning') ?? true;
     askBeforeReceiving = _prefs.getBool('askBeforeReceiving') ?? true;
     shareClipboard = _prefs.getBool('shareClipboard') ?? true;
+    autoLoad = _prefs.getBool('autoLoad') ?? true;
     pasteTipSeen = _prefs.getBool('iosPasteTip') ?? false;
     // One switch since 2.4.1; before, two (off if either was off).
     sound =
@@ -567,6 +580,8 @@ class AppState extends ChangeNotifier {
     // Bluetooth permission prompt at start.
     if (bluetoothOn) _startBluetooth();
     if (shareClipboard) _watchClipboard();
+    // Written again each start while on: it follows the app if it moved.
+    if (AutoLoad.supported) unawaited(AutoLoad.apply(autoLoad));
 
     if (Platform.isMacOS) {
       // Coming back from System Settings doesn't always count as "resumed".

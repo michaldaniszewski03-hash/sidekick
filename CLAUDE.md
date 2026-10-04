@@ -105,6 +105,28 @@ its biggest features and fixes, and bumps the website links (see
   request arrived in the tray).
   Tray icons: `assets/tray/` and Android's `ic_stat_sidekick`, from
   `make_icons.py` (`tray()`).
+  **The tray panel** (`ui/tray_panel.dart`, the owner's idea: like
+  CleanMyMac's): a click on the tray / menu-bar icon while Sidekick is in
+  the tray turns the same window into a 380×640 panel by the icon
+  (`togglePanel`; Mac under the menu bar at the icon, Windows above the
+  taskbar's corner), deep purple gradient in the theme's hue with a glow,
+  translucent cards: "Sidekick: Ready", encrypted / ready to receive and
+  the network, Clipboard (on/off), the last file received (Show), every
+  paired device with Send / Clipboard / Ping, a "Did you know?" tip, and
+  Open Sidekick / Settings / Quit. It takes the focus and closes when it
+  loses it (`onWindowBlur`; not while its file picker is open,
+  `holdPanel`). With the main window open, the icon just brings it
+  forward; right-click shows the menu. A request arriving takes over the
+  window as the corner pop-up. Rendered by `tool/screenshots_test.dart`
+  (`tray-panel.png`).
+- **Auto-load** (`platform/autoload.dart`, Settings, Windows and Mac, on by
+  default; the owner's call): starts at login, straight to the tray.
+  Windows: a `Run` registry value with `--hidden` (the runner then never
+  shows the window; it also allows one Sidekick at a time, bringing the
+  running one back instead of starting a second, which would confuse
+  paired devices). Mac: a LaunchAgent with `SIDEKICK_HIDDEN=1` (hides to
+  the menu bar). No splash or startup chime then. Rewritten every start
+  while on, so it follows the app.
 - `platform/notifications.dart` (phones): a request while Sidekick isn't on
   screen becomes a notification with Accept / Decline (`notifyOffer`;
   the buttons come back as `offerAction`). Android: `Notifications.kt`
@@ -367,6 +389,17 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.12.0
+- **A panel in the tray / menu bar**, like CleanMyMac's: click Sidekick's
+  icon for its status, your network, the clipboard, the last file you got,
+  and every paired device with Send, Clipboard and Ping, plus a tip; Open
+  Sidekick, Settings and Quit at the bottom. It closes when you click
+  anywhere else.
+- **Auto-load:** Sidekick starts in the tray when you log in (Windows and
+  Mac), quietly: no window, no chime. Settings → Auto-load turns it off.
+- **One Sidekick at a time on Windows:** opening it again brings back the
+  one already running.
 
 ### 2.11.0
 - **The clipboard shares itself, on every device:** copy, and it's on your

@@ -24,7 +24,9 @@ import 'package:sidekick/core/server.dart';
 import 'package:sidekick/core/trust.dart';
 import 'package:sidekick/main.dart';
 import 'package:sidekick/platform/files.dart';
+import 'package:sidekick/platform/desktop_window.dart';
 import 'package:sidekick/platform/input.dart';
+import 'package:sidekick/ui/tray_panel.dart';
 import 'package:sidekick/ui/widgets.dart';
 
 Future<void> _loadFonts() async {
@@ -257,6 +259,30 @@ void main() {
       });
     }
     await tester.pump(const Duration(seconds: 1));
+
+    // The panel the tray / menu-bar icon opens (Windows, Mac).
+    tester.view.physicalSize = DesktopWindow.panelSize * 2;
+    tester.view.devicePixelRatio = 2;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundary,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(colorSchemeSeed: const Color(0xFF6750A4), fontFamily: 'Roboto'),
+          home: TrayPanel(state: state),
+        ),
+      ),
+    );
+    await settle();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.runAsync(() async {
+      final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final image = await render.toImage(pixelRatio: 2);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      File(p.join(out.path, 'tray-panel.png')).writeAsBytesSync(bytes!.buffer.asUint8List());
+    });
 
     await tester.runAsync(() async {
       await phone.stop();

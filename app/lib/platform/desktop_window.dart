@@ -22,6 +22,22 @@ class DesktopWindow with WindowListener, TrayListener {
   /// The size of the corner window.
   static const popupSize = Size(380, 172);
 
+  /// The panel a click on the tray icon opens (like CleanMyMac's).
+  static const panelSize = Size(380, 640);
+
+  /// The tray panel is showing (the app draws only it, see main.dart).
+  final panel = ValueNotifier(false);
+
+  /// A tab the main window should show when it opens (the panel's Settings).
+  final openTab = ValueNotifier<int?>(null);
+
+  /// When the panel last closed on its own (focus went elsewhere): a click
+  /// on the tray icon that did it shouldn't open it again at once.
+  DateTime _panelClosedAt = DateTime(0);
+
+  /// The panel opened the file picker: losing focus to it isn't leaving.
+  bool holdPanel = false;
+
   /// The Mac's own window code (MainFlutterWindow.swift): it catches the red
   /// button itself and shows the pop-up without taking the focus.
   static const _mac = MethodChannel('sidekick/macos');
@@ -46,7 +62,7 @@ class DesktopWindow with WindowListener, TrayListener {
   /// "Open Sidekick" was picked while the corner window was up.
   bool _openAfter = false;
 
-  Future<void> init() async {
+  Future<void> init({bool startHidden = false}) async {
     await windowManager.ensureInitialized();
     // The close button hides the window instead (onWindowClose).
     await windowManager.setPreventClose(true);
@@ -61,7 +77,7 @@ class DesktopWindow with WindowListener, TrayListener {
           case 'closedToMenuBar':
             _hidden = true;
           case 'openedFromMenuBar':
-            if (popup.value == null) _hidden = false;
+            if (popup.value == null && !panel.value) _hidden = false;
         }
         return null;
       });
@@ -91,7 +107,18 @@ class DesktopWindow with WindowListener, TrayListener {
       // No tray icon. Windows has no other way back: closing quits, as
       // before. (The Mac still has its Dock icon.)
       debugPrint('Sidekick: no tray icon: $e');
-      if (Platform.isWindows) await windowManager.setPreventClose(false);
+      if (Platform.isWindows) {
+        await windowManager.setPreventClose(false);
+        // No tray to come back from: never start hidden.
+        if (startHidden) await windowManager.show();
+        return;
+      }
+    }
+    // Started at login (Auto-load): straight to the tray. (Windows' runner
+    // never showed the window; the Mac hides it.)
+    if (startHidden) {
+      _hidden = true;
+      if (Platform.isMacOS) await _mac.invokeMethod('hideToMenuBar');
     }
   }
 
@@ -99,6 +126,8 @@ class DesktopWindow with WindowListener, TrayListener {
   /// when its window is open: the app shows its own card then.
   bool show(TransferOffer offer) {
     if (!_hidden) return false;
+    // The panel gives way to the request (same window, same settings).
+    panel.value = false;
     if (popup.value == null) {
       unawaited(_openPopup(offer));
     } else {
@@ -107,14 +136,76 @@ class DesktopWindow with WindowListener, TrayListener {
     return true;
   }
 
-  Future<void> _openPopup(TransferOffer offer) async {
-    popup.value = offer;
+  /// The small-window look shared by the corner pop-up and the panel.
+  Future<void> _compact(Size size) async {
     _bounds ??= await windowManager.getBounds();
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden, windowButtonVisibility: false);
     await windowManager.setResizable(false);
     await windowManager.setAlwaysOnTop(true);
     // The Mac window can't usually be this small.
-    if (Platform.isMacOS) await windowManager.setMinimumSize(popupSize);
+    if (Platform.isMacOS) await windowManager.setMinimumSize(size);
+  }
+
+  /// Back to the full window's look and place, hidden.
+  Future<void> _restore() async {
+    await windowManager.setAlwaysOnTop(false);
+    await windowManager.setResizable(true);
+    await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+    if (Platform.isMacOS) await windowManager.setMinimumSize(_macMinSize);
+    if (_bounds case final bounds?) await windowManager.setBounds(bounds);
+    _bounds = null;
+  }
+
+  // ------------------------------------------------------------ tray panel
+
+  /// The tray icon was clicked: the panel opens (or closes) by the icon.
+  /// With the main window open, it comes to the front instead.
+  Future<void> togglePanel() async {
+    if (popup.value != null) return;
+    if (panel.value) return closePanel();
+    if (!_hidden) return open();
+    if (DateTime.now().difference(_panelClosedAt) < const Duration(milliseconds: 400)) return;
+    panel.value = true;
+    await _compact(panelSize);
+    final display = await screenRetriever.getPrimaryDisplay();
+    final area = (display.visiblePosition ?? Offset.zero) & (display.visibleSize ?? display.size);
+    const margin = 10.0;
+    final icon = await trayManager.getBounds();
+    // Mac: under the menu bar, below the icon. Windows: above the taskbar
+    // in the corner, where the tray is.
+    final left = Platform.isMacOS && icon != null
+        ? (icon.center.dx - panelSize.width / 2).clamp(area.left + margin, area.right - panelSize.width - margin)
+        : area.right - panelSize.width - margin;
+    final top = Platform.isMacOS ? area.top + margin : area.bottom - panelSize.height - margin;
+    await windowManager.setBounds(Rect.fromLTWH(left, top, panelSize.width, panelSize.height));
+    // Taking focus, so a click anywhere else closes it (onWindowBlur).
+    await windowManager.show();
+    await windowManager.focus();
+  }
+
+  /// Closes the panel (focus went elsewhere, or one of its buttons).
+  Future<void> closePanel() async {
+    if (!panel.value) return;
+    _panelClosedAt = DateTime.now();
+    if (Platform.isMacOS) {
+      await _mac.invokeMethod('hidePopup');
+    } else {
+      await windowManager.hide();
+    }
+    panel.value = false;
+    await _restore();
+  }
+
+  /// The panel's Open Sidekick (and Settings: [tab] 3).
+  Future<void> openFromPanel({int? tab}) async {
+    openTab.value = tab;
+    await closePanel();
+    await open();
+  }
+
+  Future<void> _openPopup(TransferOffer offer) async {
+    popup.value = offer;
+    await _compact(popupSize);
     // Never setSkipTaskbar: on Windows, window_manager only creates its
     // taskbar object in waitUntilReadyToShow (which Sidekick doesn't use),
     // so setSkipTaskbar dereferenced a null pointer and the whole app
@@ -164,12 +255,7 @@ class DesktopWindow with WindowListener, TrayListener {
       await windowManager.hide();
     }
     popup.value = null;
-    await windowManager.setAlwaysOnTop(false);
-    await windowManager.setResizable(true);
-    await windowManager.setTitleBarStyle(TitleBarStyle.normal);
-    if (Platform.isMacOS) await windowManager.setMinimumSize(_macMinSize);
-    if (_bounds case final bounds?) await windowManager.setBounds(bounds);
-    _bounds = null;
+    await _restore();
     if (_openAfter) {
       _openAfter = false;
       await open();
@@ -178,6 +264,7 @@ class DesktopWindow with WindowListener, TrayListener {
 
   /// Back from the tray.
   Future<void> open() async {
+    if (panel.value) await closePanel();
     if (popup.value != null) {
       _openAfter = true;
       return;
@@ -204,19 +291,18 @@ class DesktopWindow with WindowListener, TrayListener {
   // Shown some other way (on a Mac, clicking the Dock icon).
   @override
   void onWindowFocus() {
-    if (popup.value == null) _hidden = false;
+    if (popup.value == null && !panel.value) _hidden = false;
   }
 
+  // A click anywhere else closes the panel.
   @override
-  void onTrayIconMouseDown() {
-    // Windows: a click opens Sidekick, a right-click shows the menu. The
-    // Mac's menu bar shows the menu on a click.
-    if (Platform.isWindows) {
-      unawaited(open());
-    } else {
-      unawaited(trayManager.popUpContextMenu());
-    }
+  void onWindowBlur() {
+    if (panel.value && !holdPanel) unawaited(closePanel());
   }
+
+  // A click opens the panel; a right-click (or Control-click) the menu.
+  @override
+  void onTrayIconMouseDown() => unawaited(togglePanel());
 
   @override
   void onTrayIconRightMouseDown() => unawaited(trayManager.popUpContextMenu());

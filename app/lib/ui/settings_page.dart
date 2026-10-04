@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../app_state.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
+import '../platform/autoload.dart';
 import '../platform/clipboard.dart';
 import 'permissions.dart';
 import 'theme_chooser.dart';
@@ -93,6 +94,14 @@ class _SettingsPageState extends State<SettingsPage> {
                           icon: const Icon(Icons.edit_rounded),
                         ),
                       ),
+                      if (AutoLoad.supported)
+                        SwitchListTile(
+                          secondary: const IconTile(Icons.rocket_launch_outlined, tone: TileTone.primary),
+                          title: const Text('Auto-load'),
+                          subtitle: const Text('Start Sidekick in the tray when you log in'),
+                          value: state.autoLoad,
+                          onChanged: state.setAutoLoad,
+                        ),
                       SwitchListTile(
                         secondary: const IconTile(Icons.front_hand_outlined, tone: TileTone.tertiary),
                         title: const Text('Ask before receiving files'),

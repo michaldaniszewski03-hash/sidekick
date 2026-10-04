@@ -42,8 +42,11 @@ your network.
 
 On Windows and Mac, closing Sidekick's window keeps it running in the tray
 (the menu bar on a Mac), so your devices can still reach it; choose Quit
-there to stop it. On Android, a small "Ready to receive" notification shows
-while it runs in the background.
+there to stop it. With Auto-load (on unless you turn it off in Settings), it
+also starts in the tray when you log in: Windows lists it under startup
+apps, and the Mac keeps a small login item in your Library's LaunchAgents
+folder. On Android, a small "Ready to receive" notification shows while it
+runs in the background.
 
 Paired devices. A device can only do anything with yours after you pair
 them with a 6-digit code or a QR code. Paired devices can then:

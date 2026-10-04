@@ -63,6 +63,8 @@ class _ShellState extends State<Shell> {
       }),
     ];
     _lifecycle = AppLifecycleListener(onResume: state.resumed);
+    // The tray panel's Settings opens that tab.
+    DesktopWindow.instance.openTab.addListener(_openTab);
     // The first time this device pairs with an iPhone: it can't be controlled.
     _subs.add(
       state.pairedEvents.listen((d) {
@@ -87,10 +89,18 @@ class _ShellState extends State<Shell> {
       s.cancel();
     }
     _lifecycle.dispose();
+    DesktopWindow.instance.openTab.removeListener(_openTab);
     super.dispose();
   }
 
   void _go(int index) => setState(() => _index = index);
+
+  void _openTab() {
+    final tab = DesktopWindow.instance.openTab.value;
+    if (tab == null || !mounted) return;
+    DesktopWindow.instance.openTab.value = null;
+    _go(tab);
+  }
 
   Future<void> _showPasteTip() async {
     state.markPasteTipSeen();
