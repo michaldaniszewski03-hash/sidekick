@@ -21,9 +21,11 @@
 
 // The address the emails come from: a mailbox you made for
 // getsidekick.app in OVHcloud (Web Cloud → Emails).
-const FROM = 'hello@getsidekick.app';
+const FROM = 'info@getsidekick.app';
 const FROM_NAME = 'Sidekick';
 const SITE = 'https://getsidekick.app';
+// Also tell FROM about each new sign-up ("New on the wishlist: …").
+const NOTIFY_OWNER = true;
 
 const MAX_PER_HOUR = 5;        // sign-ups per visitor (by a hash of their IP)
 
@@ -158,6 +160,32 @@ function send_welcome(string $email, string $token): bool {
     return mail($email, $subject, $body, $headers, '-f' . FROM);
 }
 
+/** A short note to FROM about a new sign-up (never shown to the visitor). */
+function notify_owner(string $email, array $devices, bool $sent): void {
+    global $local;
+    $count = with_list(fn(array &$rows) => count($rows));
+    $subject = "New on the wishlist: $email";
+    $body = "$email joined the Sidekick wishlist.\r\n"
+        . 'Devices: ' . ($devices ? implode(', ', $devices) : 'not picked') . "\r\n"
+        . "People on the list now: $count\r\n"
+        . ($sent ? '' : "\r\nThe \"Got your email!\" email couldn't be sent to them.\r\n")
+        . "\r\nThe whole list: sidekick-wishlist/list.csv on the hosting (FileZilla).\r\n";
+    if ($local) {
+        $out = data_dir() . '/outbox';
+        @mkdir($out, 0700);
+        file_put_contents("$out/" . date('Ymd-His') . '-owner.txt', "To: " . FROM . "\r\nSubject: $subject\r\n\r\n$body");
+        return;
+    }
+    $headers = implode("\r\n", [
+        'From: ' . FROM_NAME . ' wishlist <' . FROM . '>',
+        'Reply-To: ' . $email,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+    ]);
+    @mail(FROM, $subject, $body, $headers, '-f' . FROM);
+}
+
 function by_token(array &$rows, string $token): ?string {
     if (!preg_match('/^[a-f0-9]{32}$/', $token)) return null;
     foreach ($rows as $k => $row) {
@@ -224,6 +252,7 @@ try {
         } else {
             error_log("Sidekick wishlist: couldn't email $email");
         }
+        if (NOTIFY_OWNER) notify_owner($email, $devices, $sent);
     }
     reply(200, ['ok' => true, 'status' => $status, 'emailed' => $sent]);
 } catch (Throwable $e) {

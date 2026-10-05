@@ -26,9 +26,11 @@ and `#wishlist` (the old `#download` section) say "Join the wishlist", and
 no database: the owner's OVHcloud free plan): signing up puts the address
 on the list and emails "Got your email! We'll remind you when Sidekick
 comes out." (the owner's words; no confirm step) via `mail()` from `FROM`
-(`hello@getsidekick.app` unless the owner names their mailbox), with a
-remove link; a honeypot field, a 2-second minimum, and 5 tries an hour per
-hashed IP. The list is `sidekick-wishlist/list.csv`,
+(`info@getsidekick.app`, the owner's mailbox), with a
+remove link, and a note to `FROM` about each sign-up (`NOTIFY_OWNER`); a
+honeypot field, a 2-second minimum, and 5 tries an hour per hashed IP.
+`wishlist-check.php` (upload once, open, delete) checks the hosting: PHP,
+the private folder, and a test email to `FROM`. The list is `sidekick-wishlist/list.csv`,
 next to `www` (outside the web root; inside it behind a deny-all
 .htaccess only if that's not writable). On localhost (`php -S
 localhost:8000`) emails go to `sidekick-wishlist/outbox` instead. Both
