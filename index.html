@@ -658,7 +658,7 @@ section { scroll-margin-top: 80px; }
 .step h3 { margin-top: 20px; font-size: 20px; font-weight: 650; }
 .step p { margin-top: 6px; color: var(--on-surface-variant); }
 
-/* download */
+/* wishlist */
 .cta-card {
   position: relative; overflow: hidden;
   padding: clamp(28px, 5vw, 64px); border-radius: 40px;
@@ -674,37 +674,42 @@ section { scroll-margin-top: 80px; }
   animation: blob 14s var(--ease) infinite alternate;
 }
 @keyframes blob { to { transform: rotate(40deg) scale(1.15); border-radius: 60% 40% 45% 55% / 55% 60% 40% 45%; } }
-.downloads {
-  position: relative; margin-top: 32px;
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+.wish { position: relative; margin-top: 28px; max-width: 640px; }
+.wish-os { display: flex; flex-wrap: wrap; gap: 8px; }
+.wish-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px 0 12px;
+  border-radius: 10px; border: 1px solid color-mix(in oklab, var(--on-primary-container) 30%, transparent);
+  background: transparent; font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: background .2s var(--ease), border-radius .3s var(--ease);
 }
-@media (max-width: 1000px) { .downloads { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .downloads { grid-template-columns: minmax(0, 1fr); } }
-.dl {
-  position: relative; display: flex; flex-direction: column; gap: 4px;
-  padding: 20px; border-radius: 24px; text-decoration: none;
-  background: var(--surface); color: var(--on-surface);
-  border: 2px solid transparent;
-  transition: border-radius .35s var(--ease), transform .35s var(--ease-spring), box-shadow .2s var(--ease);
+.wish-chip .icon { font-size: 18px; }
+.wish-chip[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); border-color: transparent; border-radius: 18px; }
+.wish-row { display: flex; gap: 10px; margin-top: 16px; }
+@media (max-width: 560px) { .wish-row { flex-direction: column; } .wish-row .btn { justify-content: center; } }
+.wish-field {
+  flex: 1; display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 18px;
+  border-radius: 18px; background: var(--surface); color: var(--on-surface);
+  border: 2px solid transparent; transition: border-color .2s var(--ease);
 }
-.dl:hover { border-radius: 32px; transform: translateY(-2px); box-shadow: var(--shadow); }
-.dl .icon { font-size: 28px; color: var(--primary); margin-bottom: 8px; }
-.dl b { font-size: 18px; font-weight: 650; }
-.dl small { font-size: 13px; color: var(--on-surface-variant); line-height: 1.4; }
-.dl .dl-go { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--primary); }
-.dl .dl-go .icon { font-size: 18px; margin: 0; }
-.dl.mine { border-color: var(--primary); }
-.dl .badge {
-  position: absolute; top: 16px; right: 16px; display: none;
-  padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
-  background: var(--primary); color: var(--on-primary);
+.wish-field:focus-within { border-color: var(--primary); }
+.wish-field .icon { color: var(--primary); }
+.wish-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 16px; }
+.wish-row .btn { height: 56px; }
+.wish-error { margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--error, #b3261e); }
+.wish-done {
+  position: relative; display: flex; align-items: center; gap: 16px; margin-top: 28px; max-width: 640px;
+  padding: 20px; border-radius: 24px; background: var(--surface); color: var(--on-surface);
+  animation: wishIn .5s var(--ease-spring);
 }
-.dl.mine .badge { display: inline-block; }
+.wish-done b { font-size: 18px; font-weight: 650; }
+.wish-done p { margin-top: 2px; color: var(--on-surface-variant); }
+.wish-check { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 16px; background: var(--primary); color: var(--on-primary); }
+@keyframes wishIn { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+.wish[hidden], .wish-done[hidden] { display: none; }
 .dl-meta { margin-top: 12px; font-size: 14px; color: var(--on-surface-variant); }
 .dl-meta a { color: var(--primary); font-weight: 600; }
 .fine { position: relative; margin-top: 20px; font-size: 13px; opacity: .8; }
 .fine .icon { font-size: 16px; vertical-align: -3px; }
-#macPkg { margin-top: 14px; }
 
 /* footer */
 footer { padding: 40px 0 56px; color: var(--on-surface-variant); font-size: 14px; }
@@ -758,7 +763,7 @@ footer nav a:hover { color: var(--on-surface); }
     <button class="icon-btn" id="themeBtn" type="button" aria-label="Toggle dark mode">
       <span class="icon" id="themeIcon">dark_mode</span>
     </button>
-    <a class="btn btn-filled btn-sm" id="navDownload" href="#download">Download</a>
+    <a class="btn btn-filled btn-sm" id="navWishlist" href="#wishlist">Join the wishlist</a>
   </div>
 </header>
 
@@ -774,10 +779,10 @@ footer nav a:hover { color: var(--on-surface); }
           computer, open your phone's files from your desktop, and send anything in a tap.
         </p>
         <div class="cta-row">
-          <a class="btn btn-filled" id="heroDownload" href="#download"><span class="icon" id="heroDownloadIcon">download</span><span id="heroDownloadLabel">Download Sidekick</span></a>
+          <a class="btn btn-filled" id="heroWishlist" href="#wishlist"><span class="icon">favorite</span><span>Join the wishlist</span></a>
           <a class="btn btn-tonal" href="#features">See what it does</a>
         </div>
-        <p class="dl-meta" id="heroDownloadMeta">Free · Windows, macOS, Android and iPhone · <a href="#download">All downloads</a></p>
+        <p class="dl-meta">Coming soon · Free · Windows, macOS, Android and iPhone</p>
         <div class="chips" aria-label="Supported platforms">
           <span class="chip"><span class="icon">android</span>Android</span>
           <span class="chip"><span class="icon">phone_iphone</span>iOS</span>
@@ -1053,50 +1058,40 @@ footer nav a:hover { color: var(--on-surface); }
     </div>
   </section>
 
-  <!-- ============================================================ DOWNLOAD -->
-  <section class="section" id="download" style="padding-top:0">
+  <!-- ============================================================ WISHLIST -->
+  <!-- Sidekick isn't out yet: the page collects interest instead of offering
+       downloads. The form is a placeholder for now: it sends and stores
+       nothing (privacy.html says so), it only thanks the visitor. -->
+  <section class="section" id="wishlist" style="padding-top:0">
     <div class="wrap">
       <div class="cta-card reveal">
-        <h2>Get Sidekick</h2>
-        <p>Free, with no account. Install it on your computer and your phone, then pair them with a 6-digit code.</p>
-        <!-- Links are filled in from RELEASE in the script below; these
-             fallbacks point at the release page for visitors without JS. -->
-        <div class="downloads">
-          <a class="dl" data-os="windows" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
-            <span class="badge">Your device</span>
-            <span class="icon">desktop_windows</span>
-            <b>Windows</b>
-            <small>Windows 10 &amp; 11 · installer</small>
-            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .exe</span></span>
-          </a>
-          <a class="dl" data-os="macos" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
-            <span class="badge">Your device</span>
-            <span class="icon">laptop_mac</span>
-            <b>macOS</b>
-            <small>macOS 12+ · first launch: right-click → Open</small>
-            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .dmg</span></span>
-          </a>
-          <a class="dl" data-os="android" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
-            <span class="badge">Your device</span>
-            <span class="icon">android</span>
-            <b>Android</b>
-            <small>Android 8.0+ · allow installing from your browser</small>
-            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .apk</span></span>
-          </a>
-          <a class="dl" data-os="ios" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">
-            <span class="badge">Your device</span>
-            <span class="icon">phone_iphone</span>
-            <b>iPhone &amp; iPad</b>
-            <small>iOS 15+ · install with AltStore or Sideloadly</small>
-            <span class="dl-go"><span class="icon">download</span><span class="dl-file">Download .ipa</span></span>
-          </a>
+        <h2>Join the wishlist</h2>
+        <p>Sidekick is almost here: free, with no account, on Windows, macOS, Android and iPhone.</p>
+        <form class="wish" id="wishForm" novalidate>
+          <div class="wish-os" role="group" aria-label="Which devices do you use?">
+            <button class="wish-chip" type="button" aria-pressed="false"><span class="icon">desktop_windows</span>Windows</button>
+            <button class="wish-chip" type="button" aria-pressed="false"><span class="icon">laptop_mac</span>Mac</button>
+            <button class="wish-chip" type="button" aria-pressed="false"><span class="icon">android</span>Android</button>
+            <button class="wish-chip" type="button" aria-pressed="false"><span class="icon">phone_iphone</span>iPhone</button>
+          </div>
+          <div class="wish-row">
+            <label class="wish-field">
+              <span class="icon" aria-hidden="true">mail</span>
+              <input id="wishEmail" type="email" name="email" placeholder="Your email" autocomplete="email" required
+                     aria-label="Your email">
+            </label>
+            <button class="btn btn-filled" type="submit"><span class="icon">favorite</span>Join the wishlist</button>
+          </div>
+          <p class="wish-error" id="wishError" role="alert" hidden>That doesn't look like an email address.</p>
+        </form>
+        <div class="wish-done" id="wishDone" hidden>
+          <span class="wish-check"><span class="icon">favorite</span></span>
+          <div>
+            <b>Thanks for your interest!</b>
+            <p>Sidekick is coming soon. Keep an eye on this page.</p>
+          </div>
         </div>
-        <!-- Macs get a choice: the .dmg (drag to Applications) or the .pkg
-             installer. Shown once RELEASE.files.macosPkg is set. -->
-        <p class="fine" id="macPkg" hidden><span class="icon" aria-hidden="true">laptop_mac</span> On a Mac you can also use the
-          <a id="macPkgLink" href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">.pkg installer</a>:
-          open it and click Continue, then Install.</p>
-        <p class="fine" id="releaseNote">Version 2.12.0 · <a href="https://github.com/michaldaniszewski03-hash/sidekick/releases/latest">Release notes and older versions</a> · <a href="/privacy.html">Privacy</a></p>
+        <p class="fine">Coming soon · <a href="/privacy.html">Privacy</a></p>
       </div>
     </div>
   </section>
@@ -1157,10 +1152,6 @@ const sounds = (() => {
   paint();
   return { play };
 })();
-// A download gets the "accepted" chime.
-document.addEventListener('click', e => {
-  if (e.target.closest('a[href*="/releases/download/"]')) sounds.play('accept');
-});
 
 /* ---------- theme (light / dark) */
 const themeIcon = $('#themeIcon');
@@ -1248,64 +1239,26 @@ function snack(msg) {
   snackTimer = setTimeout(() => snackbar.classList.remove('show'), 3200);
 }
 
-/* ---------- downloads: one place to update for each release */
-const RELEASE = {
-  version: '2.12.0',
-  page: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/tag/v2.12.0',
-  files: {
-    windows: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.12.0/SidekickSetup-2.12.0.exe',
-    macos: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.12.0/Sidekick-2.12.0.dmg',
-    android: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.12.0/Sidekick-2.12.0.apk',
-    ios: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.12.0/Sidekick-2.12.0.ipa',
-    // The Mac's other choice, an installer (every release from 2.6.0 on).
-    macosPkg: 'https://github.com/michaldaniszewski03-hash/sidekick/releases/download/v2.12.0/Sidekick-2.12.0.pkg',
-  },
-};
-
-/** 'windows' | 'macos' | 'android' | 'ios' | 'other' */
-function detectOS() {
-  const ua = navigator.userAgent || '';
-  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
-  if (/android/i.test(ua)) return 'android';
-  // iPadOS pretends to be a Mac; touch support gives it away.
-  if (/iPhone|iPad|iPod/i.test(ua) || (/Mac/i.test(platform) && navigator.maxTouchPoints > 1)) return 'ios';
-  if (/Mac/i.test(platform) || /Macintosh|Mac OS X/i.test(ua)) return 'macos';
-  if (/Win/i.test(platform) || /Windows/i.test(ua)) return 'windows';
-  return 'other';
-}
-
-const OS_INFO = {
-  windows: { label: 'Download for Windows', icon: 'desktop_windows', meta: 'Windows 10 & 11 · free' },
-  macos: { label: 'Download for Mac', icon: 'laptop_mac', meta: 'macOS 12 or newer · free' },
-  android: { label: 'Download for Android', icon: 'android', meta: 'Android 8.0 or newer · free' },
-  // An .ipa can't be installed straight from Safari, so explain first.
-  ios: { label: 'Get it for iPhone & iPad', icon: 'phone_iphone', meta: 'Installs with AltStore or Sideloadly', href: '#download' },
-  other: { label: 'Download Sidekick', icon: 'download', meta: 'Windows, macOS, Android and iPhone', href: '#download' },
-};
-
-(function setUpDownloads() {
-  const os = detectOS();
-  const info = OS_INFO[os];
-  const href = info.href || RELEASE.files[os];
-  const hero = $('#heroDownload');
-  hero.href = href;
-  $('#heroDownloadLabel').textContent = info.label;
-  $('#heroDownloadIcon').textContent = info.icon;
-  $('#navDownload').href = href;
-  $('#heroDownloadMeta').innerHTML = `${info.meta} · v${RELEASE.version} · <a href="#download">All downloads</a>`;
-  document.querySelectorAll('.dl').forEach(tile => {
-    tile.href = RELEASE.files[tile.dataset.os];
-    tile.classList.toggle('mine', tile.dataset.os === os);
-  });
-  const note = $('#releaseNote');
-  note.innerHTML = `Version ${RELEASE.version} · <a href="${RELEASE.page}">Release notes and older versions</a> · <a href="/privacy.html">Privacy</a>`;
-  if (RELEASE.files.macosPkg) {
-    $('#macPkgLink').href = RELEASE.files.macosPkg;
-    $('#macPkg').hidden = false;
-    if (os === 'macos') {
-      $('#heroDownloadMeta').innerHTML += ` · <a href="${RELEASE.files.macosPkg}">.pkg installer</a>`;
+/* ---------- wishlist: a placeholder for now. Nothing is sent or stored
+   (no email anywhere, not even in this browser); it just thanks the
+   visitor. When it's real, privacy.html and privacy.txt must say so. */
+(() => {
+  const form = $('#wishForm'), done = $('#wishDone'), err = $('#wishError'), email = $('#wishEmail');
+  form.querySelectorAll('.wish-chip').forEach(chip => chip.addEventListener('click', () => {
+    chip.setAttribute('aria-pressed', chip.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  }));
+  email.addEventListener('input', () => { err.hidden = true; });
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+      err.hidden = false;
+      email.focus();
+      return;
     }
-  }
+    form.hidden = true;
+    done.hidden = false;
+    sounds.play('accept');
+  });
 })();
 
 /* ---------- the app: Send files → ask → accept → progress, on both screens */

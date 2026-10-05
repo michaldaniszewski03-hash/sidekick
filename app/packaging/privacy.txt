@@ -115,15 +115,16 @@ WHAT WE DON'T DO
   for updates.
 - We don't sell or share data. We don't have any.
 
-THE WEBSITE AND DOWNLOADS
+THE WEBSITE
 
-The download page uses no cookies and no analytics. It remembers your light
-or dark choice and color in your browser (local storage). It loads its
-fonts from Google Fonts, so your browser connects to Google's servers
-(see Google's privacy policy). The downloads are served by GitHub (see
-GitHub's privacy statement). If you install Sidekick through another
-service, such as AltStore, SideStore, Sideloadly or the Microsoft Store,
-that service's own privacy policy applies to it.
+The website uses no cookies and no analytics. It remembers your light or
+dark choice and color in your browser (local storage). It loads its fonts
+from Google Fonts, so your browser connects to Google's servers (see
+Google's privacy policy). The wishlist form doesn't send or store anything
+yet: what you type stays in your browser and is gone when you leave. This
+policy will say so before that changes. If you install Sidekick through
+another service, such as AltStore, SideStore, Sideloadly or the Microsoft
+Store, that service's own privacy policy applies to it.
 
 CHILDREN
 

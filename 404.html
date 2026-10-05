@@ -135,7 +135,7 @@ footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space
 @media (max-width: 420px) { .actions { flex-direction: column; } }
 </style>
 <script>
-// The light/dark choice and color from the download page, if any.
+// The light/dark choice and color from the main page, if any.
 try {
   const t = localStorage.getItem('sidekick-theme');
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
@@ -181,9 +181,9 @@ try {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>
           Back to Sidekick
         </a>
-        <a class="btn tonal" href="/#download">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-          Download
+        <a class="btn tonal" href="/#wishlist">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
+          Join the wishlist
         </a>
       </div>
     </div>

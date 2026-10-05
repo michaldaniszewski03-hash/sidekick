@@ -5,7 +5,7 @@ from another (touchpad, keyboard, shortcuts), and connect over Bluetooth
 when there's no shared Wi-Fi. Everything is encrypted.
 
 One Flutter app for **Windows, macOS, Android and iOS** (`app/`), plus a
-download page (`index.html` at the top of the repo; its images live in
+website (`index.html` at the top of the repo; its images live in
 `website/` and it links them as `/website/…`). The owner hosts it at
 https://sk.dankor.digital on cyber_Folks (LiteSpeed), uploading with
 FileZilla: `index.html`, `privacy.html`, `404.html`, `.htaccess`,
@@ -13,14 +13,25 @@ FileZilla: `index.html`, `privacy.html`, `404.html`, `.htaccess`,
 uploads exactly those over FTPS whenever they change on the branch, once
 the owner adds the secrets `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD` and
 `FTP_DIR` (it skips until then). Never put the FTP login anywhere else.
+The owner has also bought **getsidekick.app** (hosting on OVHcloud); the site
+stays on sk.dankor.digital until they say to move it.
+
+**The site is a wishlist, not a download page** (the owner's call: Sidekick
+isn't out yet). No download buttons or links anywhere: the top bar, the hero
+and `#wishlist` (the old `#download` section) say "Join the wishlist", and
+`404.html` links there. The form is a placeholder for now (the owner's call):
+it sends and stores nothing, not even in the browser, and only thanks the
+visitor ("Sidekick is coming soon"), never promising an email. Both privacy
+policies say so; make it real (and update them) before it collects anything.
+The download tiles and `RELEASE` links are in git history (2.12.0) for when
+downloads come back.
 
 **Every change must work on all four platforms.**
 
 ## Keeping this file up to date
 
 **Every release adds an entry to [Versions](#versions)** (newest first) with
-its biggest features and fixes, and bumps the website links (see
-[Releasing](#releasing)). The history starts at 1.1.3.
+its biggest features and fixes (see [Releasing](#releasing)). The history starts at 1.1.3.
 
 ## Layout
 
@@ -384,8 +395,9 @@ one) without asking.
    It builds everything and publishes the release: `SidekickSetup-X.Y.Z.exe`,
    `Sidekick-X.Y.Z.dmg`, `Sidekick-X.Y.Z.pkg`, `Sidekick-X.Y.Z.apk`,
    `Sidekick-X.Y.Z.ipa`, `altstore.json`.
-3. Update `index.html` (every `X.Y.Z` link, `version:` and "Version
-   X.Y.Z"), including `RELEASE.files.macosPkg` (the `.pkg`).
+3. While the site is a wishlist there are no download links to bump. When
+   downloads come back: update `index.html` (every `X.Y.Z` link, `version:`
+   and "Version X.Y.Z"), including `RELEASE.files.macosPkg` (the `.pkg`).
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
