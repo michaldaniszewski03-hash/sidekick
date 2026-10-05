@@ -14,6 +14,7 @@ import '../platform/notifications.dart';
 import '../platform/sound.dart';
 import 'devices_page.dart';
 import 'direct_wifi.dart';
+import 'mirror_page.dart';
 import 'ping.dart';
 import 'files_page.dart';
 import 'qr_pairing.dart';
@@ -38,10 +39,13 @@ class _ShellState extends State<Shell> {
 
   AppState get state => widget.state;
 
-  static const _destinations = [
+  /// Screen Mirroring is watched on computers (phones are what's watched).
+  /// The tray panel's Settings is tab 4 there.
+  List<({IconData icon, IconData selected, String label})> get _destinations => [
     (icon: Icons.devices_outlined, selected: Icons.devices, label: 'Devices'),
     (icon: Icons.folder_outlined, selected: Icons.folder, label: 'Files'),
     (icon: Icons.mouse_outlined, selected: Icons.mouse, label: 'Remote'),
+    if (hostIsComputer) (icon: Icons.cast_outlined, selected: Icons.cast, label: 'Mirroring'),
     (icon: Icons.settings_outlined, selected: Icons.settings, label: 'Settings'),
   ];
 
@@ -56,6 +60,10 @@ class _ShellState extends State<Shell> {
       // Another device pinged this one: loud, and who.
       state.pings.listen((from) {
         if (mounted) unawaited(showPinged(context, state, from));
+      }),
+      // A computer wants to see this phone's screen.
+      state.mirrorRequests.listen((request) {
+        if (mounted) unawaited(showMirrorRequest(context, request));
       }),
       // iPhone: a network to join by hand for a direct link.
       state.manualJoins.listen((join) {
@@ -180,8 +188,11 @@ class _ShellState extends State<Shell> {
       DevicesPage(state: state, onOpen: _go),
       FilesPage(state: state, onGoToDevices: () => _go(0)),
       RemotePage(state: state, onGoToDevices: () => _go(0)),
+      if (hostIsComputer) MirrorPage(state: state, onGoToDevices: () => _go(0)),
       SettingsPage(state: state),
     ];
+    // The tab list depends on the platform (only computers have Mirroring).
+    if (_index >= pages.length) _index = pages.length - 1;
     final wide = MediaQuery.sizeOf(context).width >= 700;
     final scheme = Theme.of(context).colorScheme;
 
@@ -189,6 +200,16 @@ class _ShellState extends State<Shell> {
       listenable: state,
       builder: (context, _) => Column(
         children: [
+          if (state.mirroringTo != null)
+            MaterialBanner(
+              backgroundColor: scheme.tertiaryContainer,
+              leading: Icon(Icons.screen_share_rounded, color: scheme.onTertiaryContainer),
+              content: Text(
+                '${state.mirroringTo!.name} is watching this screen',
+                style: TextStyle(color: scheme.onTertiaryContainer),
+              ),
+              actions: [TextButton(onPressed: state.stopMirroring, child: const Text('Stop'))],
+            ),
           if (state.activeRemoteSessions.isNotEmpty)
             MaterialBanner(
               backgroundColor: scheme.tertiaryContainer,

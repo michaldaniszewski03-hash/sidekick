@@ -174,6 +174,8 @@ void main() {
     }
     await tester.tap(find.text('Remote').last);
     await shot('3-remote', waitForData: true);
+    await tester.tap(find.text('Mirroring').last);
+    await shot('4-mirroring');
     await tester.tap(find.text('Settings').last);
     await shot('5-settings');
     state.setThemeMode(ThemeMode.dark);
@@ -218,6 +220,8 @@ void main() {
     final list = find.byType(Scrollable).first;
     await tester.dragUntilVisible(find.text('What paired devices can do here'), list, const Offset(0, -200));
     await shot('iphone-settings-permissions');
+    await tester.dragUntilVisible(find.text('Let paired computers see this screen'), list, const Offset(0, -200));
+    await shot('iphone-settings-mirroring');
     expect(find.text('Control mouse and keyboard'), findsNothing);
     await tester.dragUntilVisible(find.text('Everything is encrypted'), list, const Offset(0, -200));
     await shot('iphone-settings-encryption');

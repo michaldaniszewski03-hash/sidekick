@@ -9,9 +9,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
 import android.media.MediaScannerConnection
-import android.media.MediaPlayer
+import android.media.projection.MediaProjectionManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -37,10 +36,12 @@ import java.io.IOException
  * Dart side uses for everything Android-specific: permissions, remote input,
  * the hotspot and the multicast lock.
  */
+private const val REQUEST_SCREEN = 7
+
 class MainActivity : FlutterActivity() {
     companion object {
-        /** The channel to Dart while Sidekick runs (notification buttons use it). */
-        var channel: MethodChannel? = null
+        /** The screen while it's open: screen capture needs it to ask. */
+        var current: MainActivity? = null
     }
 
     private var multicastLock: WifiManager.MulticastLock? = null
@@ -50,6 +51,11 @@ class MainActivity : FlutterActivity() {
 
     /** Another device's hotspot this phone joined (see joinHotspot). */
     private var joined: ConnectivityManager.NetworkCallback? = null
+
+    /** The engine outlives this screen (see KeepRunning.kt): borrowed, never destroyed with it. */
+    override fun provideFlutterEngine(context: Context): FlutterEngine = SidekickEngine.get(context)
+
+    override fun shouldDestroyEngineWithHost(): Boolean = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -73,8 +79,10 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // Replaces the engine's background handler (KeepRunning.kt) while
+        // this screen is open; onDestroy puts it back.
         val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "sidekick/android")
-        channel = ch
+        current = this
         ch.setMethodCallHandler { call, result ->
                 try {
                     when (call.method) {
@@ -113,15 +121,15 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
                         "playSound" -> {
-                            call.argument<String>("path")?.let { playSound(it, call.argument<Boolean>("loud") == true) }
+                            call.argument<String>("path")?.let { Sounds.playSound(it, call.argument<Boolean>("loud") == true) }
                             result.success(null)
                         }
                         "loopSound" -> {
-                            call.argument<String>("path")?.let { loopSound(it) }
+                            call.argument<String>("path")?.let { Sounds.loopSound(it) }
                             result.success(null)
                         }
                         "stopLoop" -> {
-                            stopLoop()
+                            Sounds.stopLoop()
                             result.success(null)
                         }
                         "saveToGallery" -> saveToGallery(
@@ -168,6 +176,7 @@ class MainActivity : FlutterActivity() {
                                 call.argument<String>("id") ?: "",
                                 call.argument<String>("title") ?: "",
                                 call.argument<String>("body") ?: "",
+                                (call.argument<Number>("timeout") ?: 10000).toLong(),
                             )
                             result.success(null)
                         }
@@ -197,6 +206,24 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    /** Android's "Start recording or casting with Sidekick?" (ScreenMirror.kt). */
+    private var consentReply: ((Int, Intent?) -> Unit)? = null
+
+    fun askScreenCapture(reply: (Int, Intent?) -> Unit) {
+        consentReply?.invoke(RESULT_CANCELED, null)
+        consentReply = reply
+        val manager = getSystemService(MediaProjectionManager::class.java)
+        startActivityForResult(manager.createScreenCaptureIntent(), REQUEST_SCREEN)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SCREEN) return
+        val reply = consentReply
+        consentReply = null
+        reply?.invoke(resultCode, data)
+    }
+
     /** Back on the last screen sends Sidekick to the background (still
      *  receiving, with its notification) instead of closing it. */
     override fun popSystemNavigator(): Boolean {
@@ -205,18 +232,21 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing) {
-            channel = null
-            stopService(Intent(this, SidekickService::class.java))
-        }
+        // Leaving the screen (even swiping Sidekick away) doesn't stop it:
+        // the engine and SidekickService keep running (Settings → Keep
+        // running in the background).
         hotspot?.close()
         hotspot = null
         leaveHotspot()
-        stopLoop()
         clipboardListener?.let { getSystemService(ClipboardManager::class.java).removePrimaryClipChangedListener(it) }
         clipboardListener = null
         multicastLock?.release()
         multicastLock = null
+        if (current === this) {
+            current = null
+            ScreenMirror.cancelConsent()
+            SidekickEngine.backgroundHandlers(applicationContext)
+        }
         super.onDestroy()
     }
 
@@ -392,76 +422,6 @@ class MainActivity : FlutterActivity() {
             "passphrase" to config?.preSharedKey?.trim('"'),
             "security" to "wpa2",
         )
-    }
-
-    /** Sidekick's sounds, held until they finish: a MediaPlayer nobody
-     *  holds can be garbage-collected mid-sound and go quiet. */
-    private val players = mutableSetOf<MediaPlayer>()
-
-    /** Sidekick's sounds (startup, a request, accepted, declined), on the
-     *  media volume: the "system sounds" volume is muted on many phones. */
-    /** The Ping ringtone, on repeat until [stopLoop] (the card's Found It). */
-    private var ringtone: MediaPlayer? = null
-
-    /** On the alarm volume: heard even with the phone on silent. */
-    private fun loopSound(path: String) {
-        stopLoop()
-        val player = MediaPlayer()
-        try {
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
-            player.setDataSource(path)
-            player.isLooping = true
-            player.prepare()
-            player.start()
-            ringtone = player
-        } catch (e: Exception) {
-            player.release()
-        }
-    }
-
-    private fun stopLoop() {
-        ringtone?.let {
-            try {
-                it.stop()
-            } catch (e: IllegalStateException) {
-            }
-            it.release()
-        }
-        ringtone = null
-    }
-
-    private fun playSound(path: String, loud: Boolean = false) {
-        val player = MediaPlayer()
-        players.add(player)
-        fun done(mp: MediaPlayer) {
-            players.remove(mp)
-            mp.release()
-        }
-        try {
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
-                    // A ping goes on the alarm volume: heard even with the
-                    // phone on silent, like Find My Device.
-                    .setUsage(if (loud) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
-            player.setDataSource(path)
-            player.setOnCompletionListener { done(it) }
-            player.setOnErrorListener { mp, _, _ ->
-                done(mp)
-                true
-            }
-            player.prepare()
-            player.start()
-        } catch (e: Exception) {
-            done(player)
-        }
     }
 
     /**

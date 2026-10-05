@@ -37,6 +37,45 @@ abstract final class AndroidBridge {
   static void input(Map<String, Object?> msg) => _channel.invokeMethod('input', msg).catchError((_) => null);
 }
 
+/// What doesn't need Sidekick's screen (KeepRunning.kt): it works while
+/// Sidekick runs in the background, even after it's swiped away.
+abstract final class AndroidBackground {
+  static const _channel = MethodChannel('sidekick/background');
+
+  /// Keeps Sidekick running in the background (SidekickService), or not.
+  static Future<void> keepRunning(bool on) async {
+    try {
+      await _channel.invokeMethod<void>('keepRunning', {'on': on});
+    } catch (_) {}
+  }
+
+  /// Puts [text] in the clipboard, with or without the screen.
+  static Future<bool> setClipboard(String text) async {
+    try {
+      await _channel.invokeMethod<void>('setClipboard', {'text': text});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Android isn't "optimising" Sidekick's battery (which stops it in the
+  /// background on many phones).
+  static Future<bool> batteryUnrestricted() async {
+    try {
+      return await _channel.invokeMethod<bool>('batteryUnrestricted') ?? false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<void> requestBatteryUnrestricted() async {
+    try {
+      await _channel.invokeMethod<void>('requestBatteryUnrestricted');
+    } catch (_) {}
+  }
+}
+
 /// Remote input handled by SidekickAccessibilityService.kt. It speaks the
 /// same message format as the network protocol.
 class AndroidInputInjector implements InputInjector {

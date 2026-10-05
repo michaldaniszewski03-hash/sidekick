@@ -40,7 +40,6 @@ abstract final class OfferNotifications {
     });
     try {
       await _channel.invokeMethod('requestNotifications');
-      if (Platform.isAndroid) await _channel.invokeMethod('startService');
     } catch (e) {
       debugPrint('Sidekick: notifications: $e');
     }
@@ -93,6 +92,22 @@ abstract final class OfferNotifications {
   static void showPing(String from) {
     if (!supported || WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) return;
     _call('offerDone', {'id': 'ping', 'title': 'Ping from $from', 'body': 'Open Sidekick to stop the sound'});
+  }
+
+  /// [from] wants to see this phone's screen while Sidekick isn't on
+  /// screen: opening Sidekick answers it ([ask]) or starts it.
+  static void showMirror(String from, {required bool ask}) {
+    if (!supported || WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) return;
+    _call('offerDone', {
+      'id': 'mirror',
+      'title': ask ? '$from wants to see your screen' : '$from wants to mirror your screen',
+      'body': ask ? 'Open Sidekick to answer' : 'Open Sidekick to start Screen Mirroring',
+      'timeout': 60000,
+    });
+  }
+
+  static void cancelMirror() {
+    if (supported) _call('cancelOffer', {'id': 'mirror'});
   }
 
   static void _call(String method, Map<String, Object?> args) =>

@@ -350,6 +350,47 @@ its biggest features and fixes (see [Releasing](#releasing)). The history starts
   `NSSupportsLiveActivities` is on in Info.plist. When adding objects to
   the .pbxproj by hand, use IDs nothing else has (2.7.0's first push reused
   the app icon's and Xcode called the project damaged).
+- **Screen Mirroring** (2.13.0, the owner's call: phones are watched, Mac
+  and Windows watch; computer screens may come later, their capture code
+  was set aside): the Mirroring tab exists **only on computers**
+  (`hostIsComputer`; Settings is tab 4 there, 3 on phones) and lists paired
+  phones. `core/mirror.dart`: packets of changed 64 px tiles, exact pixels
+  (lossless), zlib level 1 in a worker isolate, one binary WebSocket
+  message each on `/v1/mirror` (pinned TLS); flags say RGBA (Android) and
+  quarter turns (an iPhone app held sideways); at most two frames in
+  flight (`ack`); Fast (half size each way, the default) / Sharp switch
+  without restarting (`{t: sharp}`). The phone asks first
+  (`showMirrorRequest`: Don't allow / Always allow / Allow, a notification
+  when it's in the background), then the system asks.
+  `platform/screen_source.dart`:
+  - Android `AndroidScreen` → `ScreenMirror.kt` on the engine's
+    `sidekick/mirror`: MediaProjection consent (needs MainActivity, every
+    session), `ScreenCaptureService` (foreground, mediaProjection type,
+    Stop in its notification), a virtual display into an RGBA ImageReader,
+    resized when the phone turns, tiles compared in Kotlin.
+  - iPhone `IphoneScreen`: the **SidekickMirror** broadcast upload extension
+    (`ios/SidekickMirror/SampleHandler.swift`, its own target, bundle id
+    `….Mirror`, renamed by the TestFlight job like LiveActivity) converts
+    ReplayKit's frames with vImage, compares tiles, and answers the app over
+    a loopback TCP socket on 53319 (`BroadcastLink`: `SKB1`, then `N` /
+    `K` / `S` / `F` / `Q`). Never through the main server port. The app opens
+    the Start Broadcast sheet by tapping a hidden `RPSystemBroadcastPickerView`
+    (`startBroadcast`); Control Center's Screen Recording → Sidekick works
+    too. Extensions get ~50 MB: no extra frame copies there.
+  Tested in `test/mirror_test.dart` (pixel-exact end to end, the loopback
+  link).
+- **Always running on phones** (2.13.0): Android keeps one Flutter engine
+  outside the screen (`KeepRunning.kt` `SidekickEngine`, cached;
+  MainActivity borrows it and never destroys it), `SidekickService` is
+  sticky and doesn't stop with the task, `BootReceiver` starts it at boot,
+  Settings → Keep running in the background (pref `keepRunning`) plus a
+  battery-optimisation row. With no screen, `sidekick/android` is answered
+  by the engine's background handlers (notifications, sounds: `Sounds.kt`);
+  MainActivity takes over while open. iPhone: `KeepAlive` in AppDelegate
+  plays silence (mixes with others) and revives itself after interruptions,
+  route changes, media resets and via a 5 s watchdog. iOS still stops apps
+  swiped away and never lets one read the clipboard in the background (it's
+  checked on resume); writing what arrives works.
 - **Ping** (`/v1/ping`, the card's Ping button): the other device rings
   the owner's ringtone (`tool/sounds/ping_ringtone.mp3` → `ping.wav`, kept
   whole and loud by `prepare_sounds.py`) **on repeat until Found It!** on
@@ -401,6 +442,18 @@ one) without asking.
 4. Add the version to [Versions](#versions) below.
 
 ## Versions
+
+### 2.13.0
+- **Screen Mirroring:** a new Mirroring tab on Mac and Windows shows a
+  paired iPhone's or Android phone's screen, live and lossless (only the
+  parts that change are sent, pixel for pixel). Fast or Sharp, full screen,
+  and it turns with the phone. The phone asks first (Always allow skips
+  that), then iOS's Start Broadcast or Android's Start now.
+- **Phones stay on:** Sidekick keeps running in the background on Android
+  (even swiped away, and from the moment the phone starts) and on iPhone
+  (until it's swiped away), so what you copy on the computer lands on the
+  phone while you're in Chrome or any other app.
+- Android: request notifications and Ping now work with Sidekick closed.
 
 ### 2.12.0
 - **A panel in the tray / menu bar**, like CleanMyMac's: click Sidekick's

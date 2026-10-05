@@ -2,10 +2,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app_state.dart';
+import '../platform/android.dart';
 import '../core/bluetooth.dart';
 import '../core/models.dart';
 import '../platform/autoload.dart';
 import '../platform/clipboard.dart';
+import 'mirror_page.dart';
 import 'permissions.dart';
 import 'theme_chooser.dart';
 import 'widgets.dart';
@@ -141,6 +143,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   if (hostIsAndroid) ...[
                     const SectionLabel('Android permissions', icon: Icons.shield_outlined),
                     _Group(children: _androidPermissions()),
+                    const SectionLabel('In the background', icon: Icons.bolt_rounded),
+                    _Group(
+                      children: [
+                        SwitchListTile(
+                          secondary: const IconTile(Icons.bolt_rounded, tone: TileTone.tertiary),
+                          title: const Text('Keep running in the background'),
+                          subtitle: const Text(
+                            'Even after you swipe Sidekick away, and from the moment the phone starts. '
+                            'Shows a small notification.',
+                          ),
+                          value: state.keepRunning,
+                          onChanged: state.setKeepRunning,
+                        ),
+                        if (state.keepRunning) const _AndroidBatteryRow(),
+                      ],
+                    ),
                   ],
                   if (hostIsMacOS) ...[
                     const SectionLabel('Mac permissions', icon: Icons.shield_outlined),
@@ -263,6 +281,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     ],
                   ),
+                  // Phones are what's mirrored (computers watch, on their
+                  // Screen Mirroring tab).
+                  if (!hostIsComputer) ...[
+                    const SectionLabel('Screen Mirroring', icon: Icons.cast_rounded),
+                    MirrorSettings(state: state),
+                  ],
                   const SectionLabel('Paired devices', icon: Icons.link_rounded),
                   _Group(
                     children: [
@@ -366,6 +390,56 @@ extension on _SettingsPageState {
   /// One row per special permission, each with a button to the system screen
   /// that grants it. Status refreshes when the user comes back to the app.
   List<Widget> _androidPermissions() => androidPermissionRows();
+}
+
+/// Android stops "battery optimised" apps in the background on many
+/// phones; this asks once to let Sidekick run.
+class _AndroidBatteryRow extends StatefulWidget {
+  const _AndroidBatteryRow();
+
+  @override
+  State<_AndroidBatteryRow> createState() => _AndroidBatteryRowState();
+}
+
+class _AndroidBatteryRowState extends State<_AndroidBatteryRow> {
+  bool? _unrestricted;
+  late final AppLifecycleListener _lifecycle = AppLifecycleListener(onResume: _check);
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle;
+    _check();
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  Future<void> _check() async {
+    final value = await AndroidBackground.batteryUnrestricted();
+    if (mounted) setState(() => _unrestricted = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ok = _unrestricted ?? true;
+    return ListTile(
+      leading: IconTile(
+        ok ? Icons.battery_full_rounded : Icons.battery_alert_rounded,
+        tone: ok ? TileTone.primary : TileTone.error,
+      ),
+      title: const Text('Battery'),
+      subtitle: Text(
+        ok ? 'Unrestricted: Android leaves Sidekick running' : 'Android may stop Sidekick to save battery',
+      ),
+      trailing: ok
+          ? null
+          : FilledButton.tonal(onPressed: AndroidBackground.requestBatteryUnrestricted, child: const Text('Allow')),
+    );
+  }
 }
 
 class _Group extends StatelessWidget {

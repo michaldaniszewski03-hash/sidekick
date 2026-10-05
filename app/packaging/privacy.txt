@@ -1,5 +1,5 @@
 SIDEKICK PRIVACY POLICY
-Effective 2 October 2026 (updated for 2.6.2)
+Effective 5 October 2026 (updated for 2.13.0)
 
 THE SHORT VERSION
 
@@ -45,8 +45,13 @@ On Windows and Mac, closing Sidekick's window keeps it running in the tray
 there to stop it. With Auto-load (on unless you turn it off in Settings), it
 also starts in the tray when you log in: Windows lists it under startup
 apps, and the Mac keeps a small login item in your Library's LaunchAgents
-folder. On Android, a small "Ready to receive" notification shows while it
-runs in the background.
+folder. Phones keep Sidekick running in the background too, so a copy or a
+file from your computer still reaches them while you use other apps: on
+Android with a small "Ready to receive" notification (it also starts when
+the phone starts; Settings → Keep running turns it off), on iPhone by
+playing silence, which iOS shows as nothing and which mixes with your own
+audio. An iPhone app swiped away from the app switcher stops anyway: iOS
+allows nothing else.
 
 Paired devices. A device can only do anything with yours after you pair
 them with a 6-digit code or a QR code. Paired devices can then:
@@ -65,7 +70,14 @@ them with a 6-digit code or a QR code. Paired devices can then:
   it's back, for a few minutes. What password managers mark as secret is
   never sent, and Sidekick keeps no copy;
 - ping your device: it rings until you tap Found It! on it (on Android at
-  alarm volume, so you hear it on silent).
+  alarm volume, so you hear it on silent);
+- see your phone's screen (Screen Mirroring, from a Mac or Windows PC):
+  only after you allow it on the phone each time (or choose Always allow
+  for that computer), and then the system's own question: Start Broadcast
+  on iPhone, Start now on Android. Everything on the screen goes to that
+  computer, live and encrypted, until either of you stops it; the phone
+  shows that it's being shared. Nothing is recorded or kept. Turn it off in
+  Settings under "Let paired computers see this screen".
 You can unpair a device at any time.
 
 Encryption. Everything between paired devices is encrypted: over Wi-Fi with
@@ -81,6 +93,13 @@ PERMISSIONS, AND WHY
 - Notifications (iPhone and Android): to show a file request while
   Sidekick is in the background, with Accept and Decline, and on Android
   its progress and the "Ready to receive" notice.
+- Screen capture (iPhone and Android): only for Screen Mirroring, after
+  you allow it each time (Android's "Start now", iOS's Start Broadcast).
+  On iPhone a small broadcast extension sends the screen to the Sidekick
+  app on the same phone, which passes it to the computer.
+- Background running (iPhone and Android): to stay reachable while you use
+  other apps. Android may ask to stop optimising Sidekick's battery use
+  (Settings → Keep running); the iPhone plays silence in the background.
 - Camera (iPhone and Android): only to scan a pairing QR code. The picture
   is read on the device and is never saved or sent.
 - Photos (iPhone): only the photos you pick to send, and adding the photos

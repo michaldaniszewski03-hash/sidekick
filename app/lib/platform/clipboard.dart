@@ -68,6 +68,8 @@ class ClipboardWatcher {
     } else if (Platform.isIOS) {
       unawaited(_iosState().then((s) => _lastCount ??= s?.count));
       _timer = Timer.periodic(const Duration(seconds: 1), (_) => _checkIos());
+      // A copy made in another app goes the moment Sidekick is opened.
+      _lifecycle = AppLifecycleListener(onResume: () => unawaited(_checkIos()));
     }
   }
 

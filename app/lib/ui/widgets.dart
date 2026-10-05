@@ -46,6 +46,9 @@ DevicePlatform? debugHostPlatform;
 
 bool get hostIsIOS => debugHostPlatform == null ? Platform.isIOS : debugHostPlatform == DevicePlatform.ios;
 bool get hostIsAndroid => debugHostPlatform == null ? Platform.isAndroid : debugHostPlatform == DevicePlatform.android;
+
+/// A Mac or a Windows PC (not a phone).
+bool get hostIsComputer => !hostIsIOS && !hostIsAndroid;
 bool get hostIsMacOS => debugHostPlatform == null ? Platform.isMacOS : debugHostPlatform == DevicePlatform.macos;
 
 /// `Platform.operatingSystem`, or the overridden platform's name.

@@ -3,6 +3,7 @@ import AVFoundation
 import Flutter
 import NetworkExtension
 import Photos
+import ReplayKit
 import UserNotifications
 import UIKit
 
@@ -119,6 +120,12 @@ import UIKit
             total: (args["total"] as? NSNumber)?.int64Value ?? 0, status: args["status"] as? String ?? "",
             end: call.method == "liveEnd", failed: args["failed"] as? Bool ?? false)
           result(nil)
+        case "startBroadcast":
+          // Screen Mirroring: iOS's "Start Broadcast" sheet for Sidekick's
+          // broadcast extension (SidekickMirror), which sends the screen to
+          // the app on 127.0.0.1 (lib/platform/screen_source.dart).
+          BroadcastPicker.open()
+          result(nil)
         case "joinHotspot":
           // Another device's network for a direct link (an Android phone's
           // hotspot, a Windows PC's Wi-Fi Direct network). iOS asks "Join?".
@@ -182,21 +189,53 @@ final class Sounds {
 }
 
 /// Keeps Sidekick running while other apps are open, so a paired computer
-/// can still reach the iPhone (sending files, browsing). iOS
+/// can still reach the iPhone (sending files, browsing, the clipboard). iOS
 /// suspends apps in the background otherwise. It plays silence, mixed with
 /// other audio, so nothing you listen to is interrupted.
+///
+/// The silence must never stop: iOS suspends Sidekick seconds after it
+/// does. AVAudioEngine stops by itself when the audio route changes
+/// (AirPods, a Bluetooth speaker, a car), after a call or Siri, and when
+/// the media services reset; each of those restarts it, and a watchdog
+/// checks every few seconds for anything else.
 final class KeepAlive {
   private var engine: AVAudioEngine?
   private var player: AVAudioPlayerNode?
-  private var observer: NSObjectProtocol?
-  var running: Bool { engine != nil }
+  private var observers: [NSObjectProtocol] = []
+  private var engineObserver: NSObjectProtocol?
+  private var watchdog: Timer?
+  private var wanted = false
+  private var bridge: UIBackgroundTaskIdentifier = .invalid
+  var running: Bool { engine?.isRunning == true && player?.isPlaying == true }
 
   func set(_ on: Bool) {
-    if on { start() } else { stop() }
+    wanted = on
+    if on {
+      observe()
+      revive()
+      if watchdog == nil {
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
+          guard let self = self, self.wanted, !self.running else { return }
+          self.revive()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        watchdog = timer
+      }
+    } else {
+      watchdog?.invalidate()
+      watchdog = nil
+      for o in observers { NotificationCenter.default.removeObserver(o) }
+      observers = []
+      teardown()
+      try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
   }
 
-  private func start() {
-    guard engine == nil else { return }
+  /// Starts the silence, or starts it again: a fresh engine every time,
+  /// since one that stopped on a route change may have a stale format.
+  private func revive() {
+    guard wanted else { return }
+    teardown()
     let session = AVAudioSession.sharedInstance()
     do {
       try session.setCategory(.playback, options: [.mixWithOthers])
@@ -208,10 +247,10 @@ final class KeepAlive {
     let player = AVAudioPlayerNode()
     engine.attach(player)
     let format = engine.mainMixerNode.outputFormat(forBus: 0)
-    engine.connect(player, to: engine.mainMixerNode, format: format)
     guard format.sampleRate > 0,
       let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(format.sampleRate))
     else { return }
+    engine.connect(player, to: engine.mainMixerNode, format: format)
     silence.frameLength = silence.frameCapacity  // all zeros
     do {
       try engine.start()
@@ -222,28 +261,70 @@ final class KeepAlive {
     player.play()
     self.engine = engine
     self.player = player
-    // A phone call or Siri interrupts the session; pick up again after.
-    observer = NotificationCenter.default.addObserver(
-      forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
-    ) { [weak self] note in
-      guard let self = self,
-        let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-        AVAudioSession.InterruptionType(rawValue: raw) == .ended
-      else { return }
-      try? AVAudioSession.sharedInstance().setActive(true)
-      try? self.engine?.start()
-      self.player?.play()
-    }
+    // The engine stops itself when the route or hardware format changes.
+    engineObserver = NotificationCenter.default.addObserver(
+      forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+    ) { [weak self] _ in self?.revive() }
   }
 
-  private func stop() {
-    if let observer = observer { NotificationCenter.default.removeObserver(observer) }
-    observer = nil
-    player?.stop()
+  private func teardown() {
+    if let o = engineObserver { NotificationCenter.default.removeObserver(o) }
+    engineObserver = nil
     engine?.stop()
+    player?.stop()
     player = nil
     engine = nil
-    try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+  }
+
+  private func observe() {
+    guard observers.isEmpty else { return }
+    let center = NotificationCenter.default
+    // A call or Siri interrupts the session; start again when it's over
+    // (whether or not iOS says to resume).
+    observers.append(
+      center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) {
+        [weak self] note in
+        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+          AVAudioSession.InterruptionType(rawValue: raw) == .ended
+        else { return }
+        self?.revive()
+      })
+    observers.append(
+      center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) {
+        [weak self] _ in self?.revive()
+      })
+    observers.append(
+      center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) {
+        [weak self] _ in
+        guard let self = self, !self.running else { return }
+        self.revive()
+      })
+    // Going to the background: make sure the silence is playing, with a
+    // little borrowed time in case it has to be started again.
+    observers.append(
+      center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) {
+        [weak self] _ in
+        guard let self = self else { return }
+        if self.bridge == .invalid {
+          self.bridge = UIApplication.shared.beginBackgroundTask(withName: "sidekick.keepalive") { [weak self] in
+            self?.endBridge()
+          }
+        }
+        if !self.running { self.revive() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.endBridge() }
+      })
+    observers.append(
+      center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) {
+        [weak self] _ in
+        guard let self = self, !self.running else { return }
+        self.revive()
+      })
+  }
+
+  private func endBridge() {
+    guard bridge != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(bridge)
+    bridge = .invalid
   }
 }
 
@@ -414,6 +495,39 @@ final class LiveTransfers {
       Task { await activity.end(content, dismissalPolicy: .after(Date().addingTimeInterval(4))) }
     } else {
       Task { await activity.update(content) }
+    }
+  }
+}
+
+/// Opens iOS's "Start Broadcast" sheet for Sidekick's broadcast extension.
+/// iOS only opens it from a tap on its own picker button, so the app adds an
+/// invisible picker and taps it.
+enum BroadcastPicker {
+  private static var picker: RPSystemBroadcastPickerView?
+
+  static func open() {
+    DispatchQueue.main.async {
+      picker?.removeFromSuperview()
+      let view = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+      view.preferredExtension = (Bundle.main.bundleIdentifier ?? "dev.sidekick.sidekick") + ".Mirror"
+      view.showsMicrophoneButton = false
+      view.alpha = 0.011
+      view.isUserInteractionEnabled = false
+      let window = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap { $0.windows }
+        .first { $0.isKeyWindow }
+      window?.addSubview(view)
+      picker = view
+      for case let button as UIButton in view.subviews {
+        button.sendActions(for: .touchUpInside)
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+        if picker === view {
+          view.removeFromSuperview()
+          picker = nil
+        }
+      }
     }
   }
 }

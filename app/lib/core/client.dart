@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:web_socket_channel/io.dart';
 
@@ -551,6 +552,29 @@ class PeerClient {
     return (jsonDecode(utf8.decode(res.body)) as Map<String, dynamic>)['path'] as String;
   }
 
+  // ------------------------------------------------------------ mirroring
+
+  /// Watches this phone's screen (Screen Mirroring). [sharp]: every pixel.
+  Future<MirrorStream> openMirror({bool sharp = false}) async {
+    if (ble != null) {
+      throw SidekickException('Screen Mirroring needs Wi-Fi (or direct Wi-Fi). Bluetooth is far too slow for it.');
+    }
+    await _getJson('/v1/mirror/status');
+    final channel = IOWebSocketChannel.connect(
+      Uri(scheme: 'wss', host: host, port: port, path: '/v1/mirror', queryParameters: {if (sharp) 'sharp': '1'}),
+      headers: {if (token != null) 'authorization': 'Bearer $token'},
+      pingInterval: const Duration(seconds: 10),
+      connectTimeout: const Duration(seconds: 4),
+      customClient: _http,
+    );
+    try {
+      await channel.ready;
+    } catch (_) {
+      throw SidekickException("Couldn't start Screen Mirroring. Is it turned on in Sidekick's settings on the phone?");
+    }
+    return MirrorStream._(channel);
+  }
+
   // ------------------------------------------------------------ input
 
   Future<InputSession> openInput() async {
@@ -630,6 +654,53 @@ class InputSession {
 
   Future<void> close() async {
     _flush?.cancel();
+    await _channel.sink.close();
+  }
+}
+
+/// A phone's screen, as it arrives. Binary messages are compressed
+/// packets (core/mirror.dart), to be acknowledged with [ack] once shown;
+/// text messages say what's happening.
+class MirrorStream {
+  MirrorStream._(this._channel) {
+    _channel.stream.listen(
+      (data) {
+        if (data is List<int>) {
+          _frames.add(data is Uint8List ? data : Uint8List.fromList(data));
+        } else if (data is String) {
+          try {
+            final msg = jsonDecode(data) as Map<String, dynamic>;
+            _messages.add((type: '${msg['t']}', message: '${msg['msg'] ?? ''}'));
+          } catch (_) {}
+        }
+      },
+      onDone: () {
+        unawaited(_frames.close());
+        unawaited(_messages.close());
+      },
+      onError: (Object _) {},
+    );
+  }
+
+  final IOWebSocketChannel _channel;
+  final _frames = StreamController<Uint8List>();
+  // Kept until read: "status" comes right away, before anyone may listen.
+  final _messages = StreamController<({String type, String message})>();
+
+  /// Compressed packets, in order (each one builds on the ones before).
+  Stream<Uint8List> get frames => _frames.stream;
+
+  /// `status` (waiting to be allowed), `started`, or `error`.
+  Stream<({String type, String message})> get messages => _messages.stream;
+
+  void ack() => _channel.sink.add('{"t":"ack"}');
+
+  void keyframe() => _channel.sink.add('{"t":"keyframe"}');
+
+  /// Every pixel, or half the size each way (faster), without starting over.
+  void sharp(bool on) => _channel.sink.add(jsonEncode({'t': 'sharp', 'on': on}));
+
+  Future<void> close() async {
     await _channel.sink.close();
   }
 }

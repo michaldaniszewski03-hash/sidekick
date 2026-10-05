@@ -23,6 +23,8 @@
 		5E1DE0E2A7C24F0100C0FFEE /* TransferActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1DE0E0A7C24F0100C0FFEE /* TransferActivity.swift */; };
 		5E1DE0E4A7C24F0100C0FFEE /* SidekickLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1DE0E3A7C24F0100C0FFEE /* SidekickLive.swift */; };
 		5E1DE0E7A7C24F0100C0FFEE /* SidekickLive.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5E1DE101A7C24F0100C0FFEE /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1DE100A7C24F0100C0FFEE /* SampleHandler.swift */; };
+		5E1DE104A7C24F0100C0FFEE /* SidekickMirror.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5E1DE103A7C24F0100C0FFEE /* SidekickMirror.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +41,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 5E1DE0E9A7C24F0100C0FFEE;
 			remoteInfo = SidekickLive;
+		};
+		5E1DE10AA7C24F0100C0FFEE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E1DE106A7C24F0100C0FFEE;
+			remoteInfo = SidekickMirror;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -60,6 +69,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				5E1DE0E7A7C24F0100C0FFEE /* SidekickLive.appex in Embed Foundation Extensions */,
+				5E1DE104A7C24F0100C0FFEE /* SidekickMirror.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -91,6 +101,9 @@
 		5E1DE0E3A7C24F0100C0FFEE /* SidekickLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidekickLive.swift; sourceTree = "<group>"; };
 		5E1DE0E5A7C24F0100C0FFEE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SidekickLive.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E1DE100A7C24F0100C0FFEE /* SampleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleHandler.swift; sourceTree = "<group>"; };
+		5E1DE102A7C24F0100C0FFEE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5E1DE103A7C24F0100C0FFEE /* SidekickMirror.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SidekickMirror.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -103,6 +116,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5E1DE0EBA7C24F0100C0FFEE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E1DE108A7C24F0100C0FFEE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -140,6 +160,7 @@
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				5E1DE0E8A7C24F0100C0FFEE /* SidekickLive */,
+				5E1DE105A7C24F0100C0FFEE /* SidekickMirror */,
 			);
 			sourceTree = "<group>";
 		};
@@ -149,6 +170,7 @@
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
 				5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */,
+				5E1DE103A7C24F0100C0FFEE /* SidekickMirror.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -180,6 +202,15 @@
 				5E1DE0E5A7C24F0100C0FFEE /* Info.plist */,
 			);
 			path = SidekickLive;
+			sourceTree = "<group>";
+		};
+		5E1DE105A7C24F0100C0FFEE /* SidekickMirror */ = {
+			isa = PBXGroup;
+			children = (
+				5E1DE100A7C24F0100C0FFEE /* SampleHandler.swift */,
+				5E1DE102A7C24F0100C0FFEE /* Info.plist */,
+			);
+			path = SidekickMirror;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -218,6 +249,7 @@
 			);
 			dependencies = (
 				5E1DE0EFA7C24F0100C0FFEE /* PBXTargetDependency */,
+				5E1DE10BA7C24F0100C0FFEE /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -244,6 +276,23 @@
 			productReference = 5E1DE0E6A7C24F0100C0FFEE /* SidekickLive.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		5E1DE106A7C24F0100C0FFEE /* SidekickMirror */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E1DE10CA7C24F0100C0FFEE /* Build configuration list for PBXNativeTarget "SidekickMirror" */;
+			buildPhases = (
+				5E1DE107A7C24F0100C0FFEE /* Sources */,
+				5E1DE108A7C24F0100C0FFEE /* Frameworks */,
+				5E1DE109A7C24F0100C0FFEE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SidekickMirror;
+			productName = SidekickMirror;
+			productReference = 5E1DE103A7C24F0100C0FFEE /* SidekickMirror.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -263,6 +312,9 @@
 						LastSwiftMigration = 1100;
 					};
 					5E1DE0E9A7C24F0100C0FFEE = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					5E1DE106A7C24F0100C0FFEE = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -286,6 +338,7 @@
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 				5E1DE0E9A7C24F0100C0FFEE /* SidekickLive */,
+				5E1DE106A7C24F0100C0FFEE /* SidekickMirror */,
 			);
 		};
 /* End PBXProject section */
@@ -311,6 +364,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5E1DE0ECA7C24F0100C0FFEE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E1DE109A7C24F0100C0FFEE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -384,6 +444,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E1DE107A7C24F0100C0FFEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E1DE101A7C24F0100C0FFEE /* SampleHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -396,6 +464,11 @@
 			isa = PBXTargetDependency;
 			target = 5E1DE0E9A7C24F0100C0FFEE /* SidekickLive */;
 			targetProxy = 5E1DE0EEA7C24F0100C0FFEE /* PBXContainerItemProxy */;
+		};
+		5E1DE10BA7C24F0100C0FFEE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E1DE106A7C24F0100C0FFEE /* SidekickMirror */;
+			targetProxy = 5E1DE10AA7C24F0100C0FFEE /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -772,6 +845,79 @@
 			};
 			name = Profile;
 		};
+		5E1DE10DA7C24F0100C0FFEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				INFOPLIST_FILE = SidekickMirror/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick.Mirror;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		5E1DE10EA7C24F0100C0FFEE /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				INFOPLIST_FILE = SidekickMirror/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick.Mirror;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5E1DE10FA7C24F0100C0FFEE /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				INFOPLIST_FILE = SidekickMirror/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.sidekick.sidekick.Mirror;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -811,6 +957,16 @@
 				5E1DE0F1A7C24F0100C0FFEE /* Debug */,
 				5E1DE0F2A7C24F0100C0FFEE /* Release */,
 				5E1DE0F3A7C24F0100C0FFEE /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E1DE10CA7C24F0100C0FFEE /* Build configuration list for PBXNativeTarget "SidekickMirror" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E1DE10DA7C24F0100C0FFEE /* Debug */,
+				5E1DE10EA7C24F0100C0FFEE /* Release */,
+				5E1DE10FA7C24F0100C0FFEE /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

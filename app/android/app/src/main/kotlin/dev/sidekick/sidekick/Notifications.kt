@@ -113,7 +113,7 @@ object Notifications {
         manager(context).notify(idFor(id), n)
     }
 
-    fun done(context: Context, id: String, title: String, body: String) {
+    fun done(context: Context, id: String, title: String, body: String, timeout: Long = 10_000) {
         channels(context)
         val n = Notification.Builder(context, REQUESTS)
             .setSmallIcon(R.drawable.ic_stat_sidekick)
@@ -122,7 +122,7 @@ object Notifications {
             .setContentIntent(openApp(context))
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
-            .setTimeoutAfter(10_000)
+            .setTimeoutAfter(timeout)
             .build()
         manager(context).notify(idFor(id), n)
     }
@@ -135,7 +135,7 @@ class OfferActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra("id") ?: return
         val action = intent.getStringExtra("action") ?: return
-        val channel = MainActivity.channel
+        val channel = SidekickEngine.android
         if (channel == null) {
             // Sidekick isn't running any more: nobody to answer.
             Notifications.cancel(context, id)
@@ -148,8 +148,11 @@ class OfferActionReceiver : BroadcastReceiver() {
 
 /**
  * Keeps Sidekick running while it's in the background, with a small
- * "Ready to receive" notification. It stops with the app: swiping Sidekick
- * away (stopWithTask) or leaving it.
+ * "Ready to receive" notification: after Home, after Sidekick is swiped away
+ * from recent apps, and from boot (BootReceiver). It starts Sidekick's engine
+ * itself when there's no screen (see KeepRunning.kt), and Android restarts
+ * it if it has to stop it. Settings → Keep running in the background turns
+ * it off.
  */
 class SidekickService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
@@ -163,6 +166,7 @@ class SidekickService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        SidekickEngine.holdMulticast(this)
         val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
         // High performance, not low latency: the low-latency lock only works
         // while the app is on screen, and this is for when it isn't.
@@ -181,6 +185,7 @@ class SidekickService : Service() {
     override fun onDestroy() {
         wifiLock?.let { if (it.isHeld) it.release() }
         wifiLock = null
+        SidekickEngine.releaseMulticast()
         super.onDestroy()
     }
 
@@ -191,11 +196,8 @@ class SidekickService : Service() {
         } else {
             startForeground(Notifications.STATUS_ID, n)
         }
-        return START_NOT_STICKY
-    }
-
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        stopSelf()
-        super.onTaskRemoved(rootIntent)
+        // No screen (boot, or Android restarted the service): start Sidekick.
+        SidekickEngine.get(applicationContext)
+        return START_STICKY
     }
 }

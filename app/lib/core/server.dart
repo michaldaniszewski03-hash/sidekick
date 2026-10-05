@@ -9,23 +9,30 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_web_socket/shelf_web_socket.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../platform/files.dart';
 import '../platform/hotspot.dart';
 import '../platform/input.dart';
+import '../platform/screen_source.dart';
 import 'ble_protocol.dart';
 import 'crypto.dart';
+import 'mirror.dart';
 import 'models.dart';
 import 'trust.dart';
 
 /// What this device lets paired peers do. Mirrors the toggles in Settings.
 class Permissions {
-  const Permissions({this.files = true, this.input = true});
+  const Permissions({this.files = true, this.input = true, this.mirror = true});
   final bool files;
   final bool input;
 
-  Permissions copyWith({bool? files, bool? input}) =>
-      Permissions(files: files ?? this.files, input: input ?? this.input);
+  /// Screen Mirroring of this computer (it still asks each time, unless
+  /// the viewer is always allowed).
+  final bool mirror;
+
+  Permissions copyWith({bool? files, bool? input, bool? mirror}) =>
+      Permissions(files: files ?? this.files, input: input ?? this.input, mirror: mirror ?? this.mirror);
 }
 
 sealed class ServerEvent {}
@@ -198,6 +205,13 @@ class RemoteSessionChanged extends ServerEvent {
   final bool active;
 }
 
+/// This screen started or stopped being mirrored to [peer].
+class MirrorSessionChanged extends ServerEvent {
+  MirrorSessionChanged(this.peer, {required this.active});
+  final TrustedPeer peer;
+  final bool active;
+}
+
 /// The HTTP + WebSocket server every Sidekick device runs.
 ///
 /// Unauthenticated routes: `GET /v1/info`, `POST /v1/pair/request`,
@@ -217,7 +231,11 @@ class SidekickServer {
     bool Function()? askBeforeReceiving,
     bool Function()? shareClipboard,
     bool Function()? ringing,
-  }) : askBeforeReceiving = askBeforeReceiving ?? (() => true),
+    ScreenSource? screen,
+    Future<bool> Function(TrustedPeer peer)? approveMirror,
+  }) : screen = screen ?? ScreenSource.forCurrentPlatform(),
+       approveMirror = approveMirror ?? ((_) async => false),
+       askBeforeReceiving = askBeforeReceiving ?? (() => true),
        ringing = ringing ?? (() => false),
        shareClipboard = shareClipboard ?? (() => true),
        inputReady = inputReady ?? (() async => input.supported),
@@ -251,6 +269,21 @@ class SidekickServer {
   /// A ping is ringing here until someone taps Found It: another one is
   /// refused (409), and the device that sent it says so.
   final bool Function() ringing;
+
+  /// This phone's screen, for Screen Mirroring.
+  final ScreenSource screen;
+
+  /// Asks the person at this computer whether [peer] may see the screen.
+  final Future<bool> Function(TrustedPeer peer) approveMirror;
+
+  /// The one mirroring session there can be at a time.
+  _MirrorSession? _mirror;
+
+  /// Who's watching this screen right now, if anyone.
+  TrustedPeer? get mirroringTo => _mirror?.peer;
+
+  /// Ends mirroring from this side (the Stop button).
+  void stopMirroring() => _mirror?.close();
 
   /// The most text a clipboard may carry (Bluetooth can take it too).
   static const maxClipboard = 256 * 1024;
@@ -381,6 +414,8 @@ class SidekickServer {
       ..post('/v1/transfer/cancel', _authed(_cancelOffer, (p) => p.files))
       ..get('/v1/input/status', _authed(_inputStatus, (p) => p.input))
       ..get('/v1/input', _authed(_inputSocket, (p) => p.input))
+      ..get('/v1/mirror/status', _authed(_mirrorStatus, (p) => p.mirror))
+      ..get('/v1/mirror', _authed(_mirrorSocket, (p) => p.mirror))
       ..post('/v1/link/hotspot', _authed(_linkHotspot))
       ..post('/v1/link/join', _authed(_linkJoin))
       ..post('/v1/link/release', _authed(_linkRelease));
@@ -905,6 +940,110 @@ class SidekickServer {
     return _error(503, "${me.name} hasn't allowed remote control yet. On ${me.name}, open Sidekick → $where.");
   }
 
+  // -------------------------------------------------------------- mirroring
+
+  /// Can this screen be mirrored? Asked before the WebSocket, so the viewer
+  /// gets a clear reason instead of a failed upgrade.
+  Response _mirrorStatus(Request r) {
+    if (!screen.supported) return _error(404, 'Only iPhones and Android phones can be mirrored.');
+    final busy = _mirror;
+    if (busy != null && busy.peer.id != _peer(r).id) {
+      return _error(409, 'This screen is already being mirrored to ${busy.peer.name}.');
+    }
+    return _json({'ok': true});
+  }
+
+  /// The mirroring stream (see core/mirror.dart). `?sharp=1`: every pixel.
+  FutureOr<Response> _mirrorSocket(Request r) {
+    final status = _mirrorStatus(r);
+    if (status.statusCode != 200) return status;
+    final peer = _peer(r);
+    final sharp = r.url.queryParameters['sharp'] == '1';
+    return webSocketHandler((WebSocketChannel channel, _) {
+      unawaited(_runMirror(peer, channel, sharp));
+    })(r);
+  }
+
+  Future<void> _runMirror(TrustedPeer peer, WebSocketChannel channel, bool sharp) async {
+    // A viewer reconnecting (e.g. for the sharper picture) replaces itself.
+    _mirror?.close();
+    final session = _mirror = _MirrorSession(peer, channel);
+    void say(String type, [String message = '']) {
+      if (!session.closed) channel.sink.add(jsonEncode({'t': type, 'msg': message}));
+    }
+
+    var started = false;
+    channel.stream.listen(
+      (data) {
+        if (data is! String) return;
+        try {
+          final msg = jsonDecode(data);
+          if (msg is! Map) return;
+          if (msg['t'] == 'ack') session.acked();
+          if (msg['t'] == 'keyframe') unawaited(screen.keyframe());
+          if (msg['t'] == 'sharp' && started) unawaited(screen.setSharp(msg['on'] == true));
+        } catch (_) {}
+      },
+      onDone: session.close,
+      onError: (Object _) => session.close(),
+    );
+
+    MirrorZip? zip;
+    try {
+      say('status', 'Waiting for ${self().name} to allow it…');
+      final allowed = await approveMirror(peer).timeout(const Duration(seconds: 60), onTimeout: () => false);
+      if (session.closed) return;
+      if (!allowed) {
+        say('error', "${self().name} didn't allow mirroring.");
+        return;
+      }
+      say('status', '${screen.startHint}…');
+      try {
+        await screen.start(sharp: sharp, viewer: peer.name);
+      } on MirrorException catch (e) {
+        say('error', e.message);
+        return;
+      }
+      started = true;
+      _events.add(MirrorSessionChanged(peer, active: true));
+      say('started');
+      zip = await MirrorZip.start();
+      var lastCursor = -2;
+      while (!session.closed) {
+        // Stop the moment the viewer is unpaired.
+        if (trust.byId(peer.id)?.token != peer.token) break;
+        // Never more than two frames ahead of what the viewer has shown:
+        // it always gets the newest picture, never a queue of old ones.
+        await session.room();
+        if (session.closed) break;
+        final packet = await screen.frame();
+        if (packet == null) break;
+        final cursor = MirrorPacket.cursorOf(packet);
+        if (MirrorPacket.tileCountOf(packet) == 0 && cursor == lastCursor) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          continue;
+        }
+        lastCursor = cursor;
+        final z = await zip.compress(packet);
+        if (session.closed) break;
+        session.sent();
+        channel.sink.add(z);
+      }
+    } on MirrorException catch (e) {
+      say('error', e.message);
+    } catch (e) {
+      say('error', 'Mirroring stopped: $e');
+    } finally {
+      zip?.close();
+      if (started) {
+        await screen.stop();
+        _events.add(MirrorSessionChanged(peer, active: false));
+      }
+      if (identical(_mirror, session)) _mirror = null;
+      session.close();
+    }
+  }
+
   FutureOr<Response> _inputSocket(Request r) async {
     if (!await inputReady()) return _error(503, "This device hasn't allowed remote control yet.");
     final peer = _peer(r);
@@ -929,5 +1068,46 @@ class SidekickServer {
         cancelOnError: true,
       );
     }, pingInterval: const Duration(seconds: 10))(r);
+  }
+}
+
+/// One viewer watching this screen, with flow control: at most two frames
+/// on their way at a time.
+class _MirrorSession {
+  _MirrorSession(this.peer, this.channel);
+  final TrustedPeer peer;
+  final WebSocketChannel channel;
+  bool closed = false;
+  int _inFlight = 0;
+  Completer<void>? _room;
+
+  void sent() => _inFlight++;
+
+  void acked() {
+    if (_inFlight > 0) _inFlight--;
+    _room?.complete();
+    _room = null;
+  }
+
+  /// Waits until fewer than two frames are on their way (or a viewer that
+  /// stopped answering has had a few seconds).
+  Future<void> room() async {
+    if (_inFlight < 2 || closed) return;
+    final c = _room = Completer<void>();
+    await c.future.timeout(
+      const Duration(seconds: 3),
+      onTimeout: () {
+        _inFlight = 0;
+        _room = null;
+      },
+    );
+  }
+
+  void close() {
+    if (closed) return;
+    closed = true;
+    _room?.complete();
+    _room = null;
+    unawaited(channel.sink.close());
   }
 }
