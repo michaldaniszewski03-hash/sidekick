@@ -1,5 +1,5 @@
-# Sidekick's website on cyber_Folks (LiteSpeed / Apache).
-# Upload this next to index.html (the subdomain's root folder).
+# Sidekick's website (getsidekick.app, OVHcloud; Apache).
+# Upload this next to index.html (the site's root folder, "www").
 
 # Any address that doesn't exist shows 404.html, at the same address (no
 # redirect), with a real "404 Not Found" status.

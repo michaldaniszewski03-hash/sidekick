@@ -695,6 +695,7 @@ section { scroll-margin-top: 80px; }
 .wish-field .icon { color: var(--primary); }
 .wish-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 16px; }
 .wish-row .btn { height: 56px; }
+.wish-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .wish-error { margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--error, #b3261e); }
 .wish-done {
   position: relative; display: flex; align-items: center; gap: 16px; margin-top: 28px; max-width: 640px;
@@ -1060,8 +1061,8 @@ footer nav a:hover { color: var(--on-surface); }
 
   <!-- ============================================================ WISHLIST -->
   <!-- Sidekick isn't out yet: the page collects interest instead of offering
-       downloads. The form is a placeholder for now: it sends and stores
-       nothing (privacy.html says so), it only thanks the visitor. -->
+       downloads. The form posts to wishlist.php, which emails "Got your
+       email!" and once more at launch (privacy.html says so). -->
   <section class="section" id="wishlist" style="padding-top:0">
     <div class="wrap">
       <div class="cta-card reveal">
@@ -1082,16 +1083,18 @@ footer nav a:hover { color: var(--on-surface); }
             </label>
             <button class="btn btn-filled" type="submit"><span class="icon">favorite</span>Join the wishlist</button>
           </div>
+          <!-- Left empty by people; bots fill it in. -->
+          <label class="wish-trap" aria-hidden="true">Website <input name="website" tabindex="-1" autocomplete="off"></label>
           <p class="wish-error" id="wishError" role="alert" hidden>That doesn't look like an email address.</p>
         </form>
         <div class="wish-done" id="wishDone" hidden>
-          <span class="wish-check"><span class="icon">favorite</span></span>
+          <span class="wish-check"><span class="icon" id="wishDoneIcon">favorite</span></span>
           <div>
-            <b>Thanks for your interest!</b>
-            <p>Sidekick is coming soon. Keep an eye on this page.</p>
+            <b id="wishDoneTitle">You're on the list!</b>
+            <p id="wishDoneText">We'll remind you when Sidekick comes out.</p>
           </div>
         </div>
-        <p class="fine">Coming soon · <a href="/privacy.html">Privacy</a></p>
+        <p class="fine">One email now, one when Sidekick is out. Nothing else · <a href="/privacy.html">Privacy</a></p>
       </div>
     </div>
   </section>
@@ -1239,26 +1242,74 @@ function snack(msg) {
   snackTimer = setTimeout(() => snackbar.classList.remove('show'), 3200);
 }
 
-/* ---------- wishlist: a placeholder for now. Nothing is sent or stored
-   (no email anywhere, not even in this browser); it just thanks the
-   visitor. When it's real, privacy.html and privacy.txt must say so. */
+/* ---------- wishlist: posts to wishlist.php, which puts the address on
+   the list and emails "Got your email!". Coming back from the email's
+   remove link (?wishlist=removed) says so. */
 (() => {
   const form = $('#wishForm'), done = $('#wishDone'), err = $('#wishError'), email = $('#wishEmail');
+  const button = form.querySelector('button[type="submit"]');
+  const loaded = Date.now();
   form.querySelectorAll('.wish-chip').forEach(chip => chip.addEventListener('click', () => {
     chip.setAttribute('aria-pressed', chip.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
   }));
   email.addEventListener('input', () => { err.hidden = true; });
-  form.addEventListener('submit', e => {
+
+  function show(icon, title, text) {
+    $('#wishDoneIcon').textContent = icon;
+    $('#wishDoneTitle').textContent = title;
+    $('#wishDoneText').textContent = text;
+    form.hidden = true;
+    done.hidden = false;
+  }
+  function fail(text) {
+    err.textContent = text;
+    err.hidden = false;
+  }
+
+  form.addEventListener('submit', async e => {
     e.preventDefault();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
-      err.hidden = false;
+    const address = email.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      fail("That doesn't look like an email address.");
       email.focus();
       return;
     }
-    form.hidden = true;
-    done.hidden = false;
-    sounds.play('accept');
+    const body = new FormData();
+    body.set('email', address);
+    body.set('devices', [...form.querySelectorAll('.wish-chip[aria-pressed="true"]')]
+      .map(c => c.textContent.replace(c.querySelector('.icon').textContent, '').trim()).join(','));
+    body.set('website', form.elements.website.value);
+    body.set('t', String(loaded));
+    button.disabled = true;
+    try {
+      const res = await fetch('/wishlist.php', { method: 'POST', body });
+      const out = await res.json().catch(() => ({ ok: false, error: 'server' }));
+      if (out.ok && out.status === 'already') {
+        show('favorite', "You're already on the list", "We'll remind you when Sidekick comes out.");
+      } else if (out.ok) {
+        show('mark_email_read', "You're on the list!", out.emailed === false
+          ? "We'll remind you when Sidekick comes out."
+          : `Got it! We sent a hello to ${address} (look in spam if it's not there). We'll remind you when Sidekick comes out.`);
+        sounds.play('accept');
+      } else {
+        fail({
+          email: "That doesn't look like an email address.",
+          busy: 'Too many tries. Please wait a little and try again.',
+        }[out.error] || 'Something went wrong. Please try again later.');
+      }
+    } catch {
+      fail("Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      button.disabled = false;
+    }
   });
+
+  // Back from the link in the email.
+  const state = new URLSearchParams(location.search).get('wishlist');
+  if (state === 'removed') {
+    show('done', 'Removed', "Your email is off the list. You won't hear from us.");
+    history.replaceState(null, '', location.pathname + '#wishlist');
+  }
 })();
 
 /* ---------- the app: Send files → ask → accept → progress, on both screens */

@@ -10,8 +10,9 @@ website (`index.html` at the top of the repo; its images live in
 **https://getsidekick.app**, the official domain (the owner's, hosting on
 OVHcloud; it was at sk.dankor.digital on cyber_Folks before). Use
 getsidekick.app wherever an address is shown (ads, trailers, the app).
-The owner uploads with FileZilla: `index.html`, `privacy.html`, `404.html`,
-`.htaccess`, `robots.txt` and `website/` go in the site's root folder. The
+The owner uploads with FileZilla: `index.html`, `wishlist.php`, `privacy.html`,
+`404.html`, `.htaccess`, `robots.txt` and `website/` go in the site's root
+folder (`www`). The
 pages link only with relative or `/…` paths, so nothing in them names the
 domain. `.github/workflows/website.yml`
 uploads exactly those over FTPS whenever they change on the branch, once
@@ -21,10 +22,17 @@ the owner adds the secrets `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD` and
 **The site is a wishlist, not a download page** (the owner's call: Sidekick
 isn't out yet). No download buttons or links anywhere: the top bar, the hero
 and `#wishlist` (the old `#download` section) say "Join the wishlist", and
-`404.html` links there. The form is a placeholder for now (the owner's call):
-it sends and stores nothing, not even in the browser, and only thanks the
-visitor ("Sidekick is coming soon"), never promising an email. Both privacy
-policies say so; make it real (and update them) before it collects anything.
+`404.html` links there. **The wishlist is real** (`wishlist.php`, PHP only,
+no database: the owner's OVHcloud free plan): signing up puts the address
+on the list and emails "Got your email! We'll remind you when Sidekick
+comes out." (the owner's words; no confirm step) via `mail()` from `FROM`
+(`hello@getsidekick.app` unless the owner names their mailbox), with a
+remove link; a honeypot field, a 2-second minimum, and 5 tries an hour per
+hashed IP. The list is `sidekick-wishlist/list.csv`,
+next to `www` (outside the web root; inside it behind a deny-all
+.htaccess only if that's not writable). On localhost (`php -S
+localhost:8000`) emails go to `sidekick-wishlist/outbox` instead. Both
+privacy policies describe exactly this; keep them true if it changes.
 The download tiles and `RELEASE` links are in git history (2.12.0) for when
 downloads come back.
 

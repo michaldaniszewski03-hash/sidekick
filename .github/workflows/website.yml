@@ -13,7 +13,7 @@ name: Website
 on:
   push:
     branches: [claude/sidekick-app-architecture-8ilytw]
-    paths: [index.html, privacy.html, 404.html, .htaccess, robots.txt, website/**, .github/workflows/website.yml]
+    paths: [index.html, wishlist.php, privacy.html, 404.html, .htaccess, robots.txt, website/**, .github/workflows/website.yml]
   workflow_dispatch:
 
 # One upload at a time; a newer one waits instead of cancelling a half-done upload.
@@ -46,7 +46,7 @@ jobs:
         if: steps.check.outputs.ok == 'true'
         run: |
           mkdir site
-          cp index.html privacy.html 404.html .htaccess robots.txt site/
+          cp index.html wishlist.php privacy.html 404.html .htaccess robots.txt site/
           cp -r website site/
 
       # Uploads only what changed since the last upload (it keeps a small
