@@ -6,15 +6,17 @@ when there's no shared Wi-Fi. Everything is encrypted.
 
 One Flutter app for **Windows, macOS, Android and iOS** (`app/`), plus a
 website (`index.html` at the top of the repo; its images live in
-`website/` and it links them as `/website/…`). The owner hosts it at
-https://sk.dankor.digital on cyber_Folks (LiteSpeed), uploading with
-FileZilla: `index.html`, `privacy.html`, `404.html`, `.htaccess`,
-`robots.txt` and `website/` go in the subdomain's root folder. `.github/workflows/website.yml`
+`website/` and it links them as `/website/…`). It lives at
+**https://getsidekick.app**, the official domain (the owner's, hosting on
+OVHcloud; it was at sk.dankor.digital on cyber_Folks before). Use
+getsidekick.app wherever an address is shown (ads, trailers, the app).
+The owner uploads with FileZilla: `index.html`, `privacy.html`, `404.html`,
+`.htaccess`, `robots.txt` and `website/` go in the site's root folder. The
+pages link only with relative or `/…` paths, so nothing in them names the
+domain. `.github/workflows/website.yml`
 uploads exactly those over FTPS whenever they change on the branch, once
 the owner adds the secrets `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD` and
 `FTP_DIR` (it skips until then). Never put the FTP login anywhere else.
-The owner has also bought **getsidekick.app** (hosting on OVHcloud); the site
-stays on sk.dankor.digital until they say to move it.
 
 **The site is a wishlist, not a download page** (the owner's call: Sidekick
 isn't out yet). No download buttons or links anywhere: the top bar, the hero

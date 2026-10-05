@@ -1,4 +1,4 @@
-# Uploads the website to sk.dankor.digital (cyber_Folks) over FTPS whenever
+# Uploads the website to getsidekick.app over FTPS whenever
 # its files change, the same files the owner used to upload with FileZilla.
 #
 # Needs four repository secrets (Settings -> Secrets and variables ->

@@ -156,8 +156,8 @@ void main() {
   test('clipboard and ping: only from paired devices', () async {
     final client = await pair();
     final copied = pc.server.events.only<ClipboardReceived>().first;
-    await client.sendClipboard('https://sk.dankor.digital');
-    expect((await copied).text, 'https://sk.dankor.digital');
+    await client.sendClipboard('https://getsidekick.app');
+    expect((await copied).text, 'https://getsidekick.app');
     expect((await copied).from.id, phone.id);
 
     final pinged = pc.server.events.only<Pinged>().first;
